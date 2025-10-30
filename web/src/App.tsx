@@ -19,7 +19,7 @@ export default function App() {
 
   const [includeQuantities, setIncludeQuantities] = useState<boolean>(true);
   const [includeSubsections, setIncludeSubsections] = useState<boolean>(true);
-  const [umlMode, setUmlMode] = useState<boolean>(true); // Currently always using UML renderer
+  const [umlMode, setUmlMode] = useState<boolean>(true);
 
   const [crossModules, setCrossModules] = useState<boolean>(true);
   const [namespace, setNamespace] = useState<string>("nomad_simulations.schema_packages");
@@ -28,8 +28,16 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // --- branch diff state ---
+  const [branches, setBranches] = useState<string[]>([]);
+  const [baseBranch, setBaseBranch] = useState<string>("");
+  const [headBranch, setHeadBranch] = useState<string>("");
+  const [diffData, setDiffData] = useState<any | null>(null);
+  const [diffLoading, setDiffLoading] = useState<boolean>(false);
+
   const api = useMemo(() => axios.create({ baseURL: apiBase }), [apiBase]);
 
+  // roots for selected package
   const loadRoots = async () => {
     setErr(null);
     try {
@@ -43,9 +51,11 @@ export default function App() {
     }
   };
 
+  // build single-branch graph (resets diff view)
   const loadGraph = async () => {
     setErr(null);
     setLoading(true);
+    setDiffData(null);
     try {
       const r = await api.get("/schema", {
         params: {
@@ -57,8 +67,6 @@ export default function App() {
           base_namespace: namespace || undefined
         }
       });
-      // debug
-      // console.log("Graph response", r.data);
       setGraph(r.data);
     } catch (e: any) {
       setErr(e?.response?.data?.detail || String(e));
@@ -68,16 +76,62 @@ export default function App() {
     }
   };
 
+  // fetch git branches
+  const loadBranches = async () => {
+    try {
+      const r = await api.get("/git/branches");
+      setBranches(r.data.branches || []);
+    } catch (e) {
+      // keep silent in UI; dropdown will just be empty
+      console.error("Failed to load branches", e);
+    }
+  };
+
+  // compare base/head using SAME filters as sidebar
+  const compareBranches = async () => {
+    if (!baseBranch || !headBranch) return;
+    setErr(null);
+    setDiffLoading(true);
+    setGraph(null); // switch to diff mode
+    try {
+      const r = await api.post(
+        "/graph/diff",
+        {
+          base: baseBranch,
+          head: headBranch,
+          package: pkg
+        },
+        {
+          params: {
+            root,
+            include_quantities: includeQuantities,
+            include_subsections: includeSubsections,
+            allow_cross_module: crossModules,
+            base_namespace: namespace || undefined
+          }
+        }
+      );
+      setDiffData(r.data);
+    } catch (e: any) {
+      setErr(e?.response?.data?.detail || String(e));
+      setDiffData(null);
+    } finally {
+      setDiffLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadRoots();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    loadBranches();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <main>
       <aside className="sidebar">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h3 style={{ margin: 0 }}>Schema UML</h3>
-          <span className="small">{loading ? "Loading…" : ""}</span>
+          <span className="small">{loading || diffLoading ? "Loading…" : ""}</span>
         </div>
 
         <label className="label" style={{ marginTop: 12 }}>API base</label>
@@ -140,7 +194,6 @@ export default function App() {
           </label>
         </div>
 
-        {/* NEW controls */}
         <div className="row" style={{ marginTop: 6 }}>
           <label>
             <input
@@ -183,14 +236,51 @@ export default function App() {
         {err ? (
           <p style={{ color: "#b91c1c", marginTop: 10, whiteSpace: "pre-wrap" }}>{err}</p>
         ) : null}
+
+        {/* --- Branch comparison --- */}
+        <hr />
+        <h4 style={{ marginTop: 10 }}>Compare branches</h4>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label>Base branch</label>
+          <select className="select" value={baseBranch} onChange={(e) => setBaseBranch(e.target.value)}>
+            <option value="">—</option>
+            {branches.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+
+          <label>Head branch</label>
+          <select className="select" value={headBranch} onChange={(e) => setHeadBranch(e.target.value)}>
+            <option value="">—</option>
+            {branches.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+
+          <button className="btn" onClick={compareBranches} disabled={!baseBranch || !headBranch || diffLoading}>
+            {diffLoading ? "Comparing…" : "Compare"}
+          </button>
+        </div>
       </aside>
 
       <div className="graph">
-        {graph ? (
+        {diffData ? (
+          <>
+            <div style={{ padding: "6px 8px", fontSize: 12, background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
+              Base: {diffData.base.branch} ({diffData.base.sha.slice(0, 7)}) → Head: {diffData.head.branch} ({diffData.head.sha.slice(0, 7)}){" "}
+              <span style={{ marginLeft: 12 }}>
+                <span style={{ color: "#16a34a" }}>🟩 Added</span> •{" "}
+                <span style={{ color: "#ca8a04" }}>🟨 Changed</span> •{" "}
+                <span style={{ color: "#dc2626" }}>🟥 Removed</span>
+              </span>
+            </div>
+            <GraphView
+              nodes={diffData.head.graph.nodes}
+              edges={diffData.head.graph.edges}
+              diff={diffData.diff}
+            />
+          </>
+        ) : graph ? (
           <GraphView nodes={graph.nodes} edges={graph.edges} />
         ) : (
           <div style={{ padding: 24, color: "#6b7280" }}>
-            No graph yet. Select a package, load roots, pick a root, then “Build graph”.
+            No graph yet. Select a package, load roots, pick a root, then “Build graph”; or compare two branches.
           </div>
         )}
       </div>

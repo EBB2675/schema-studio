@@ -2,3 +2,5 @@ fastapi
 uvicorn
 pydantic
 networkx
+gitpython
+orjson

@@ -2,7 +2,7 @@ from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import ORJSONResponse
 from extractor.graph_builder import build_graph, list_sections
 from fastapi.middleware.cors import CORSMiddleware
-
+from .routes_git import router as git_router
 
 app = FastAPI(title="Schema UML API", default_response_class=ORJSONResponse)
 
@@ -12,6 +12,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(git_router)
 
 @app.get("/health")
 def health():

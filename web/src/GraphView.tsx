@@ -26,7 +26,21 @@ type RawEdge = {
   card?: string | null;
 };
 
-type Props = { nodes: RawNode[]; edges: RawEdge[] };
+type Props = {
+  nodes: RawNode[];
+  edges: RawEdge[];
+  diff?: {
+    nodes: {
+      added: any[];
+      removed: any[];
+      changed: { id: string }[];
+    };
+    edges: {
+      added: { source: string; target: string; type?: string }[];
+      removed: { source: string; target: string; type?: string }[];
+    };
+  } | null;
+};
 
 // --- helpers ---
 const cleanType = (t?: string | null) => {
@@ -67,7 +81,7 @@ function umlLabel(
   return lines.join("\n");
 }
 
-export default function GraphView({ nodes, edges }: Props) {
+export default function GraphView({ nodes, edges, diff }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
 
@@ -183,7 +197,13 @@ export default function GraphView({ nodes, edges }: Props) {
           }
         },
         { selector: ".hidden", style: { "display": "none" } },
-        { selector: ":selected", style: { "border-width": 3, "border-color": "#2563eb" } }
+        { selector: ":selected", style: { "border-width": 3, "border-color": "#2563eb" } },
+        // --- diff highlight styles ---
+        { selector: ".diff-added",   style: { "border-color": "#16a34a", "border-width": 4 } },
+        { selector: ".diff-removed", style: { "border-color": "#dc2626", "border-width": 4 } },
+        { selector: ".diff-changed", style: { "border-color": "#ca8a04", "border-width": 4 } },
+        { selector: "edge.diff-added",   style: { "line-color": "#16a34a", "target-arrow-color": "#16a34a", "source-arrow-color": "#16a34a", "width": 3 } },
+        { selector: "edge.diff-removed", style: { "line-color": "#dc2626", "target-arrow-color": "#dc2626", "source-arrow-color": "#dc2626", "width": 3, "line-style": "dashed" } },
       ],
       layout: {
         name: "elk",
@@ -202,98 +222,32 @@ export default function GraphView({ nodes, edges }: Props) {
 
     cyRef.current = cy;
 
-    // --- Build indegree map for composition edges ---
-    const indeg = new Map<string, number>();
-    cy.$("node").forEach(n => indeg.set(n.id(), 0));
-    cy.$("edge[type='composition']").forEach((e: EdgeSingular) => {
-      const t = e.target().id();
-      indeg.set(t, (indeg.get(t) ?? 0) + 1);
-    });
+    // --- Apply diff highlights ---
+    if (diff) {
+      const addedIds   = new Set(diff.nodes?.added?.map((n: any) => n.id));
+      const removedIds = new Set(diff.nodes?.removed?.map((n: any) => n.id));
+      const changedIds = new Set(diff.nodes?.changed?.map((c: any) => c.id));
 
-    // --- Initial collapsed state ---
-    cy.$("edge[type='composition']").addClass("hidden");
+      cy.$("node").forEach((n) => {
+        const id = n.id();
+        if (addedIds.has(id))   n.addClass("diff-added");
+        if (removedIds.has(id)) n.addClass("diff-removed");
+        if (changedIds.has(id)) n.addClass("diff-changed");
+      });
 
-    // Hide only leaves (no children, but indegree > 0)
-    cy.$("node").forEach((n: NodeSingular) => {
-      const hasKids = n.outgoers().edges().filter(e => e.data("type") === "composition").length > 0;
-      const isNonRoot = (indeg.get(n.id()) ?? 0) > 0;
-      if (isNonRoot && !hasKids) n.addClass("hidden");
-    });
+      const edgeKey = (e: any) => `${e.source}|${e.target}|${e.type ?? ""}`;
+      const addedE   = new Set(diff.edges?.added?.map(edgeKey));
+      const removedE = new Set(diff.edges?.removed?.map(edgeKey));
 
-    // Add ▸ to nodes that have children
-    cy.$("node").forEach((n: NodeSingular) => {
-      const hasKids = n.outgoers().edges().filter(e => e.data("type") === "composition").length > 0;
-      if (!hasKids) return;
-      const id = n.id();
-      const rawName: string = n.data("rawName") || "";
-      const attrs = attrsMap.get(id) ?? [];
-      const methods = methodsMap.get(id) ?? [];
-      n.data("label", umlLabel(`▸ ${rawName}`, attrs, methods));
-    });
-
-    // --- Helpers ---
-    const relayout = () => {
-      cy.layout({
-        name: "elk",
-        nodeDimensionsIncludeLabels: true,
-        elk: {
-          algorithm: "layered",
-          "elk.direction": "RIGHT",
-          "elk.layered.spacing.nodeNodeBetweenLayers": 90,
-          "elk.spacing.nodeNode": 26,
-          "elk.layered.nodePlacement.bk.fixedAlignment": "BALANCED",
-          "elk.layered.mergeEdges": true,
-          "elk.edgeRouting": "ORTHOGONAL"
-        }
-      } as any).run();
-    };
-
-    const setIndicator = (node: NodeSingular, open: boolean) => {
-      const id = node.id();
-      const rawName: string = node.data("rawName") || "";
-      const attrs = attrsMap.get(id) ?? [];
-      const methods = methodsMap.get(id) ?? [];
-      const prefix = open ? "▾ " : "▸ ";
-      node.data("label", umlLabel(prefix + rawName, attrs, methods));
-    };
-
-    const expand = (node: NodeSingular) => {
-      const outEdges = node.outgoers().edges().filter(e => e.data("type") === "composition");
-      const children = outEdges.targets();
-      if (outEdges.length === 0) return;
-      outEdges.removeClass("hidden");
-      children.removeClass("hidden");
-      setIndicator(node, true);
-    };
-
-    const collapse = (node: NodeSingular) => {
-      const outEdges = node.outgoers().edges().filter(e => e.data("type") === "composition");
-      const children = outEdges.targets();
-      children.forEach((c: NodeSingular) => collapse(c));
-      outEdges.addClass("hidden");
-      children.addClass("hidden");
-      setIndicator(node, false);
-    };
-
-    // --- Click handler ---
-    cy.on("tap", "node", (evt) => {
-      const n = evt.target as NodeSingular;
-      const outEdges = n.outgoers().edges().filter(e => e.data("type") === "composition");
-      if (outEdges.length === 0) return;
-
-      const children = outEdges.targets();
-      const edgesHidden = outEdges.filter(".hidden").length > 0;
-      const kidsHidden  = children.filter(".hidden").length > 0;
-      const isCollapsed = edgesHidden || kidsHidden;
-
-      if (isCollapsed) expand(n);
-      else collapse(n);
-
-      relayout();
-    });
+      cy.$("edge").forEach(e => {
+        const k = `${e.data("source")}|${e.data("target")}|${e.data("type") || ""}`;
+        if (addedE.has(k))   e.addClass("diff-added");
+        if (removedE.has(k)) e.addClass("diff-removed");
+      });
+    }
 
     return () => { cyRef.current?.destroy(); };
-  }, [sectionsMap, attrsMap, methodsMap, compEdges]);
+  }, [sectionsMap, attrsMap, methodsMap, compEdges, diff]);
 
   return <div className="graph" ref={containerRef} />;
 }
