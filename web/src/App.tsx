@@ -76,7 +76,7 @@ export default function App() {
     <main>
       <aside className="sidebar">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ margin: 0 }}>Schema UML (Minimal)</h3>
+          <h3 style={{ margin: 0 }}>Schema UML</h3>
           <span className="small">{loading ? "Loading…" : ""}</span>
         </div>
 
