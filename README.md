@@ -86,7 +86,7 @@ http://localhost:5173
 
 ## 🧑‍💻 Authors & Maintainers
 
-**Dr. Esma Birsen Boydaş**  
+**Dr. Esma Birsen Boydas**  
 Humboldt-Universität zu Berlin — FAIRmat / NOMAD Lab  
 ---
 
