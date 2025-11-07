@@ -1,228 +1,265 @@
 # REPO GUIDE — Schema-UML
 
-A structured overview of the repository for developers to programmatically navigate, understand, and extend the project.
+A structured overview of the repository for developers to navigate, understand, and extend the project.
 
 ---
 
-## 0. TL;DR
+## 0) TL;DR
 
-**Purpose:** Visualize NOMAD data schemas as UML diagrams and compare schema changes between Git branches.
+**Purpose:** Visualize `nomad-simulations` schema as UML diagrams and compare schema changes across Git branches.
 
 **Frontend:** React + TypeScript + Cytoscape + ELK  
-**Backend:** FastAPI + GitPython  
+**Backend:** FastAPI + GitPython
 
 **Main directories:**
-- `web/` — frontend React app  
-- `api/` — FastAPI backend  
-- `extractor/` — logic to extract schema structure  
-- `api/_data/` — auto-generated git worktrees (ignored)
+- `web/` — frontend React app
+- `api/` — FastAPI backend
+- `extractor/` — schema graph extractor
+- `api/_data/` — auto-generated bare mirror + worktrees (gitignored)
 
 **Key endpoints:**
-- `GET /roots` → list section roots  
-- `GET /schema` → build UML graph  
-- `GET /git/branches` → list branches  
-- `POST /graph/diff` → compare branches  
+- `GET /roots` — list section roots for a package
+- `GET /schema` — build a graph (single branch)
+- `GET /git/branches` — list local branches of the repo
+- `POST /graph/diff` — compare two branches and return a diff
 
-**Environment variable:**
-    NOMAD_SIM_REPO=/path/to/nomad-simulations
+**Environment variables (one of):**
+```bash
+export NOMAD_SIM_REPO=/path/to/nomad-simulations
+# or
+export GIT_REPO_DIR=/path/to/nomad-simulations
+```
 
----
-
-## 1. Repository Structure
-
-    schema-uml/
-    ├─ api/                         # FastAPI backend
-    │  ├─ main.py                   # App entry point, routes, CORS
-    │  ├─ routes_git.py             # /git/* and /graph/diff endpoints
-    │  ├─ graph_runner.py           # Runs extractor in worktree subprocess
-    │  ├─ git_utils.py              # Bare clone & worktree management
-    │  ├─ diff.py                   # Graph comparison logic
-    │  ├─ _data/                    # Auto-generated bare mirror & worktrees (gitignored)
-    │  └─ requirements.txt
-    │
-    ├─ extractor/
-    │  ├─ graph_builder.py          # build_graph(package, **opts)
-    │  └─ __init__.py
-    │
-    ├─ web/                         # React frontend
-    │  ├─ src/
-    │  │  ├─ App.tsx                # Main UI, API calls, diff logic
-    │  │  ├─ GraphView.tsx          # Cytoscape UML renderer
-    │  │  └─ styles.css
-    │  ├─ index.html
-    │  └─ package.json
-    │
-    ├─ README.md                    # Developer setup
-    └─ REPO_GUIDE.md                # (this file)
+**UX highlights:**
+- UML cards show **sections**; **quantities** appear as attributes inside the card (not separate nodes).
+- Right **Doc Panel** shows the **class docstring** and a **clickable list of quantities**; clicking a quantity shows its docstring.
+- Branch diff highlights: 🟩 Added, 🟨 Changed, 🟥 Removed (edges dashed red).
 
 ---
 
-## 2. Data Contracts
+## 1) Repository Structure
 
-### 2.1 Graph JSON (output of extractor → consumed by frontend)
+```text
+schema-uml/
+├─ api/                         # FastAPI backend
+│  ├─ main.py                   # App entry, routers, CORS, /roots and /schema
+│  ├─ routes_git.py             # /git/branches and /graph/diff
+│  ├─ graph_runner.py           # Runs extractor in a worktree subprocess
+│  ├─ git_utils.py              # Bare mirror & worktree management
+│  ├─ diff.py                   # Graph comparison logic
+│  ├─ _data/                    # Auto-generated bare mirror & worktrees (gitignored)
+│  └─ requirements.txt
+│
+├─ extractor/
+│  ├─ graph_builder.py          # build_graph(package, **opts); now embeds docstrings
+│  └─ __init__.py
+│
+├─ web/                         # React frontend (Vite)
+│  ├─ src/
+│  │  ├─ App.tsx                # Sidebar controls, API calls, diff banner, export
+│  │  ├─ GraphView.tsx          # Cytoscape UML renderer (sections only; quantities folded)
+│  │  ├─ components/
+│  │  │  └─ DocPanel.tsx        # Class/quantity docstrings; quantity list (clickable)
+│  │  ├─ store/
+│  │  │  └─ selection.ts        # Zustand store for selected item
+│  │  └─ styles.css
+│  ├─ index.html
+│  └─ package.json
+│
+├─ README.md                    # Quick start, features, troubleshooting
+└─ REPO_GUIDE.md                # (this file)
+```
 
+---
+
+## 2) Data Contracts
+
+### 2.1 Graph JSON (`GET /schema` → consumed by frontend)
+
+```json
+{
+  "package": "nomad_simulations.schema_packages.model_method",
+  "root": "ModelMethod",
+  "nodes": [
     {
-      "package": "nomad_simulations.schema_packages.model_method",
-      "root": "ModelMethod",
-      "nodes": [
-        {
-          "id": "ModelMethod",
-          "kind": "section",
-          "label": "ModelMethod",
-          "module": "nomad_simulations.schema_packages.model_method",
-          "methods": ["..."]        // optional
-        },
-        {
-          "id": "ModelMethod.main_basis_set",
-          "kind": "quantity",
-          "label": "main_basis_set",
-          "owner": "ModelMethod",
-          "dtype": "str",
-          "shape": null,
-          "card": null
-        }
-      ],
-      "edges": [
-        { "source": "ModelMethod", "target": "BasisSet", "type": "hasSubSection", "card": "0..*" }
-      ]
-    }
-
-Notes:
-- Sections render as UML classes (nodes).
-- Quantities render as attributes inside the class label.
-- `hasSubSection` edges render as composition edges in the diagram.
-
-### 2.2 Diff JSON (backend `/graph/diff` response)
-
+      "id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+      "kind": "section",
+      "label": "ModelMethod",
+      "module": "nomad_simulations.schema_packages.model_method",
+      "doc": "Section docstring here...",
+      "methods": ["normalize", "validate"]
+    },
     {
-      "base": { "branch": "develop", "sha": "abc123", "graph": { /* graph A */ } },
-      "head": { "branch": "feature", "sha": "def456", "graph": { /* graph B */ } },
-      "diff": {
-        "nodes": {
-          "added":   [{ "id": "NewSection", "kind": "section" }],
-          "removed": [{ "id": "OldSection", "kind": "section" }],
-          "changed": [{ "id": "EditedSection" }]
-        },
-        "edges": {
-          "added":   [{ "source": "A", "target": "B", "type": "hasSubSection" }],
-          "removed": [{ "source": "X", "target": "Y", "type": "hasSubSection" }]
-        },
-        "attrs": {
-          "ModelMethod": {
-            "added":   ["new_attr: int", "another: str"],
-            "removed": ["old_attr: float"]
-          }
-        }
-      }
+      "id": "nomad_simulations.schema_packages.model_method.ModelMethod.determinant",
+      "kind": "quantity",
+      "label": "determinant",
+      "owner": "nomad_simulations.schema_packages.model_method.ModelMethod",
+      "dtype": "Enum(restricted, unrestricted, restricted-open-shell)",
+      "shape": null,
+      "card": null,
+      "doc": "The spin-coupling form of the determinant used for ..."
     }
+  ],
+  "edges": [
+    {
+      "source": "nomad_simulations.schema_packages.model_method.ModelMethod",
+      "target": "nomad_simulations.schema_packages.model_method.BasisSetContainer",
+      "type": "hasSubSection",
+      "card": "0..*"
+    }
+  ]
+}
+```
 
-Frontend rendering policy:
-- Added sections → green outline.
-- Changed sections → amber outline.
-- Removed sections/edges → listed in a side panel (keeps layout light).
-- Attribute diffs may be appended as +/- lines or summarized in the side panel.
+**Notes**
+- `kind ∈ {"section","quantity"}`.
+- **Quantities include `doc`** (backend embeds docstrings; frontend shows them in the Doc Panel).
+- The frontend **does not render quantity nodes** on the canvas; it folds them into each section’s card and the panel.
+
+### 2.2 Diff JSON (`POST /graph/diff`)
+
+```json
+{
+  "base": { "branch": "develop", "sha": "abc123", "graph": { } },
+  "head": { "branch": "feature", "sha": "def456", "graph": { } },
+  "diff": {
+    "nodes": {
+      "added":   [{ "id": "X", "kind": "section" }],
+      "removed": [{ "id": "Y", "kind": "section" }],
+      "changed": [{ "id": "Z" }]
+    },
+    "edges": {
+      "added":   [{ "source": "A", "target": "B", "type": "hasSubSection" }],
+      "removed": [{ "source": "C", "target": "D", "type": "hasSubSection" }]
+    }
+  }
+}
+```
+
+**Frontend rendering policy**
+- Added sections → green border (`.diff-added`)
+- Changed sections → amber border (`.diff-changed`)
+- Removed sections/edges → shown in the diff banner/summary (removed edges dashed red)
 
 ---
 
-## 3. Backend Flow (branch diff)
+## 3) Backend Flow
 
-1) `GET /git/branches`  
-   - Ensures a bare clone exists under `api/_data/nomad-simulations.bare`.  
-   - Returns local branch names.
+1. **`GET /git/branches`**
+   - Opens repo from `$NOMAD_SIM_REPO` or `$GIT_REPO_DIR` (falls back to current working dir, searching parents).
+   - Returns local branch names plus active and HEAD SHA.
 
-2) `POST /graph/diff`  
-   - Materializes two worktrees for `{base, head}`.  
-   - Runs the extractor in a subprocess for each worktree (`graph_runner.py`).  
-   - Computes `{nodes, edges, attrs}` delta with `diff.py`.  
+2. **`POST /graph/diff`**
+   - Creates two worktrees for `{base, head}` (under `api/_data/…`).
+   - Runs the extractor in each worktree via `graph_runner.py`.
+   - Computes node/edge deltas in `diff.py`.
    - Returns `{ base, head, diff }`.
 
-3) `GET /schema`  
-   - Runs extractor once for interactive browsing (no diff).
+3. **`GET /schema`**
+   - Runs extractor once (no diff) for interactive browsing.
 
-Key files:
-- `api/main.py` — app setup, routers, CORS.  
-- `api/routes_git.py` — endpoints; calls into `git_utils`, `graph_runner`, `diff`.  
-- `api/git_utils.py` — bare mirror + worktree management.  
-- `api/graph_runner.py` — subprocess wrapper; passes args; returns JSON.  
-- `api/diff.py` — indexing and diff logic (sections, quantities-as-attributes, edges).
-
----
-
-## 4. Frontend Flow
-
-- `App.tsx`
-  - Controls: API base, package/module, root, flags.
-  - Build graph: calls `/schema`, renders head graph.
-  - Compare: calls `/graph/diff` (often with light options: `include_subsections=false`, `allow_cross_module=false`), renders head graph + diff highlights; removed listed at right.
-
-- `GraphView.tsx`
-  - Cytoscape + ELK renderer.
-  - Sections as class cards; quantities merged into labels.
-  - Expand/collapse via composition edges.
-  - Diff classes: `.diff-added`, `.diff-changed`.
-
-Performance tip:
-- For diffs, prefer `include_subsections=false` and `allow_cross_module=false` to avoid large layouts.
+**Key files**
+- `api/main.py` — FastAPI app, `GET /roots`, `GET /schema`, mounts Git router.
+- `api/routes_git.py` — `GET /git/branches`, `POST /graph/diff`.
+- `api/git_utils.py` — bare clone + worktree management.
+- `api/graph_runner.py` — subprocess wrapper to call extractor within a worktree.
+- `api/diff.py` — graph indexing and set diffs.
+- `extractor/graph_builder.py` — **embeds docstrings** for **sections and quantities** (`doc=_doc_from(...)`).
 
 ---
 
-## 5. Common Ops (for contributors)
+## 4) Frontend Flow
 
-Add a new endpoint:
-- Edit `api/routes_git.py`; mount via `app.include_router(...)` in `api/main.py` if needed.
-- For extractor output tied to a branch, use `git_utils.materialize_worktree(branch)` then `graph_runner.build_graph_in_subprocess(...)`.
+- **`App.tsx`**
+  - Sidebar controls: API base, package, roots, toggles (quantities/subsections/uml), cross-module, base namespace.
+  - **Build graph:** calls `/schema` with current filters.
+  - **Compare branches:** calls `/graph/diff` and renders the *head* graph with diff highlights and a banner.
 
-Change graph building:
-- Edit `extractor/graph_builder.py`.  
-- Function contract:  
-  `build_graph(package: str, root: str|None=None, include_quantities=True, include_subsections=True, allow_cross_module=True, base_namespace: str|None=None) -> dict`
+- **`GraphView.tsx`**
+  - Renders **sections only** as UML cards (Cytoscape + ELK).
+  - Folds quantity metadata into each section’s card label (attributes) and passes it to the **Doc Panel** (no quantity nodes).
+  - Styles: composition edges with diamonds; diff classes with colored outlines; removed edges dashed red.
 
-Adjust diff semantics:
-- Edit `api/diff.py` (e.g., how “changed” is defined for sections or attributes).
+- **`components/DocPanel.tsx`**
+  - Shows selected **class** docstring plus a **clickable list of quantities** (name + dtype/shape/card).
+  - Clicking a **quantity** shows its **docstring** (comes from `/schema` payload; no extra fetch needed).
+  - Uses a small Zustand store for selection.
 
-Change diagram behavior or styling:
-- Edit `web/src/GraphView.tsx` (Cytoscape styles, label builder, toggling).
+- **`store/selection.ts`**
+  - Zustand store with `{ selected, setSelected }`, where `selected` may be a class or a quantity.
 
----
-
-## 6. Extension Ideas
-
-Show only changed:
-- Add a toggle in `App.tsx`; filter elements to (added ∪ changed ∪ neighbors) before rendering.
-
-Export PNG/SVG:
-- Use Cytoscape exporters: `cy.png({full:true})`, `cy.svg({full:true})` and trigger download.
-
-Persist repo path (no env vars):
-- Add `POST /git/set_repo?path=...` to save a path in `api/_data/repo_path.txt`.
-- In `git_utils`, prefer env var if present, else read the saved path.
+**Performance tips**
+- For large repos, during branch diff, disable cross-module traversal and/or subsections to keep the graph small.
 
 ---
 
-## 7. Operational Notes
+## 5) Common Contributor Operations
 
-Bare mirror location:
-- `api/_data/nomad-simulations.bare`
+**Add/change graph building**
+- Edit `extractor/graph_builder.py`.
+- Function signature:
+  ```python
+  build_graph(package: str,
+              root: str | None = None,
+              include_quantities: bool = True,
+              include_subsections: bool = True,
+              allow_cross_module: bool = True,
+              base_namespace: str | None = None,
+              ...) -> dict
+  ```
+- Ensure quantities include `doc` via `_doc_from(q)`.
 
-Worktrees:
-- `api/_data/nomad-simulations.bare/worktrees/<branch>/...`
+**Extend diff semantics**
+- Edit `api/diff.py` to adjust what counts as “changed” (e.g., dtype/shape/card changes).
 
-Rebuild mirror safely:
-- Remove and recreate:
-    rm -rf api/_data
-    mkdir -p api/_data
-    (cd api/_data && git clone --bare "$NOMAD_SIM_REPO" nomad-simulations.bare)
+**Add endpoints**
+- Put handlers in `api/routes_git.py` (or a new router) and mount via `app.include_router(...)` in `api/main.py`.
 
-.gitignore:
-- Ensure it contains:
-    api/_data/
+**Adjust diagram styles/behavior**
+- Edit `web/src/GraphView.tsx` (Cytoscape styles, label formatting, layout).
+- Edit `web/src/components/DocPanel.tsx` for panel layout/content.
 
 ---
 
-## 8. Known Constraints
+## 6) Extension Ideas
 
-- Large graphs + ELK may freeze the browser; prefer light diffs for compare.
-- Removed quantities are attributes, not nodes; surface them via `diff.attrs` in label or in the side panel.
-- Ghost rendering of removed sections can be added but should be limited to visible subtrees to avoid layout blow-up.
+- **Export** PNG/SVG of the current graph (`cy.png({full:true})`, `cy.svg({full:true})`).
+- **Filter** to show only (added ∪ changed ∪ neighbors) in diff mode.
+- **Search** box to highlight nodes/attrs by name or dtype.
+- **Remote branches**: add scope toggle (`?scope=local|all`) in `/git/branches`.
+
+---
+
+## 7) Operational Notes
+
+**Bare mirror location**
+```
+api/_data/nomad-simulations.bare
+```
+
+**Worktrees**
+```
+api/_data/nomad-simulations.bare/worktrees/<branch>/...
+```
+
+**Rebuild mirror safely**
+```bash
+rm -rf api/_data
+mkdir -p api/_data
+( cd api/_data && git clone --bare "$NOMAD_SIM_REPO" nomad-simulations.bare )
+```
+
+**.gitignore**
+```
+api/_data/
+```
+
+---
+
+## 8) Known Constraints
+
+- Very large graphs + ELK can be slow in the browser; use filters for diffs.
+- Quantities are **not** nodes in the canvas; removed/changed attributes should be surfaced via the diff banner or (future) attribute diff list.
+- Cross-module traversal can explode node count; keep a tight `base_namespace` during exploration.
 
 ---
