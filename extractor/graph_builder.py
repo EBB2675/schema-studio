@@ -26,6 +26,35 @@ class Edge:
     card: Optional[str] = None
 
 
+# -------- doc helpers --------
+
+def _normalize_doc(s: Any) -> Optional[str]:
+    """Trim edges, preserve newlines, strip trailing spaces per line."""
+    if not isinstance(s, str):
+        return None
+    return "\n".join(line.rstrip() for line in s.strip().splitlines())
+
+
+def _doc_from(obj: Any) -> Optional[str]:
+    """
+    Try to extract a human doc/description from common attributes used by
+    NOMAD-style metainfo (description, m_def.description) and fall back to __doc__.
+    """
+    for attr in ("description", "doc", "desc"):
+        v = getattr(obj, attr, None)
+        v = _normalize_doc(v)
+        if v:
+            return v
+    mdef = getattr(obj, "m_def", None)
+    if mdef is not None:
+        v = _normalize_doc(getattr(mdef, "description", None))
+        if v:
+            return v
+    return _normalize_doc(getattr(obj, "__doc__", None))
+
+
+# -------- main API --------
+
 def list_sections(package: str) -> List[str]:
     mod = importlib.import_module(package)
     base_ns = _root_namespace(package)
@@ -80,12 +109,14 @@ def build_graph(
         # collect methods defined in your package
         methods = _public_methods(sec_obj)
 
-        doc = (sec_obj.__doc__ or "").strip() if hasattr(sec_obj, "__doc__") else None
+        # robust doc extraction
+        doc = _doc_from(sec_obj)
+
         nodes[sec_id] = Node(
             id=sec_id,
             kind="section",
             label=sec_name,
-            doc=doc or None,
+            doc=doc,
             module=sec_mod,
             methods=methods or None
         )
@@ -100,6 +131,7 @@ def build_graph(
                         id=qid,
                         kind="quantity",
                         label=qname,
+                        doc=_doc_from(q),               # ← include quantity doc
                         dtype=_dtype_from(q),
                         shape=_shape_from(q),
                         card=_cardinality_from(q),
@@ -156,6 +188,7 @@ def _is_section(obj) -> bool:
     # Section classes have m_def; be liberal to support variations
     return inspect.isclass(obj) and (hasattr(obj, "m_def") or hasattr(obj, "quantities") or hasattr(obj, "sub_sections"))
 
+
 def _items_from_mapping_or_list(x) -> Iterable[Tuple[str, Any]]:
     if x is None:
         return []
@@ -169,6 +202,7 @@ def _items_from_mapping_or_list(x) -> Iterable[Tuple[str, Any]]:
                 out.append((name, obj))
         return out
     return []
+
 
 def _cardinality_from(obj) -> Optional[str]:
     if hasattr(obj, "repeats"):
@@ -186,6 +220,7 @@ def _cardinality_from(obj) -> Optional[str]:
             return str(c)
     return None
 
+
 def _dtype_from(q) -> Optional[str]:
     for attr in ("dtype", "type"):
         if hasattr(q, attr):
@@ -195,6 +230,7 @@ def _dtype_from(q) -> Optional[str]:
                 pass
     return None
 
+
 def _shape_from(q) -> Optional[str]:
     if hasattr(q, "shape"):
         try:
@@ -202,6 +238,7 @@ def _shape_from(q) -> Optional[str]:
         except Exception:
             return None
     return None
+
 
 def _get_quantities(sec_obj) -> Iterable[Tuple[str, Any]]:
     # Try class-level first
@@ -217,6 +254,7 @@ def _get_quantities(sec_obj) -> Iterable[Tuple[str, Any]]:
                 return _items_from_mapping_or_list(qmap)
     return []
 
+
 def _get_subsections(sec_obj) -> Iterable[Tuple[str, Any]]:
     # Try class-level first
     smap = getattr(sec_obj, "sub_sections", None)
@@ -231,6 +269,7 @@ def _get_subsections(sec_obj) -> Iterable[Tuple[str, Any]]:
                 return _items_from_mapping_or_list(smap)
     return []
 
+
 def _target_section_obj(subsec_obj):
     """
     Return the raw target stored in SubSection definition.
@@ -240,6 +279,7 @@ def _target_section_obj(subsec_obj):
         if hasattr(subsec_obj, attr):
             return getattr(subsec_obj, attr)
     return None
+
 
 def _resolve_section_class(target) -> Optional[type]:
     """
@@ -269,11 +309,13 @@ def _resolve_section_class(target) -> Optional[type]:
             pass
     return None
 
+
 def _root_namespace(package: str) -> str:
     parts = package.split(".")
     if len(parts) >= 3:
         return ".".join(parts[:3])
     return parts[0]
+
 
 def _module_allowed(module: str, base_namespace: str, exclude_prefixes: Tuple[str, ...], allow_cross_module: bool) -> bool:
     if any(module.startswith(p) for p in exclude_prefixes):
@@ -283,9 +325,11 @@ def _module_allowed(module: str, base_namespace: str, exclude_prefixes: Tuple[st
     # same module only if cross-mod disabled
     return module.startswith(base_namespace)
 
+
 def _module_in_namespace(obj, package_namespace: str) -> bool:
     mod = getattr(obj, "__module__", "")
     return mod.startswith(package_namespace)
+
 
 def _public_methods(sec_obj) -> List[str]:
     """Only public methods implemented under 'nomad_simulations*'."""

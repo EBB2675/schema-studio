@@ -3,7 +3,7 @@ import cytoscape from "cytoscape";
 import elk from "elkjs/lib/elk.bundled.js";
 import cytoscapeElk from "cytoscape-elk";
 import type { Core, ElementDefinition } from "cytoscape";
-import { useSelection } from "./store/selection";
+import { useSelection, type QtyMeta } from "./store/selection";
 
 cytoscapeElk(cytoscape, elk as any);
 
@@ -41,7 +41,6 @@ type Props = {
   } | null;
 };
 
-// --- helpers ---
 const cleanType = (t?: string | null) => {
   if (!t) return "";
   const m = t.match(/^m_[a-zA-Z0-9_]+\((.+)\)$/);
@@ -84,23 +83,30 @@ export default function GraphView({ nodes, edges, diff }: Props) {
 
   const setSelected = useMemo(() => useSelection.getState().setSelected, []);
 
-  const { sectionsMap, attrsMap, methodsMap, compEdges } = useMemo(() => {
+  // Build:
+  // - sectionsMap: id -> section node
+  // - attrsMap: section id -> display lines for UML
+  // - methodsMap: section id -> methods
+  // - quantitiesByOwner: section id -> QtyMeta[]  (for DocPanel)
+  const { sectionsMap, attrsMap, methodsMap, compEdges, quantitiesByOwner } = useMemo(() => {
     const sections = new Map<string, RawNode>();
     const attrs = new Map<string, { name: string; dtype?: string; shape?: string | null; card?: string | null }[]>();
     const methods = new Map<string, string[]>();
+    const qByOwner = new Map<string, QtyMeta[]>();
 
-    // collect only sections; quantities are folded into the card text
     for (const n of nodes) {
       if (n.kind === "section") {
         sections.set(n.id, n);
         attrs.set(n.id, attrs.get(n.id) ?? []);
         methods.set(n.id, (n.methods ?? []) as string[]);
+        qByOwner.set(n.id, qByOwner.get(n.id) ?? []);
       }
     }
 
-    // fold quantity metadata into their owners' attribute list
     for (const q of nodes) {
       if (q.kind !== "quantity" || !q.owner) continue;
+
+      // For UML card display
       const list = attrs.get(q.owner) ?? [];
       list.push({
         name: q.label,
@@ -109,11 +115,25 @@ export default function GraphView({ nodes, edges, diff }: Props) {
         card: q.card ?? undefined
       });
       attrs.set(q.owner, list);
+
+      // For panel
+      const metaList = qByOwner.get(q.owner) ?? [];
+      metaList.push({
+        id: q.id,
+        name: q.label,
+        dtype: q.dtype ?? undefined,
+        shape: q.shape ?? undefined,
+        card: q.card ?? undefined,
+        doc: q.doc ?? undefined,
+        path: q.path ?? undefined,
+        line: typeof q.line === "number" ? q.line : undefined,
+        owner: q.owner
+      });
+      qByOwner.set(q.owner, metaList);
     }
 
     const subs = edges.filter(e => e.type === "hasSubSection");
-
-    return { sectionsMap: sections, attrsMap: attrs, methodsMap: methods, compEdges: subs };
+    return { sectionsMap: sections, attrsMap: attrs, methodsMap: methods, compEdges: subs, quantitiesByOwner: qByOwner };
   }, [nodes, edges]);
 
   useEffect(() => {
@@ -121,7 +141,6 @@ export default function GraphView({ nodes, edges, diff }: Props) {
     cyRef.current?.destroy();
     cyRef.current = null;
 
-    // --- Build Cytoscape graph (sections only) ---
     const elements: ElementDefinition[] = [];
 
     for (const [secId, sec] of sectionsMap.entries()) {
@@ -173,8 +192,7 @@ export default function GraphView({ nodes, edges, diff }: Props) {
             "text-wrap": "wrap",
             "text-max-width": 280,
             "font-size": 12,
-            "font-family":
-              "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
+            "font-family": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
             padding: "8px",
             "text-halign": "center",
             "text-valign": "center",
@@ -208,7 +226,6 @@ export default function GraphView({ nodes, edges, diff }: Props) {
         },
         { selector: ".hidden", style: { display: "none" } },
         { selector: ":selected", style: { "border-width": 3, "border-color": "#2563eb" } },
-        // diff highlights
         { selector: ".diff-added",   style: { "border-color": "#16a34a", "border-width": 4 } },
         { selector: ".diff-removed", style: { "border-color": "#dc2626", "border-width": 4 } },
         { selector: ".diff-changed", style: { "border-color": "#ca8a04", "border-width": 4 } },
@@ -230,16 +247,18 @@ export default function GraphView({ nodes, edges, diff }: Props) {
       } as any
     });
 
-    // === Selection → DocPanel (class only) ===
+    // Selection → DocPanel (class only; but with quantities looked up from the local map)
     cy.on("tap", "node", (evt) => {
       const d = evt.target.data();
+      const qList = quantitiesByOwner.get(d.id) || [];
       useSelection.getState().setSelected({
         id: d.id,
         kind: "class",
         name: d.rawName || d.id,
         doc: d.doc || "",
         path: d.path || "",
-        line: typeof d.line === "number" ? d.line : undefined
+        line: typeof d.line === "number" ? d.line : undefined,
+        quantities: qList
       });
     });
 
@@ -249,7 +268,7 @@ export default function GraphView({ nodes, edges, diff }: Props) {
 
     cyRef.current = cy;
 
-    // --- Diff highlights ---
+    // Diff highlights (unchanged)
     if (diff) {
       const addedIds   = new Set(diff.nodes?.added?.map((n: any) => n.id));
       const removedIds = new Set(diff.nodes?.removed?.map((n: any) => n.id));
@@ -274,7 +293,7 @@ export default function GraphView({ nodes, edges, diff }: Props) {
     }
 
     return () => { cyRef.current?.destroy(); };
-  }, [sectionsMap, attrsMap, methodsMap, compEdges, diff, setSelected]);
+  }, [sectionsMap, attrsMap, methodsMap, compEdges, quantitiesByOwner, diff, setSelected]);
 
   return <div className="graph" ref={containerRef} />;
 }
