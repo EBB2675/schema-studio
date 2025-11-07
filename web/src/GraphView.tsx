@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useRef } from "react";
 import cytoscape from "cytoscape";
 import elk from "elkjs/lib/elk.bundled.js";
 import cytoscapeElk from "cytoscape-elk";
-import type { Core, ElementDefinition, NodeSingular, EdgeSingular } from "cytoscape";
+import type { Core, ElementDefinition } from "cytoscape";
+import { useSelection } from "./store/selection";
 
 cytoscapeElk(cytoscape, elk as any);
 
@@ -17,6 +18,8 @@ type RawNode = {
   owner?: string | null;
   doc?: string | null;
   methods?: string[] | null;
+  path?: string | null;
+  line?: number | null;
 };
 
 type RawEdge = {
@@ -30,11 +33,7 @@ type Props = {
   nodes: RawNode[];
   edges: RawEdge[];
   diff?: {
-    nodes: {
-      added: any[];
-      removed: any[];
-      changed: { id: string }[];
-    };
+    nodes: { added: any[]; removed: any[]; changed: { id: string }[] };
     edges: {
       added: { source: string; target: string; type?: string }[];
       removed: { source: string; target: string; type?: string }[];
@@ -75,9 +74,7 @@ function umlLabel(
   const moreM = methods.length > MAX_M ? [`… (+${methods.length - MAX_M} more)`] : [];
 
   const lines = [name, "────────────", ...attrLines, ...moreA];
-  if (methods.length) {
-    lines.push("────────────", ...methodLines, ...moreM);
-  }
+  if (methods.length) lines.push("────────────", ...methodLines, ...moreM);
   return lines.join("\n");
 }
 
@@ -85,29 +82,37 @@ export default function GraphView({ nodes, edges, diff }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
 
+  const setSelected = useMemo(() => useSelection.getState().setSelected, []);
+
   const { sectionsMap, attrsMap, methodsMap, compEdges } = useMemo(() => {
     const sections = new Map<string, RawNode>();
     const attrs = new Map<string, { name: string; dtype?: string; shape?: string | null; card?: string | null }[]>();
     const methods = new Map<string, string[]>();
 
+    // collect only sections; quantities are folded into the card text
     for (const n of nodes) {
       if (n.kind === "section") {
         sections.set(n.id, n);
         attrs.set(n.id, attrs.get(n.id) ?? []);
         methods.set(n.id, (n.methods ?? []) as string[]);
-      } else if (n.kind === "quantity" && n.owner) {
-        const list = attrs.get(n.owner) ?? [];
-        list.push({
-          name: n.label,
-          dtype: n.dtype ?? undefined,
-          shape: n.shape ?? undefined,
-          card: n.card ?? undefined
-        });
-        attrs.set(n.owner, list);
       }
     }
 
+    // fold quantity metadata into their owners' attribute list
+    for (const q of nodes) {
+      if (q.kind !== "quantity" || !q.owner) continue;
+      const list = attrs.get(q.owner) ?? [];
+      list.push({
+        name: q.label,
+        dtype: q.dtype ?? undefined,
+        shape: q.shape ?? undefined,
+        card: q.card ?? undefined
+      });
+      attrs.set(q.owner, list);
+    }
+
     const subs = edges.filter(e => e.type === "hasSubSection");
+
     return { sectionsMap: sections, attrsMap: attrs, methodsMap: methods, compEdges: subs };
   }, [nodes, edges]);
 
@@ -116,8 +121,9 @@ export default function GraphView({ nodes, edges, diff }: Props) {
     cyRef.current?.destroy();
     cyRef.current = null;
 
-    // --- Build Cytoscape graph ---
+    // --- Build Cytoscape graph (sections only) ---
     const elements: ElementDefinition[] = [];
+
     for (const [secId, sec] of sectionsMap.entries()) {
       const attrs = attrsMap.get(secId) ?? [];
       const methods = methodsMap.get(secId) ?? [];
@@ -127,7 +133,10 @@ export default function GraphView({ nodes, edges, diff }: Props) {
           label: umlLabel(sec.label, attrs, methods),
           rawName: sec.label,
           kind: "uml_class",
-          module: sec.module ?? ""
+          module: sec.module ?? "",
+          doc: sec.doc ?? "",
+          path: sec.path ?? "",
+          line: typeof sec.line === "number" ? sec.line : undefined
         }
       });
     }
@@ -155,21 +164,22 @@ export default function GraphView({ nodes, edges, diff }: Props) {
         {
           selector: "node[kind='uml_class']",
           style: {
-            "shape": "round-rectangle",
+            shape: "round-rectangle",
             "background-color": "#f5f7fa",
             "border-color": "#0f172a",
             "border-width": 1.5,
-            "color": "#0f172a",
-            "label": "data(label)",
+            color: "#0f172a",
+            label: "data(label)",
             "text-wrap": "wrap",
             "text-max-width": 280,
             "font-size": 12,
-            "font-family": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
-            "padding": "8px",
+            "font-family":
+              "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
+            padding: "8px",
             "text-halign": "center",
             "text-valign": "center",
-            "width": "label",
-            "height": "label",
+            width: "label",
+            height: "label",
             "shadow-blur": 12,
             "shadow-color": "#94a3b8",
             "shadow-offset-x": 2,
@@ -180,14 +190,14 @@ export default function GraphView({ nodes, edges, diff }: Props) {
           selector: "edge[type='composition']",
           style: {
             "line-color": "#475569",
-            "width": 2,
+            width: 2,
             "curve-style": "segments",
             "source-arrow-shape": "diamond",
             "source-arrow-color": "#475569",
             "target-arrow-shape": "triangle",
             "target-arrow-color": "#475569",
             "arrow-scale": 1.1,
-            "label": "data(card)",
+            label: "data(card)",
             "font-size": 10,
             "text-rotation": "autorotate",
             "text-margin-y": -6,
@@ -196,14 +206,14 @@ export default function GraphView({ nodes, edges, diff }: Props) {
             "text-background-padding": 2
           }
         },
-        { selector: ".hidden", style: { "display": "none" } },
+        { selector: ".hidden", style: { display: "none" } },
         { selector: ":selected", style: { "border-width": 3, "border-color": "#2563eb" } },
-        // --- diff highlight styles ---
+        // diff highlights
         { selector: ".diff-added",   style: { "border-color": "#16a34a", "border-width": 4 } },
         { selector: ".diff-removed", style: { "border-color": "#dc2626", "border-width": 4 } },
         { selector: ".diff-changed", style: { "border-color": "#ca8a04", "border-width": 4 } },
-        { selector: "edge.diff-added",   style: { "line-color": "#16a34a", "target-arrow-color": "#16a34a", "source-arrow-color": "#16a34a", "width": 3 } },
-        { selector: "edge.diff-removed", style: { "line-color": "#dc2626", "target-arrow-color": "#dc2626", "source-arrow-color": "#dc2626", "width": 3, "line-style": "dashed" } },
+        { selector: "edge.diff-added",   style: { "line-color": "#16a34a", "target-arrow-color": "#16a34a", "source-arrow-color": "#16a34a", width: 3 } },
+        { selector: "edge.diff-removed", style: { "line-color": "#dc2626", "target-arrow-color": "#dc2626", "source-arrow-color": "#dc2626", width: 3, "line-style": "dashed" } }
       ],
       layout: {
         name: "elk",
@@ -220,9 +230,26 @@ export default function GraphView({ nodes, edges, diff }: Props) {
       } as any
     });
 
+    // === Selection → DocPanel (class only) ===
+    cy.on("tap", "node", (evt) => {
+      const d = evt.target.data();
+      useSelection.getState().setSelected({
+        id: d.id,
+        kind: "class",
+        name: d.rawName || d.id,
+        doc: d.doc || "",
+        path: d.path || "",
+        line: typeof d.line === "number" ? d.line : undefined
+      });
+    });
+
+    cy.on("tap", (evt) => {
+      if (evt.target === cy) useSelection.getState().setSelected(null);
+    });
+
     cyRef.current = cy;
 
-    // --- Apply diff highlights ---
+    // --- Diff highlights ---
     if (diff) {
       const addedIds   = new Set(diff.nodes?.added?.map((n: any) => n.id));
       const removedIds = new Set(diff.nodes?.removed?.map((n: any) => n.id));
@@ -247,7 +274,7 @@ export default function GraphView({ nodes, edges, diff }: Props) {
     }
 
     return () => { cyRef.current?.destroy(); };
-  }, [sectionsMap, attrsMap, methodsMap, compEdges, diff]);
+  }, [sectionsMap, attrsMap, methodsMap, compEdges, diff, setSelected]);
 
   return <div className="graph" ref={containerRef} />;
 }

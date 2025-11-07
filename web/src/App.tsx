@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import GraphView from "./GraphView";
+import DocPanel from "./components/DocPanel"; // ⬅️ NEW
 
 type ApiGraph = {
   package: string;
@@ -259,30 +260,45 @@ export default function App() {
         </div>
       </aside>
 
-      <div className="graph">
-        {diffData ? (
-          <>
-            <div style={{ padding: "6px 8px", fontSize: 12, background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
-              Base: {diffData.base.branch} ({diffData.base.sha.slice(0, 7)}) → Head: {diffData.head.branch} ({diffData.head.sha.slice(0, 7)}){" "}
-              <span style={{ marginLeft: 12 }}>
-                <span style={{ color: "#16a34a" }}>🟩 Added</span> •{" "}
-                <span style={{ color: "#ca8a04" }}>🟨 Changed</span> •{" "}
-                <span style={{ color: "#dc2626" }}>🟥 Removed</span>
-              </span>
+      {/* === MAIN WORKSPACE: Graph + Doc Panel side-by-side === */}
+      <div
+        className="graph"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 360px",
+          height: "100vh",
+          overflow: "hidden"
+        }}
+      >
+        {/* Left: the existing graph area (unchanged) */}
+        <div style={{ minWidth: 0 }}>
+          {diffData ? (
+            <>
+              <div style={{ padding: "6px 8px", fontSize: 12, background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
+                Base: {diffData.base.branch} ({diffData.base.sha.slice(0, 7)}) → Head: {diffData.head.branch} ({diffData.head.sha.slice(0, 7)}){" "}
+                <span style={{ marginLeft: 12 }}>
+                  <span style={{ color: "#16a34a" }}>🟩 Added</span> •{" "}
+                  <span style={{ color: "#ca8a04" }}>🟨 Changed</span> •{" "}
+                  <span style={{ color: "#dc2626" }}>🟥 Removed</span>
+                </span>
+              </div>
+              <GraphView
+                nodes={diffData.head.graph.nodes}
+                edges={diffData.head.graph.edges}
+                diff={diffData.diff}
+              />
+            </>
+          ) : graph ? (
+            <GraphView nodes={graph.nodes} edges={graph.edges} />
+          ) : (
+            <div style={{ padding: 24, color: "#6b7280" }}>
+              No graph yet. Select a package, load roots, pick a root, then “Build graph”; or compare two branches.
             </div>
-            <GraphView
-              nodes={diffData.head.graph.nodes}
-              edges={diffData.head.graph.edges}
-              diff={diffData.diff}
-            />
-          </>
-        ) : graph ? (
-          <GraphView nodes={graph.nodes} edges={graph.edges} />
-        ) : (
-          <div style={{ padding: 24, color: "#6b7280" }}>
-            No graph yet. Select a package, load roots, pick a root, then “Build graph”; or compare two branches.
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* Right: the new docstring panel */}
+        <DocPanel />
       </div>
     </main>
   );
