@@ -1,6 +1,6 @@
 # Schema UML Viewer
 
-Interactive UML-style viewer for `nomad-simulations. 
+Interactive UML-style viewer for `nomad-simulations`. 
 
 
 Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
