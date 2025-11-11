@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import GraphView from "./GraphView";
-import DocPanel from "./components/DocPanel"; // ⬅️ NEW
+import DocPanel from "./components/DocPanel";
 
 type ApiGraph = {
   package: string;
@@ -15,6 +15,7 @@ const DEFAULT_API = "http://localhost:5179";
 export default function App() {
   const [apiBase, setApiBase] = useState<string>(DEFAULT_API);
   const [pkg, setPkg] = useState<string>("nomad_simulations.schema_packages.model_method");
+  const [availablePkgs, setAvailablePkgs] = useState<string[]>([]);
   const [roots, setRoots] = useState<string[]>([]);
   const [root, setRoot] = useState<string>("ModelMethod");
 
@@ -29,7 +30,7 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // --- branch diff state ---
+  // branch diff state
   const [branches, setBranches] = useState<string[]>([]);
   const [baseBranch, setBaseBranch] = useState<string>("");
   const [headBranch, setHeadBranch] = useState<string>("");
@@ -65,8 +66,8 @@ export default function App() {
           include_quantities: includeQuantities,
           include_subsections: includeSubsections,
           allow_cross_module: crossModules,
-          base_namespace: namespace || undefined
-        }
+          base_namespace: namespace || undefined,
+        },
       });
       setGraph(r.data);
     } catch (e: any) {
@@ -88,7 +89,29 @@ export default function App() {
     }
   };
 
-  // compare base/head using SAME filters as sidebar
+  // fetch available schema packages from develop branch
+  const loadPackages = async () => {
+    try {
+      const r = await api.get("/git/packages", {
+        params: {
+          branch: "develop",
+          base_package: "nomad_simulations.schema_packages",
+        },
+      });
+      const list: string[] = r.data.packages || [];
+      setAvailablePkgs(list);
+
+      // if current pkg is not in the list, default to the first entry
+      if (list.length > 0 && !list.includes(pkg)) {
+        setPkg(list[0]);
+      }
+    } catch (e) {
+      // silent failure is fine; user can still type manually
+      console.error("Failed to load packages", e);
+    }
+  };
+
+  // compare base/head using same filters as sidebar
   const compareBranches = async () => {
     if (!baseBranch || !headBranch) return;
     setErr(null);
@@ -100,7 +123,7 @@ export default function App() {
         {
           base: baseBranch,
           head: headBranch,
-          package: pkg
+          package: pkg,
         },
         {
           params: {
@@ -108,8 +131,8 @@ export default function App() {
             include_quantities: includeQuantities,
             include_subsections: includeSubsections,
             allow_cross_module: crossModules,
-            base_namespace: namespace || undefined
-          }
+            base_namespace: namespace || undefined,
+          },
         }
       );
       setDiffData(r.data);
@@ -124,6 +147,7 @@ export default function App() {
   useEffect(() => {
     loadRoots();
     loadBranches();
+    loadPackages();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -135,7 +159,9 @@ export default function App() {
           <span className="small">{loading || diffLoading ? "Loading…" : ""}</span>
         </div>
 
-        <label className="label" style={{ marginTop: 12 }}>API base</label>
+        <label className="label" style={{ marginTop: 12 }}>
+          API base
+        </label>
         <input
           className="input"
           value={apiBase}
@@ -143,7 +169,9 @@ export default function App() {
           placeholder="http://localhost:5179"
         />
 
-        <label className="label" style={{ marginTop: 12 }}>Package (module)</label>
+        <label className="label" style={{ marginTop: 12 }}>
+          Package (module)
+        </label>
         <input
           className="input"
           value={pkg}
@@ -151,15 +179,41 @@ export default function App() {
           placeholder="nomad_simulations.schema_packages.model_method"
         />
 
+        {availablePkgs.length > 0 && (
+          <>
+            <label className="label" style={{ marginTop: 8 }}>
+              Choose from develop
+            </label>
+            <select
+              className="select"
+              value={availablePkgs.includes(pkg) ? pkg : ""}
+              onChange={(e) => setPkg(e.target.value)}
+            >
+              <option value="">Custom module...</option>
+              {availablePkgs.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+
         <div className="row" style={{ marginTop: 8 }}>
-          <button className="btn" onClick={loadRoots}>Load roots</button>
+          <button className="btn" onClick={loadRoots}>
+            Load roots
+          </button>
           <span className="small">{roots.length ? `${roots.length} sections` : ""}</span>
         </div>
 
-        <label className="label" style={{ marginTop: 12 }}>Root section</label>
+        <label className="label" style={{ marginTop: 12 }}>
+          Root section
+        </label>
         <select className="select" value={root} onChange={(e) => setRoot(e.target.value)}>
           {roots.map((r) => (
-            <option key={r} value={r}>{r}</option>
+            <option key={r} value={r}>
+              {r}
+            </option>
           ))}
         </select>
 
@@ -206,7 +260,9 @@ export default function App() {
           </label>
         </div>
 
-        <label className="label" style={{ marginTop: 8 }}>Base namespace (optional)</label>
+        <label className="label" style={{ marginTop: 8 }}>
+          Base namespace (optional)
+        </label>
         <input
           className="input"
           value={namespace}
@@ -215,7 +271,9 @@ export default function App() {
         />
 
         <div className="row" style={{ marginTop: 10 }}>
-          <button className="btn" onClick={loadGraph}>Build graph</button>
+          <button className="btn" onClick={loadGraph}>
+            Build graph
+          </button>
           {graph ? (
             <button
               className="btn secondary"
@@ -238,44 +296,72 @@ export default function App() {
           <p style={{ color: "#b91c1c", marginTop: 10, whiteSpace: "pre-wrap" }}>{err}</p>
         ) : null}
 
-        {/* --- Branch comparison --- */}
+        {/* Branch comparison */}
         <hr />
         <h4 style={{ marginTop: 10 }}>Compare branches</h4>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <label>Base branch</label>
-          <select className="select" value={baseBranch} onChange={(e) => setBaseBranch(e.target.value)}>
-            <option value="">—</option>
-            {branches.map(b => <option key={b} value={b}>{b}</option>)}
+          <select
+            className="select"
+            value={baseBranch}
+            onChange={(e) => setBaseBranch(e.target.value)}
+          >
+            <option value="">-</option>
+            {branches.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
           </select>
 
           <label>Head branch</label>
-          <select className="select" value={headBranch} onChange={(e) => setHeadBranch(e.target.value)}>
-            <option value="">—</option>
-            {branches.map(b => <option key={b} value={b}>{b}</option>)}
+          <select
+            className="select"
+            value={headBranch}
+            onChange={(e) => setHeadBranch(e.target.value)}
+          >
+            <option value="">-</option>
+            {branches.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
           </select>
 
-          <button className="btn" onClick={compareBranches} disabled={!baseBranch || !headBranch || diffLoading}>
+          <button
+            className="btn"
+            onClick={compareBranches}
+            disabled={!baseBranch || !headBranch || diffLoading}
+          >
             {diffLoading ? "Comparing…" : "Compare"}
           </button>
         </div>
       </aside>
 
-      {/* === MAIN WORKSPACE: Graph + Doc Panel side-by-side === */}
+      {/* Main workspace: Graph + Doc Panel side-by-side */}
       <div
         className="graph"
         style={{
           display: "grid",
           gridTemplateColumns: "1fr 360px",
           height: "100vh",
-          overflow: "hidden"
+          overflow: "hidden",
         }}
       >
-        {/* Left: the existing graph area (unchanged) */}
+        {/* Left: graph area */}
         <div style={{ minWidth: 0 }}>
           {diffData ? (
             <>
-              <div style={{ padding: "6px 8px", fontSize: 12, background: "#f9fafb", borderBottom: "1px solid #e5e7eb" }}>
-                Base: {diffData.base.branch} ({diffData.base.sha.slice(0, 7)}) → Head: {diffData.head.branch} ({diffData.head.sha.slice(0, 7)}){" "}
+              <div
+                style={{
+                  padding: "6px 8px",
+                  fontSize: 12,
+                  background: "#f9fafb",
+                  borderBottom: "1px solid #e5e7eb",
+                }}
+              >
+                Base: {diffData.base.branch} ({diffData.base.sha.slice(0, 7)}) → Head:{" "}
+                {diffData.head.branch} ({diffData.head.sha.slice(0, 7)}){" "}
                 <span style={{ marginLeft: 12 }}>
                   <span style={{ color: "#16a34a" }}>🟩 Added</span> •{" "}
                   <span style={{ color: "#ca8a04" }}>🟨 Changed</span> •{" "}
@@ -292,12 +378,13 @@ export default function App() {
             <GraphView nodes={graph.nodes} edges={graph.edges} />
           ) : (
             <div style={{ padding: 24, color: "#6b7280" }}>
-              No graph yet. Select a package, load roots, pick a root, then “Build graph”; or compare two branches.
+              No graph yet. Select a package, load roots, pick a root, then “Build graph”; or compare
+              two branches.
             </div>
           )}
         </div>
 
-        {/* Right: the new docstring panel */}
+        {/* Right: docstring panel */}
         <DocPanel />
       </div>
     </main>

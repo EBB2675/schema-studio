@@ -21,6 +21,7 @@ A structured overview of the repository for developers to navigate, understand, 
 - `GET /roots` — list section roots for a package
 - `GET /schema` — build a graph (single branch)
 - `GET /git/branches` — list local branches of the repo
+- `GET /git/packages`— list Python modules
 - `POST /graph/diff` — compare two branches and return a diff
 
 **Environment variables (one of):**

@@ -7,12 +7,12 @@ import { GraphPayload, GraphNodeData, GraphEdgeData } from '../types';
 cytoscape.use(elk);
 
 async function fetchGraph(): Promise<GraphPayload> {
-  // Adjust to your backend route if different
+  // Adjust to backend route if different
   const res = await fetch('/api/graph');
   if (!res.ok) throw new Error(`Graph fetch failed: ${res.status}`);
   const payload = (await res.json()) as GraphPayload;
 
-  // Minimal sanity: ensure ids exist
+  // Minimal sanity
   payload.nodes.forEach(n => {
     if (!n.id) throw new Error('Node without id encountered');
   });
