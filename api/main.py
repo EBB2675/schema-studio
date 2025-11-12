@@ -53,3 +53,78 @@ def schema(
         base_namespace=base_namespace
     )
     return data
+
+def _repo_root() -> Path:
+    root = os.environ.get("NOMAD_SIM_REPO") or os.environ.get("GIT_REPO_DIR")
+    if not root:
+        raise RuntimeError("Set NOMAD_SIM_REPO or GIT_REPO_DIR to a local clone of nomad-simulations")
+    return Path(root).resolve()
+
+def _export_subtree(repo: Path, branch: str, rel_path: str, outdir: Path) -> None:
+    archive = outdir / "tree.zip"
+    subprocess.run(
+        ["git", "-C", str(repo), "archive", branch, rel_path, "-o", str(archive)],
+        check=True
+    )
+    shutil.unpack_archive(str(archive), str(outdir))
+
+def _collect_classes_from_file(py_path: Path) -> list[str]:
+    try:
+        src = py_path.read_text(encoding="utf-8", errors="ignore")
+        tree = ast.parse(src)
+        # only top-level classes
+        return [n.name for n in tree.body if isinstance(n, ast.ClassDef)]
+    except Exception:
+        return []
+
+class PackageClasses(BaseModel):
+    package: str
+    classes: list[str]
+
+class OverviewOut(BaseModel):
+    branch: str
+    base: str
+    items: list[PackageClasses]
+
+@app.get("/overview", response_model=OverviewOut)
+def overview(
+    branch: str = Query("develop"),
+    base: str = Query("nomad_simulations.schema_packages"),
+):
+    """
+    Return packages under `base` and top-level classes in each package, at `branch`.
+    """
+    try:
+        repo = _repo_root()
+        base_path = base.replace(".", "/")
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            try:
+                _export_subtree(repo, branch, base_path, td)
+            except subprocess.CalledProcessError as e:
+                raise HTTPException(status_code=404, detail=f"Cannot export {base} at {branch}") from e
+
+            root_dir = td / base_path
+            if not root_dir.exists():
+                raise HTTPException(status_code=404, detail=f"{base} not found at {branch}")
+
+            items: list[PackageClasses] = []
+            for dirpath, dirnames, filenames in os.walk(root_dir):
+                pkg_dir = Path(dirpath)
+                if "__init__.py" not in filenames:
+                    continue
+                rel = pkg_dir.relative_to(td)
+                package_name = str(rel).replace("/", ".")
+                cls_names: set[str] = set()
+                for f in filenames:
+                    if f.endswith(".py"):
+                        cls_names.update(_collect_classes_from_file(pkg_dir / f))
+                items.append(PackageClasses(package=package_name, classes=sorted(cls_names)))
+
+            items.sort(key=lambda x: x.package)
+            return OverviewOut(branch=branch, base=base, items=items)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")

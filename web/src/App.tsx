@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import GraphView from "./GraphView";
 import DocPanel from "./components/DocPanel";
+import OverviewList from "./components/OverviewList";
 
 type ApiGraph = {
   package: string;
