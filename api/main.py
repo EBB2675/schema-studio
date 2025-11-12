@@ -2,13 +2,17 @@ from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import ORJSONResponse
 from extractor.graph_builder import build_graph, list_sections
 from fastapi.middleware.cors import CORSMiddleware
+import os, subprocess, tempfile, shutil, ast
+from pathlib import Path
+from pydantic import BaseModel
+
 from .routes_git import router as git_router
 
 app = FastAPI(title="Schema UML API", default_response_class=ORJSONResponse)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # dev-friendly
+    allow_origins=["*"],  
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -37,8 +41,8 @@ def schema(
     root: str | None = Query(None),
     include_quantities: bool = Query(True),
     include_subsections: bool = Query(True),
-    allow_cross_module: bool = Query(True),                 # NEW
-    base_namespace: str | None = Query(None),               # NEW
+    allow_cross_module: bool = Query(True),                 
+    base_namespace: str | None = Query(None),               
 ):
     data = build_graph(
         package=package,
