@@ -38,6 +38,10 @@ export default function App() {
   const [diffData, setDiffData] = useState<any | null>(null);
   const [diffLoading, setDiffLoading] = useState<boolean>(false);
 
+  // overview mode
+  const [mode, setMode] = useState<"graph" | "overview">("graph");
+  const [overviewBranch, setOverviewBranch] = useState<string>("develop");
+
   const api = useMemo(() => axios.create({ baseURL: apiBase }), [apiBase]);
 
   // roots for selected package
@@ -158,6 +162,31 @@ export default function App() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h3 style={{ margin: 0 }}>Schema UML</h3>
           <span className="small">{loading || diffLoading ? "Loading…" : ""}</span>
+        </div>
+
+        {/* Overview toggle */}
+        <div className="row" style={{ marginTop: 8, gap: 8, alignItems: "center" }}>
+          <button
+            className="btn"
+            onClick={() => setMode((m) => (m === "overview" ? "graph" : "overview"))}
+            title="Toggle bird's-eye view"
+          >
+            {mode === "overview" ? "Back to diagram" : "Bird's-eye view"}
+          </button>
+          {mode === "overview" && (
+            <>
+              <label className="label" style={{ margin: 0 }}>Branch</label>
+              <select
+                className="select"
+                value={overviewBranch}
+                onChange={(e) => setOverviewBranch(e.target.value)}
+              >
+                {["develop", ...branches.filter((b) => b !== "develop")].map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
 
         <label className="label" style={{ marginTop: 12 }}>
@@ -351,7 +380,9 @@ export default function App() {
       >
         {/* Left: graph area */}
         <div style={{ minWidth: 0 }}>
-          {diffData ? (
+          {mode === "overview" ? (
+            <OverviewList apiBase={apiBase} branch={overviewBranch} />
+          ) : diffData ? (
             <>
               <div
                 style={{

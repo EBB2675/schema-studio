@@ -60,6 +60,60 @@ def _repo_root() -> Path:
         raise RuntimeError("Set NOMAD_SIM_REPO or GIT_REPO_DIR to a local clone of nomad-simulations")
     return Path(root).resolve()
 
+def _run_git(repo: Path, *args: str) -> str:
+    cp = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+    if cp.returncode != 0:
+        raise subprocess.CalledProcessError(cp.returncode, cp.args, cp.stdout, cp.stderr)
+    return cp.stdout
+
+def _git_path_exists(repo: Path, branch: str, path: str) -> bool:
+    # returns True if path exists at branch (dir tree or file)
+    try:
+        out = _run_git(repo, "ls-tree", "-d", "--name-only", branch, path).strip()
+        if out:
+            return True
+        # if not a dir, check any file under it
+        out2 = _run_git(repo, "ls-tree", "-r", "--name-only", branch, path).strip()
+        return bool(out2)
+    except subprocess.CalledProcessError:
+        return False
+
+def _resolve_base_tree(repo: Path, branch: str, base_path: str) -> str:
+    """
+    Try to find the tree path that contains the given base package.
+    Tries:
+      1) base_path
+      2) src/base_path
+      3) search the tree for */base_path/__init__.py and infer the prefix
+    Returns a repository-relative path suitable for `git archive`.
+    """
+    candidates = [base_path, f"src/{base_path}"]
+    for c in candidates:
+        if _git_path_exists(repo, branch, c):
+            return c
+
+    # Fallback: search entire tree for any file under the base
+    try:
+        listing = _run_git(repo, "ls-tree", "-r", "--name-only", branch)
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(status_code=404, detail=f"Branch not found: {branch}") from e
+
+    target_suffix = f"{base_path}/__init__.py"
+    prefix = None
+    for line in listing.splitlines():
+        if line.endswith(target_suffix):
+            # line is like "src/nomad_simulations/schema_packages/__init__.py"
+            prefix = line[: -len(target_suffix)].rstrip("/")
+            break
+    if prefix is not None:
+        resolved = f"{prefix}/{base_path}" if prefix else base_path
+        return resolved
+
+    raise HTTPException(
+        status_code=404,
+        detail=f"Cannot locate {base_path} at {branch} (tried {base_path}, src/{base_path})"
+    )
+
 def _export_subtree(repo: Path, branch: str, rel_path: str, outdir: Path) -> None:
     archive = outdir / "tree.zip"
     subprocess.run(
@@ -72,7 +126,6 @@ def _collect_classes_from_file(py_path: Path) -> list[str]:
     try:
         src = py_path.read_text(encoding="utf-8", errors="ignore")
         tree = ast.parse(src)
-        # only top-level classes
         return [n.name for n in tree.body if isinstance(n, ast.ClassDef)]
     except Exception:
         return []
@@ -92,33 +145,45 @@ def overview(
     base: str = Query("nomad_simulations.schema_packages"),
 ):
     """
-    Return packages under `base` and top-level classes in each package, at `branch`.
+    Bird's-eye overview: packages under `base` and their top-level classes at `branch`.
+    Resolves repo layout prefixes (e.g., src/).
     """
     try:
         repo = _repo_root()
         base_path = base.replace(".", "/")
-        with tempfile.TemporaryDirectory() as td:
-            td = Path(td)
-            try:
-                _export_subtree(repo, branch, base_path, td)
-            except subprocess.CalledProcessError as e:
-                raise HTTPException(status_code=404, detail=f"Cannot export {base} at {branch}") from e
 
-            root_dir = td / base_path
-            if not root_dir.exists():
-                raise HTTPException(status_code=404, detail=f"{base} not found at {branch}")
+        # resolve actual tree path (handles src/ layout)
+        resolved_tree = _resolve_base_tree(repo, branch, base_path)
+
+        with tempfile.TemporaryDirectory() as td_str:
+            td = Path(td_str)
+            try:
+                _export_subtree(repo, branch, resolved_tree, td)
+            except subprocess.CalledProcessError as e:
+                raise HTTPException(status_code=404, detail=f"Cannot export {resolved_tree} at {branch}") from e
+
+            # the extracted folder root is td / <resolved_tree>
+            extract_root = td / resolved_tree
+            if not extract_root.exists():
+                raise HTTPException(status_code=404, detail=f"Extracted path missing: {resolved_tree}")
 
             items: list[PackageClasses] = []
-            for dirpath, dirnames, filenames in os.walk(root_dir):
+            for dirpath, dirnames, filenames in os.walk(extract_root):
                 pkg_dir = Path(dirpath)
                 if "__init__.py" not in filenames:
                     continue
-                rel = pkg_dir.relative_to(td)
-                package_name = str(rel).replace("/", ".")
+
+                # rel path from the resolved tree root
+                rel_from_resolved = pkg_dir.relative_to(extract_root)
+                # Build full dotted package name: base + (optional tail)
+                tail = str(rel_from_resolved).replace("/", ".")
+                package_name = base if tail in ("", ".") else f"{base}.{tail}"
+
                 cls_names: set[str] = set()
                 for f in filenames:
                     if f.endswith(".py"):
                         cls_names.update(_collect_classes_from_file(pkg_dir / f))
+
                 items.append(PackageClasses(package=package_name, classes=sorted(cls_names)))
 
             items.sort(key=lambda x: x.package)
