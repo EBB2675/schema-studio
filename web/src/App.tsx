@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import GraphView from "./GraphView";
 import DocPanel from "./components/DocPanel";
-import OverviewList from "./components/OverviewList";
+import OverviewGrid from "./components/OverviewGrid";
 
 type ApiGraph = {
   package: string;
@@ -381,7 +381,8 @@ export default function App() {
         {/* Left: graph area */}
         <div style={{ minWidth: 0 }}>
           {mode === "overview" ? (
-            <OverviewList apiBase={apiBase} branch={overviewBranch} />
+            //<OverviewList apiBase={apiBase} branch={overviewBranch} />
+            <OverviewGrid apiBase={apiBase} branch={overviewBranch} />
           ) : diffData ? (
             <>
               <div
