@@ -428,12 +428,9 @@ export default function App() {
             borderLeft: "1px solid #e5e7eb",
           }}
         >
-          {/* Top: DocPanel, takes most of the space and scrolls if needed */}
           <div style={{ flex: 2, minHeight: 0, overflowY: "auto" }}>
             <DocPanel />
           </div>
-
-          {/* Bottom: UnderTheHoodPanel, own smaller scroll area */}
           <div
             style={{
               flexBasis: "220px",
@@ -442,7 +439,7 @@ export default function App() {
               overflowY: "auto",
             }}
           >
-            <UnderTheHoodPanel />
+            <UnderTheHoodPanel apiBase={apiBase} />
           </div>
         </div>
       </div>

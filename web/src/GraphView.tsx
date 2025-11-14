@@ -247,18 +247,27 @@ export default function GraphView({ nodes, edges, diff }: Props) {
       } as any
     });
 
-    // Selection → DocPanel (class only; but with quantities looked up from the local map)
+    // Selection → DocPanel + UnderTheHoodPanel
     cy.on("tap", "node", (evt) => {
       const d = evt.target.data();
       const qList = quantitiesByOwner.get(d.id) || [];
+
+      // fully-qualified section name for /usage
+      // e.g. module="nomad_simulations.schema_packages.model_method", rawName="DFT"
+      const fqid =
+        d.module && (d.rawName || d.id)
+          ? `${d.module}.${d.rawName || d.id}`
+          : d.id;
+
       useSelection.getState().setSelected({
-        id: d.id,
+        id: d.id,                    
+        fqid,                       
         kind: "class",
         name: d.rawName || d.id,
         doc: d.doc || "",
         path: d.path || "",
         line: typeof d.line === "number" ? d.line : undefined,
-        quantities: qList
+        quantities: qList,
       });
     });
 
