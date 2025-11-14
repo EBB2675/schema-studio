@@ -3,6 +3,7 @@ import axios from "axios";
 import GraphView from "./GraphView";
 import DocPanel from "./components/DocPanel";
 import OverviewGrid from "./components/OverviewGrid";
+import UnderTheHoodPanel from './components/UnderTheHoodPanel';
 
 type ApiGraph = {
   package: string;
@@ -417,8 +418,19 @@ export default function App() {
           )}
         </div>
 
-        {/* Right: docstring panel */}
-        <DocPanel />
+        {/* Right: docstring panel + under the hood panel */}
+        <div
+          style={{
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "auto",
+            borderLeft: "1px solid #e5e7eb",
+          }}
+        >
+          <DocPanel />
+          <UnderTheHoodPanel />
+        </div>
       </div>
     </main>
   );
