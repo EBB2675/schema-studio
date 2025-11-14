@@ -418,18 +418,32 @@ export default function App() {
           )}
         </div>
 
-        {/* Right: docstring panel + under the hood panel */}
+        {/* Right: docstring panel (top) + under-the-hood panel (bottom) */}
         <div
           style={{
             minWidth: 0,
             display: "flex",
             flexDirection: "column",
-            overflow: "auto",
+            height: "100vh",
             borderLeft: "1px solid #e5e7eb",
           }}
         >
-          <DocPanel />
-          <UnderTheHoodPanel />
+          {/* Top: DocPanel, takes most of the space and scrolls if needed */}
+          <div style={{ flex: 2, minHeight: 0, overflowY: "auto" }}>
+            <DocPanel />
+          </div>
+
+          {/* Bottom: UnderTheHoodPanel, own smaller scroll area */}
+          <div
+            style={{
+              flexBasis: "220px",
+              borderTop: "1px solid #e5e7eb",
+              minHeight: 0,
+              overflowY: "auto",
+            }}
+          >
+            <UnderTheHoodPanel />
+          </div>
         </div>
       </div>
     </main>
