@@ -1,3 +1,5 @@
+from typing import List, Optional
+
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import ORJSONResponse
 from extractor.graph_builder import build_graph, list_sections
@@ -7,6 +9,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from .routes_git import router as git_router
+from extractor.usage_index import UsageEntry, get_usage_for_section
 
 app = FastAPI(title="Schema UML API", default_response_class=ORJSONResponse)
 
@@ -193,3 +196,32 @@ def overview(
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
+    
+
+class UsageEntryModel(BaseModel):
+    kind: str
+    qualname: str
+    module: str
+    short_name: str
+    doc: Optional[str]
+
+@app.get("/usage", response_model=List[UsageEntryModel])
+def get_usage(section_id: str = Query(..., description="Fully qualified section class name")):
+    """
+    Return "under the hood" usage information for a given section class.
+
+    section_id should be the same as the node id for class nodes,
+    e.g. "nomad_simulations.schema_packages.model_method.ModelMethod".
+    """
+    entries = get_usage_for_section(section_id)
+    # entries is a tuple[UsageEntry, ...]; convert to Pydantic models
+    return [
+        UsageEntryModel(
+            kind=e.kind,
+            qualname=e.qualname,
+            module=e.module,
+            short_name=e.short_name,
+            doc=e.doc,
+        )
+        for e in entries
+    ]
