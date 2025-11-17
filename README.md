@@ -7,6 +7,7 @@ Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 
 - Visualizes **sections** as UML cards (attributes = quantities, edges = subsections).
 - Right-hand **Doc Panel** shows the **class docstring** and a **clickable list of quantities**.
+- Right-hand **Under the hood** panel shows **normalization and helper functions** that act on the selected section.
 - **Branch diff** (base → head) highlights **added/changed/removed** nodes/edges.
 
 ---
@@ -15,6 +16,9 @@ Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 
 - **UML cards**: Section name, attributes (quantity name, dtype, shape, cardinality), and optional methods.
 - **Doc panel**: Click a class to see its docstring; click a quantity in the panel to see its docstring.
+- **Under-the-hood panel**:
+  - Click a class to see which **normalize methods** and **module-level helpers** the viewer can associate with that section.
+  - Information is derived from `nomad-simulations` via a small introspection/indexing step in the backend.
 - **Branch comparison**: Choose two Git branches and render the diff with visual highlights.
 - **Namespace filtering**: Limit traversal to a base namespace; optionally include cross-module links.
 
@@ -74,7 +78,8 @@ Open: <http://localhost:5173/>
 3. **Root section**: Pick one (e.g. `ModelMethod`) or leave empty to load all.
 4. **Build graph**: Render UML cards and composition edges.
 5. **Doc panel**: Click a class → see its docstring + list of quantities; click a quantity to view its docstring.
-6. **Compare branches**: Choose **Base** and **Head** → **Compare** to see a visual diff.
+6. **Under the hood panel**: Click a class → see which normalizers and module-level helpers are associated with that section.
+7. **Compare branches**: Choose **Base** and **Head** → **Compare** to see a visual diff.
 
 Legend:
 - 🟩 **Added** (green border / edges)  
@@ -107,6 +112,7 @@ Legend:
 - **Frontend**
   - `web/src/GraphView.tsx`: builds Cytoscape graph (sections + composition edges), wires selection to the store.
   - `web/src/components/DocPanel.tsx`: shows class/quantity docs; lists quantities with dtype/shape/card.
+  - `web/src/components/UnderTheHoodPanel.tsx`: for the selected class, calls /usage on API base and renders the normalization list.
   - `web/src/store/selection.ts`: Zustand store for selected node.
 - **ELK Layout**: layered, right-directed; label size is included in node dimensions.
 

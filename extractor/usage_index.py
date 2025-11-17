@@ -17,23 +17,18 @@ class UsageEntry:
     """
     Describes one "under the hood" code path that acts on a given section.
 
-    Fields
-    ------
-    kind:
-        One of:
-          * "normalize_method"   -> section.normalize(...)
-          * "normalize_function" -> module-level normalize_<SectionName>(...)
-          * "utility_function"   -> (reserved for future heuristics)
-    qualname:
-        Fully-qualified Python name of the function/method, e.g.
-        "nomad_simulations.schema_packages.model_method.ModelMethod.normalize"
-        or "nomad_simulations.schema_packages.model_method.normalize_model_method".
-    module:
+    kind
+        "normalize_method"   -> section.normalize(...)
+        "normalize_function" -> module-level helper acting on the section
+        "utility_function"   -> reserved for future heuristics
+    qualname
+        Fully-qualified Python name of the callable.
+    module
         Module name containing the callable.
-    short_name:
-        Simple function/method name, e.g. "normalize" or "normalize_model_method".
-    doc:
-        First line of the callable's docstring, if available.
+    short_name
+        Simple function/method name, e.g. "normalize" or "normalize_dft".
+    doc
+        Short first-paragraph summary of the callable's docstring, if available.
     """
     kind: UsageKind
     qualname: str
@@ -42,9 +37,13 @@ class UsageEntry:
     doc: Optional[str] = None
 
 
-def _safe_getdoc(obj: object) -> Optional[str]:
+def _short_doc(obj: object, max_len: int = 280) -> Optional[str]:
     """
-    Return the first non-empty line of an object's docstring, or None.
+    Return a compact first-paragraph summary of an object's docstring.
+
+    - Takes all lines up to the first blank line.
+    - Collapses whitespace to single spaces.
+    - Truncates to `max_len` characters with an ellipsis if needed.
     """
     try:
         raw = inspect.getdoc(obj) or ""
@@ -55,8 +54,22 @@ def _safe_getdoc(obj: object) -> Optional[str]:
     if not raw:
         return None
 
-    first = raw.splitlines()[0].strip()
-    return first or None
+    lines = raw.splitlines()
+    para_lines: list[str] = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            # stop at first blank line
+            break
+        para_lines.append(line)
+
+    if not para_lines:
+        return None
+
+    text = " ".join(para_lines)
+    if len(text) > max_len:
+        text = text[: max_len - 1].rstrip() + "…"
+    return text or None
 
 
 def _resolve_section_class(section_qualname: str):
@@ -108,7 +121,6 @@ def _usage_from_normalize_method(cls) -> List[UsageEntry]:
     if inspect.ismethod(normalize) or inspect.isfunction(normalize):
         func = normalize
     else:
-        # Descriptors / other callables
         func = getattr(cls, "normalize", None)
         if not (inspect.ismethod(func) or inspect.isfunction(func)):
             return entries
@@ -122,7 +134,7 @@ def _usage_from_normalize_method(cls) -> List[UsageEntry]:
             qualname=qualname,
             module=module_name,
             short_name="normalize",
-            doc=_safe_getdoc(func),
+            doc=_short_doc(func),
         )
     )
     return entries
@@ -130,11 +142,19 @@ def _usage_from_normalize_method(cls) -> List[UsageEntry]:
 
 def _usage_from_module_normalize_functions(cls) -> List[UsageEntry]:
     """
-    Discover module-level helpers of the form normalize_<SectionName>* in the
-    same module as the section class.
+    Discover module-level helpers that appear to normalize this section.
 
-    Example: for ModelMethod, this will pick up normalize_model_method(...)
-    in nomad_simulations.schema_packages.model_method.
+    Heuristic:
+      - we look in the *same module* as the section class
+      - function name must contain "normalize"
+      - function name must also contain the class name (case-insensitive)
+        somewhere, not necessarily directly after "normalize_"
+
+    Examples that will be picked up for DFT:
+      * normalize_dft
+      * normalize_dft_section
+      * section_normalize_dft
+      * normalize_modelmethod_dft
     """
     entries: List[UsageEntry] = []
 
@@ -143,17 +163,22 @@ def _usage_from_module_normalize_functions(cls) -> List[UsageEntry]:
         module = importlib.import_module(module_name)
     except Exception:
         logger.debug(
-            "Could not import module %s while scanning normalize_* helpers for %s",
+            "Could not import module %s while scanning normalize helpers for %s",
             module_name,
             cls,
             exc_info=True,
         )
         return entries
 
-    prefix = f"normalize_{cls.__name__}".lower()
+    cls_name_lower = cls.__name__.lower()
 
     for name, obj in inspect.getmembers(module, inspect.isfunction):
-        if not name.lower().startswith(prefix):
+        n_lower = name.lower()
+
+        # must look like some kind of normalizer for this class
+        if "normalize" not in n_lower:
+            continue
+        if cls_name_lower not in n_lower:
             continue
 
         qualname = f"{module.__name__}.{name}"
@@ -163,7 +188,7 @@ def _usage_from_module_normalize_functions(cls) -> List[UsageEntry]:
                 qualname=qualname,
                 module=module.__name__,
                 short_name=name,
-                doc=_safe_getdoc(obj),
+                doc=_short_doc(obj),
             )
         )
 
@@ -190,7 +215,7 @@ def get_usage_for_section(section_qualname: str) -> Tuple[UsageEntry, ...]:
     ----------
     section_qualname
         Fully-qualified section class name, e.g.
-        "nomad_simulations.schema_packages.model_method.ModelMethod".
+        "nomad_simulations.schema_packages.model_method.DFT".
 
     Returns
     -------
