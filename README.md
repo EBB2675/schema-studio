@@ -49,6 +49,8 @@ export NOMAD_SIM_REPO=<somethingsomething>/nomad-simulations
 ```
 Make it persistent by adding the export to `~/.bashrc` or `~/.zshrc`.
 
+The repository should be under `nomad-simulations/` folder. Custom module names are not yet supported. 
+
 ### 4) Backend (FastAPI)
 ```bash
 uvicorn api.main:app --reload --port 5179
@@ -60,6 +62,8 @@ curl 'http://127.0.0.1:5179/roots?package=nomad_simulations.schema_packages.mode
 curl 'http://127.0.0.1:5179/schema?package=nomad_simulations.schema_packages.model_method&root=ModelMethod&include_quantities=true'
 curl 'http://127.0.0.1:5179/git/branches'
 ```
+
+(REMINDER: The repository should be under `nomad-simulations/` folder. Custom module names are not yet supported.)
 
 ### 5) Frontend (Vite dev server)
 ```bash
