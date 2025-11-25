@@ -13,3 +13,10 @@ main { display: flex; height: 100%; font-family: system-ui, -apple-system, Segoe
   background: linear-gradient(180deg, #f7f8fa 0%, #eef1f5 100%);
 }
 hr { border:0; border-top:1px solid #e5e7eb; margin:12px 0; }
+.panel {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e5e7eb;
+}
