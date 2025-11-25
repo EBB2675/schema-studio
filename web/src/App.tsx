@@ -428,15 +428,26 @@ export default function App() {
             borderLeft: "1px solid #e5e7eb",
           }}
         >
-          <div style={{ flex: 2, minHeight: 0, overflowY: "auto" }}>
-            <DocPanel />
-          </div>
+          {/* top half: DocPanel */}
           <div
             style={{
-              flexBasis: "220px",
-              borderTop: "1px solid #e5e7eb",
+              flex: 1,           
               minHeight: 0,
               overflowY: "auto",
+              padding: "8px",
+            }}
+          >
+            <DocPanel />
+          </div>
+
+          {/* bottom half: Under the hood */}
+          <div
+            style={{
+              flex: 1,            
+              minHeight: 0,
+              overflowY: "auto",
+              padding: "8px",
+              borderTop: "1px solid #e5e7eb",
             }}
           >
             <UnderTheHoodPanel apiBase={apiBase} />
