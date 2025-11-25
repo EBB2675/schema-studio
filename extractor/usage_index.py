@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal, Optional, List, Tuple
+
 import functools
 import importlib
 import inspect
@@ -19,14 +20,14 @@ class UsageEntry:
 
     kind
         "normalize_method"   -> section.normalize(...)
-        "normalize_function" -> module-level helper acting on the section
-        "utility_function"   -> reserved for future heuristics
+        "normalize_function" -> module-level helper likely acting on the section
+        "utility_function"   -> helpers actually called inside normalize()
     qualname
         Fully-qualified Python name of the callable.
     module
         Module name containing the callable.
     short_name
-        Simple function/method name, e.g. "normalize" or "normalize_dft".
+        Simple function/method name, e.g. "normalize" or "resolve_chemical_symbol".
     doc
         Short first-paragraph summary of the callable's docstring, if available.
     """
@@ -39,10 +40,11 @@ class UsageEntry:
 
 def _short_doc(obj: object, max_len: int = 280) -> Optional[str]:
     """
-    Return a compact first-paragraph summary of an object's docstring.
+    Return a compact first-sentence summary of an object's docstring.
 
     - Takes all lines up to the first blank line.
     - Collapses whitespace to single spaces.
+    - Cuts at the end of the first sentence if possible.
     - Truncates to `max_len` characters with an ellipsis if needed.
     """
     try:
@@ -67,10 +69,16 @@ def _short_doc(obj: object, max_len: int = 280) -> Optional[str]:
         return None
 
     text = " ".join(para_lines)
+
+    # Keep only the first sentence if possible!!!
+    dot_pos = text.find(". ")
+    if dot_pos != -1:
+        text = text[: dot_pos + 1]
+
     if len(text) > max_len:
         text = text[: max_len - 1].rstrip() + "…"
-    return text or None
 
+    return text or None
 
 def _resolve_section_class(section_qualname: str):
     """
@@ -107,23 +115,35 @@ def _resolve_section_class(section_qualname: str):
     return cls
 
 
+def _get_normalize_callable(cls):
+    """
+    Return the underlying normalize function or method for a section class.
+
+    Returns None if no suitable normalize callable is found.
+    """
+    normalize = getattr(cls, "normalize", None)
+    if normalize is None:
+        return None
+
+    if inspect.ismethod(normalize) or inspect.isfunction(normalize):
+        return normalize
+
+    func = getattr(cls, "normalize", None)
+    if inspect.ismethod(func) or inspect.isfunction(func):
+        return func
+
+    return None
+
+
 def _usage_from_normalize_method(cls) -> List[UsageEntry]:
     """
     Discover a normalize() method on the section class itself.
     """
     entries: List[UsageEntry] = []
 
-    normalize = getattr(cls, "normalize", None)
-    if normalize is None:
+    func = _get_normalize_callable(cls)
+    if func is None:
         return entries
-
-    # For bound/unbound methods we want the underlying function-like object.
-    if inspect.ismethod(normalize) or inspect.isfunction(normalize):
-        func = normalize
-    else:
-        func = getattr(cls, "normalize", None)
-        if not (inspect.ismethod(func) or inspect.isfunction(func)):
-            return entries
 
     module_name = getattr(func, "__module__", cls.__module__)
     qualname = f"{module_name}.{cls.__name__}.normalize"
@@ -149,12 +169,6 @@ def _usage_from_module_normalize_functions(cls) -> List[UsageEntry]:
       - function name must contain "normalize"
       - function name must also contain the class name (case-insensitive)
         somewhere, not necessarily directly after "normalize_"
-
-    Examples that will be picked up for DFT:
-      * normalize_dft
-      * normalize_dft_section
-      * section_normalize_dft
-      * normalize_modelmethod_dft
     """
     entries: List[UsageEntry] = []
 
@@ -195,15 +209,88 @@ def _usage_from_module_normalize_functions(cls) -> List[UsageEntry]:
     return entries
 
 
+def _helpers_from_normalize_source(cls, func) -> List[object]:
+    """
+    Heuristic: inspect the source of `cls.normalize` and look for usages
+    of methods on the same class and functions in the same module.
+
+    We look for patterns like:
+      - ".helper_name("
+      - "helper_name("
+
+    and only keep callables.
+    """
+    try:
+        source = inspect.getsource(func)
+    except OSError:
+        # Builtins, C-extensions, dynamically created functions, etc.
+        return []
+
+    helpers: set[object] = set()
+
+    # 1) methods on the same class, e.g. self.resolve_chemical_symbol(...)
+    for name, obj in inspect.getmembers(cls):
+        if name == "normalize":
+            continue
+        if name.startswith("__"):
+            # skip dunder methods
+            continue
+        if not callable(obj):
+            continue
+
+        # Look for ".name(" to catch self.name(...) or other.attr.name(...)
+        needle = f".{name}("
+        if needle in source:
+            helpers.add(obj)
+
+    # 2) functions from the same module, e.g. normalize_atoms_state(...)
+    try:
+        module = importlib.import_module(cls.__module__)
+    except Exception:
+        module = None
+
+    if module is not None:
+        for name, obj in inspect.getmembers(module, inspect.isfunction):
+            if name == "normalize":
+                continue
+
+            # Either bare call "name(" or attribute call ".name("
+            if f"{name}(" in source or f".{name}(" in source:
+                helpers.add(obj)
+
+    return list(helpers)
+
+
 def _usage_from_utility_functions(cls) -> List[UsageEntry]:
     """
-    Placeholder for future heuristics for "utility_function" entries.
+    Utility functions that are actually used inside cls.normalize().
 
-    For now, we return an empty list. Later, this could be extended to scan
-    selected utility modules and look for type-hints or isinstance checks
-    involving `cls`.
+    This includes:
+      - methods on the same class (self.helper_method)
+      - module level functions in the same module
     """
-    return []
+    entries: List[UsageEntry] = []
+
+    func = _get_normalize_callable(cls)
+    if func is None:
+        return entries
+
+    for helper in _helpers_from_normalize_source(cls, func):
+        name = getattr(helper, "__name__", repr(helper))
+        module_name = getattr(helper, "__module__", cls.__module__)
+        qualname = f"{module_name}.{getattr(helper, '__qualname__', name)}"
+
+        entries.append(
+            UsageEntry(
+                kind="utility_function",
+                qualname=qualname,
+                module=module_name,
+                short_name=name,
+                doc=_short_doc(helper),
+            )
+        )
+
+    return entries
 
 
 @functools.lru_cache(maxsize=1024)
@@ -215,13 +302,13 @@ def get_usage_for_section(section_qualname: str) -> Tuple[UsageEntry, ...]:
     ----------
     section_qualname
         Fully-qualified section class name, e.g.
-        "nomad_simulations.schema_packages.model_method.DFT".
+        "nomad_simulations.schema_packages.model_method.ModelMethod".
 
     Returns
     -------
     tuple[UsageEntry, ...]
         Possibly empty. Normalization methods/helpers come first, followed
-        by any utility functions (once implemented).
+        by any utility functions.
     """
     cls = _resolve_section_class(section_qualname)
     if cls is None:
@@ -232,7 +319,7 @@ def get_usage_for_section(section_qualname: str) -> Tuple[UsageEntry, ...]:
     entries.extend(_usage_from_module_normalize_functions(cls))
     entries.extend(_usage_from_utility_functions(cls))
 
-    # Stable sort: normalize_method → normalize_function → utility_function
+    # Stable sort: normalize_method -> normalize_function -> utility_function
     kind_order = {
         "normalize_method": 0,
         "normalize_function": 1,
