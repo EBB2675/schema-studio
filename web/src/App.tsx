@@ -418,7 +418,7 @@ export default function App() {
           )}
         </div>
 
-        {/* Right: docstring panel (top) + under-the-hood panel (bottom) */}
+        {/* Right: DocPanel (top) + Under-the-hood (bottom) */}
         <div
           style={{
             minWidth: 0,
@@ -426,31 +426,34 @@ export default function App() {
             flexDirection: "column",
             height: "100vh",
             borderLeft: "1px solid #e5e7eb",
+            padding: "4px",
+            gap: "4px"
           }}
         >
-          {/* top half: DocPanel */}
+          {/* TOP PANEL — about 60% */}
           <div
             style={{
-              flex: 1,           
+              flex: 6,
               minHeight: 0,
-              overflowY: "auto",
-              padding: "8px",
+              overflowY: "auto"
             }}
           >
-            <DocPanel />
+            <div className="panel">
+              <DocPanel />
+            </div>
           </div>
 
-          {/* bottom half: Under the hood */}
+          {/* BOTTOM PANEL — about 40% */}
           <div
             style={{
-              flex: 1,            
+              flex: 4,
               minHeight: 0,
-              overflowY: "auto",
-              padding: "8px",
-              borderTop: "1px solid #e5e7eb",
+              overflowY: "auto"
             }}
           >
-            <UnderTheHoodPanel apiBase={apiBase} />
+            <div className="panel">
+              <UnderTheHoodPanel apiBase={apiBase} />
+            </div>
           </div>
         </div>
       </div>
