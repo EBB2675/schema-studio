@@ -29,6 +29,10 @@ type RawEdge = {
   card?: string | null;
 };
 
+export type GraphExportHandle = {
+  toPng: () => string | null;
+};
+
 type Props = {
   nodes: RawNode[];
   edges: RawEdge[];
@@ -39,6 +43,7 @@ type Props = {
       removed: { source: string; target: string; type?: string }[];
     };
   } | null;
+  onReady?: (handle: GraphExportHandle | null) => void;
 };
 
 const cleanType = (t?: string | null) => {
@@ -77,7 +82,7 @@ function umlLabel(
   return lines.join("\n");
 }
 
-export default function GraphView({ nodes, edges, diff }: Props) {
+export default function GraphView({ nodes, edges, diff, onReady }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
 
@@ -140,6 +145,7 @@ export default function GraphView({ nodes, edges, diff }: Props) {
     if (!containerRef.current) return;
     cyRef.current?.destroy();
     cyRef.current = null;
+    onReady?.(null);
 
     const elements: ElementDefinition[] = [];
 
@@ -277,6 +283,15 @@ export default function GraphView({ nodes, edges, diff }: Props) {
 
     cyRef.current = cy;
 
+    onReady?.({
+      toPng: () =>
+        cyRef.current?.png({
+          full: true,
+          scale: 2,
+          bg: "#ffffff"
+        }) ?? null
+    });
+
     // Diff highlights (unchanged)
     if (diff) {
       const addedIds   = new Set(diff.nodes?.added?.map((n: any) => n.id));
@@ -301,8 +316,11 @@ export default function GraphView({ nodes, edges, diff }: Props) {
       });
     }
 
-    return () => { cyRef.current?.destroy(); };
-  }, [sectionsMap, attrsMap, methodsMap, compEdges, quantitiesByOwner, diff, setSelected]);
+    return () => {
+      onReady?.(null);
+      cyRef.current?.destroy();
+    };
+  }, [sectionsMap, attrsMap, methodsMap, compEdges, quantitiesByOwner, diff, setSelected, onReady]);
 
   return <div className="graph" ref={containerRef} />;
 }
