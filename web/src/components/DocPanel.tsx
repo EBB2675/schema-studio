@@ -6,24 +6,12 @@ function QtyRow({ q, onClick }: { q: QtyMeta; onClick: () => void }) {
   if (q.shape && q.shape !== "[]") meta.push(q.shape);
   if (q.card) meta.push(`[${q.card}]`);
   return (
-    <button
-      onClick={onClick}
-      style={{
-        display: "flex",
-        width: "100%",
-        textAlign: "left",
-        padding: "6px 8px",
-        borderRadius: 8,
-        border: "1px solid #e5e7eb",
-        background: "#fff",
-        cursor: "pointer"
-      }}
-    >
-      <div style={{ flex: 1, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace" }}>
+    <button className="qty-row" onClick={onClick}>
+      <div style={{ flex: 1 }} className="qty-mono">
         <div style={{ fontSize: 13 }}>{q.name}</div>
         <div style={{ fontSize: 11, opacity: 0.7 }}>{meta.join("  ")}</div>
       </div>
-      <div style={{ fontSize: 12, opacity: 0.6 }}>View</div>
+      <div className="tag" style={{ borderColor: "rgba(124, 58, 237, 0.4)", color: "#c7d2fe" }}>View</div>
     </button>
   );
 }
@@ -47,38 +35,27 @@ export default function DocPanel() {
   };
 
   return (
-    <aside
-      style={{
-        width: 360,
-        borderLeft: "1px solid #e5e7eb",
-        padding: 16,
-        overflow: "auto",
-        height: "100vh",
-        boxSizing: "border-box",
-        background: "#fff"
-      }}
-    >
+    <div className="doc-shell">
       {!selected ? (
-        <div style={{ opacity: 0.6, fontSize: 13 }}>Select a class to see its docstring and quantities.</div>
+        <div className="doc-empty">Select a class to see its docstring and quantities.</div>
       ) : selected.kind === "class" ? (
         <>
-          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.7, marginBottom: 6 }}>
-            class
+          <div className="doc-header">
+            <div className="meta-label">Class</div>
+            {selected.path ? (
+              <div className="code-badge">
+                <span>{selected.path}{selected.line ? `:${selected.line}` : ""}</span>
+              </div>
+            ) : null}
           </div>
-          <h2 style={{ fontSize: 18, margin: "0 0 8px 0" }}>{selected.name}</h2>
-          {(selected.path || selected.line) && (
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 12 }}>
-              {selected.path}{selected.line ? `:${selected.line}` : ""}
-            </div>
-          )}
-          <pre style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap", marginBottom: 16 }}>
-            {selected.doc || "No docstring available."}
-          </pre>
+          <h2 className="doc-title">{selected.name}</h2>
+          <pre className="doc-docstring">{selected.doc || "No docstring available."}</pre>
 
-          <div style={{ fontSize: 12, fontWeight: 600, margin: "8px 0 6px" }}>
-            Quantities {selected.quantities ? `(${selected.quantities.length})` : "(0)"}
+          <div className="doc-subtitle">
+            <span>Quantities</span>
+            <span className="qty-count">{selected.quantities ? selected.quantities.length : 0}</span>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div className="doc-card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {(selected.quantities ?? []).map((q) => (
               <QtyRow key={q.id} q={q} onClick={() => showQuantity(q)} />
             ))}
@@ -89,26 +66,24 @@ export default function DocPanel() {
         </>
       ) : (
         <>
-          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.7, marginBottom: 6 }}>
-            quantity
+          <div className="doc-header">
+            <div className="meta-label">Quantity</div>
+            {(selected.path || selected.line) && (
+              <div className="code-badge">
+                {selected.path}{selected.line ? `:${selected.line}` : ""}
+              </div>
+            )}
           </div>
-          <h2 style={{ fontSize: 18, margin: "0 0 8px 0" }}>{selected.name}</h2>
-          {(selected.path || selected.line) && (
-            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>
-              {selected.path}{selected.line ? `:${selected.line}` : ""}
-            </div>
-          )}
-          <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 10 }}>
+          <h2 className="doc-title">{selected.name}</h2>
+          <div className="doc-meta">
             {[selected.dtype, selected.shape && selected.shape !== "[]"
               ? selected.shape
               : null, selected.card ? `[${selected.card}]` : null]
               .filter(Boolean).join("  ")}
           </div>
-          <pre style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
-            {selected.doc || "No docstring available."}
-          </pre>
+          <pre className="doc-docstring">{selected.doc || "No docstring available."}</pre>
         </>
       )}
-    </aside>
+    </div>
   );
 }

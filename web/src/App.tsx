@@ -280,272 +280,294 @@ export default function App() {
   };
 
   return (
-    <main>
+    <main className="app-shell">
       <aside className="sidebar">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ margin: 0 }}>Schema UML</h3>
-          <span className="small">{loading || diffLoading ? "Loading…" : ""}</span>
+        <div className="brand-card">
+          <p className="eyebrow">Schema explorer</p>
+          <h3 className="brand-title">
+            <span className="pulse" />
+            Schema UML
+          </h3>
+          <p className="subdued">Craft diagrams, compare branches, and publish docs.</p>
+          <div className="row" style={{ marginTop: 10 }}>
+            <span className="tag">{loading || diffLoading ? "Working…" : "Ready"}</span>
+            {selectedClassName ? <span className="tag">Selected: {selectedClassName}</span> : null}
+          </div>
         </div>
 
-        {/* Overview toggle */}
-        <div className="row" style={{ marginTop: 8, gap: 8, alignItems: "center" }}>
-          <button
-            className="btn"
-            onClick={() => setMode((m) => (m === "overview" ? "graph" : "overview"))}
-            title="Toggle bird's-eye view"
-          >
-            {mode === "overview" ? "Back to diagram" : "Bird's-eye view"}
-          </button>
-          {mode === "overview" && (
-            <>
-              <label className="label" style={{ margin: 0 }}>Branch</label>
-              <select
-                className="select"
-                value={overviewBranch}
-                onChange={(e) => setOverviewBranch(e.target.value)}
-              >
-                {[DEFAULT_BRANCH, ...branches.filter((b) => b !== DEFAULT_BRANCH)].map((b) => (
-                  <option key={b} value={b}>{b}</option>
-                ))}
-              </select>
-            </>
-          )}
-        </div>
-
-        <label className="label" style={{ marginTop: 12 }}>
-          API base
-        </label>
-        <input
-          className="input"
-          value={apiBase}
-          onChange={(e) => setApiBase(e.target.value)}
-          placeholder="http://localhost:5179"
-        />
-
-        <label className="label" style={{ marginTop: 12 }}>
-          Package (module)
-        </label>
-        <input
-          className="input"
-          value={pkg}
-          onChange={(e) => setPkg(e.target.value)}
-          placeholder={DEFAULT_PACKAGE}
-        />
-
-        {availablePkgs.length > 0 && (
-          <>
-            <label className="label" style={{ marginTop: 8 }}>
-              Choose from {DEFAULT_BRANCH}
-            </label>
-            <select
-              className="select"
-              value={availablePkgs.includes(pkg) ? pkg : ""}
-              onChange={(e) => setPkg(e.target.value)}
+        <div className="section">
+          <div className="section-title">
+            <span>Workspace</span>
+            <span className="hint">Switch modes on the fly</span>
+          </div>
+          <div className="row" style={{ gap: 10 }}>
+            <button
+              className="btn"
+              onClick={() => setMode((m) => (m === "overview" ? "graph" : "overview"))}
+              title="Toggle bird's-eye view"
             >
-              <option value="">Custom module...</option>
-              {availablePkgs.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </>
-        )}
-
-        <div className="row" style={{ marginTop: 8 }}>
-          <button className="btn" onClick={loadRoots}>
-            Load roots
-          </button>
-          <span className="small">{roots.length ? `${roots.length} sections` : ""}</span>
+              {mode === "overview" ? "Back to diagram" : "Bird's-eye view"}
+            </button>
+            {mode === "overview" && (
+              <div style={{ flex: 1 }}>
+                <label className="label" style={{ margin: 0 }}>Branch</label>
+                <select
+                  className="select"
+                  value={overviewBranch}
+                  onChange={(e) => setOverviewBranch(e.target.value)}
+                >
+                  {[DEFAULT_BRANCH, ...branches.filter((b) => b !== DEFAULT_BRANCH)].map((b) => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
         </div>
 
-        <label className="label" style={{ marginTop: 12 }}>
-          Root section
-        </label>
-        <select className="select" value={root} onChange={(e) => setRoot(e.target.value)}>
-          {roots.map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </select>
+        <div className="section">
+          <div className="section-title">
+            <span>API & package</span>
+            <span className="hint">Connect to a backend</span>
+          </div>
+          <div className="action-stack">
+            <div>
+              <label className="label">API base</label>
+              <input
+                className="input"
+                value={apiBase}
+                onChange={(e) => setApiBase(e.target.value)}
+                placeholder="http://localhost:5179"
+              />
+            </div>
 
-        <hr />
+            <div>
+              <label className="label">Package (module)</label>
+              <input
+                className="input"
+                value={pkg}
+                onChange={(e) => setPkg(e.target.value)}
+                placeholder={DEFAULT_PACKAGE}
+              />
+            </div>
 
-        <div className="row">
-          <label>
-            <input
-              type="checkbox"
-              checked={includeQuantities}
-              onChange={(e) => setIncludeQuantities(e.target.checked)}
-            />{" "}
-            Quantities
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={includeSubsections}
-              onChange={(e) => setIncludeSubsections(e.target.checked)}
-            />{" "}
-            Subsections
-          </label>
+            {availablePkgs.length > 0 && (
+              <div>
+                <label className="label">Choose from {DEFAULT_BRANCH}</label>
+                <select
+                  className="select"
+                  value={availablePkgs.includes(pkg) ? pkg : ""}
+                  onChange={(e) => setPkg(e.target.value)}
+                >
+                  <option value="">Custom module...</option>
+                  {availablePkgs.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <div>
+                <label className="label">Root section</label>
+                <select className="select" value={root} onChange={(e) => setRoot(e.target.value)}>
+                  {roots.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">&nbsp;</label>
+                <button className="btn" onClick={loadRoots}>
+                  Load roots
+                </button>
+                <div className="small">{roots.length ? `${roots.length} sections` : ""}</div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="row" style={{ marginTop: 6 }}>
-          <label>
+        <div className="section">
+          <div className="section-title">
+            <span>Diagram filters</span>
+            <span className="hint">Fine-tune the graph</span>
+          </div>
+          <div className="control-grid">
+            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={includeQuantities}
+                onChange={(e) => setIncludeQuantities(e.target.checked)}
+              />
+              Quantities
+            </label>
+            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={includeSubsections}
+                onChange={(e) => setIncludeSubsections(e.target.checked)}
+              />
+              Subsections
+            </label>
+            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={umlMode}
+                onChange={(e) => setUmlMode(e.target.checked)}
+              />
+              UML mode
+            </label>
+            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={crossModules}
+                onChange={(e) => setCrossModules(e.target.checked)}
+              />
+              Cross-modules
+            </label>
+          </div>
+
+          <div style={{ marginTop: 10 }}>
+            <label className="label">Base namespace (optional)</label>
             <input
-              type="checkbox"
-              checked={umlMode}
-              onChange={(e) => setUmlMode(e.target.checked)}
-            />{" "}
-            UML mode
-          </label>
-        </div>
+              className="input"
+              value={namespace}
+              onChange={(e) => setNamespace(e.target.value)}
+              placeholder={DEFAULT_NAMESPACE}
+            />
+          </div>
 
-        <div className="row" style={{ marginTop: 6 }}>
-          <label>
-            <input
-              type="checkbox"
-              checked={crossModules}
-              onChange={(e) => setCrossModules(e.target.checked)}
-            />{" "}
-            Cross-modules
-          </label>
-        </div>
+          <div className="row" style={{ marginTop: 14, justifyContent: "space-between", gap: 10 }}>
+            <button className="btn" onClick={loadGraph}>
+              Build graph
+            </button>
+            {currentGraph ? (
+              <div className="row" style={{ flex: 1, justifyContent: "flex-end" }}>
+                <button className="btn secondary" onClick={exportJson}>
+                  Export JSON
+                </button>
+                <button
+                  className="btn secondary"
+                  onClick={exportPdf}
+                  disabled={!exportHandle}
+                  title={exportHandle ? "Download current diagram as PDF" : "Build a graph first"}
+                >
+                  Export PDF
+                </button>
+              </div>
+            ) : null}
+          </div>
 
-        <label className="label" style={{ marginTop: 8 }}>
-          Base namespace (optional)
-        </label>
-        <input
-          className="input"
-          value={namespace}
-          onChange={(e) => setNamespace(e.target.value)}
-          placeholder={DEFAULT_NAMESPACE}
-        />
-
-        <div className="row" style={{ marginTop: 10 }}>
-          <button className="btn" onClick={loadGraph}>
-            Build graph
-          </button>
-          {currentGraph ? (
-            <>
-              <button className="btn secondary" onClick={exportJson}>
-                Export JSON
-              </button>
-              <button
-                className="btn secondary"
-                onClick={exportPdf}
-                disabled={!exportHandle}
-                title={exportHandle ? "Download current diagram as PDF" : "Build a graph first"}
-              >
-                Export PDF
-              </button>
-            </>
+          {err ? (
+            <p style={{ color: "#fca5a5", marginTop: 10, whiteSpace: "pre-wrap" }}>{err}</p>
           ) : null}
         </div>
 
-        {err ? (
-          <p style={{ color: "#b91c1c", marginTop: 10, whiteSpace: "pre-wrap" }}>{err}</p>
-        ) : null}
+        <div className="section">
+          <div className="section-title">
+            <span>Editable mode</span>
+            <span className="hint">Prototype new quantities</span>
+          </div>
+          <div className="row" style={{ marginBottom: 6 }}>
+            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={editableMode}
+                onChange={(e) => {
+                  setEditableMode(e.target.checked);
+                  setAddErr(null);
+                }}
+              />
+              Editable mode
+            </label>
+            {addBlockedReason && <span className="small">{addBlockedReason}</span>}
+          </div>
 
-        <hr />
-        <div className="row" style={{ marginTop: 6 }}>
-          <label>
-            <input
-              type="checkbox"
-              checked={editableMode}
-              onChange={(e) => {
-                setEditableMode(e.target.checked);
-                setAddErr(null);
-              }}
-            />{" "}
-            Editable mode
-          </label>
+          <AddQuantityForm
+            enabled={editableMode && !addBlockedReason}
+            blockedReason={addBlockedReason}
+            targetClass={selectedClassName}
+            onSubmit={addCustomQuantity}
+            submitting={addLoading}
+            error={addErr}
+          />
         </div>
 
-        <AddQuantityForm
-          enabled={editableMode && !addBlockedReason}
-          blockedReason={addBlockedReason}
-          targetClass={selectedClassName}
-          onSubmit={addCustomQuantity}
-          submitting={addLoading}
-          error={addErr}
-        />
+        <div className="section">
+          <div className="section-title">
+            <span>Compare branches</span>
+            <span className="hint">Diff diagrams across git</span>
+          </div>
+          <div className="action-stack">
+            <div>
+              <label className="label">Base branch</label>
+              <select
+                className="select"
+                value={baseBranch}
+                onChange={(e) => setBaseBranch(e.target.value)}
+              >
+                <option value="">-</option>
+                {branches.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        {/* Branch comparison */}
-        <hr />
-        <h4 style={{ marginTop: 10 }}>Compare branches</h4>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <label>Base branch</label>
-          <select
-            className="select"
-            value={baseBranch}
-            onChange={(e) => setBaseBranch(e.target.value)}
-          >
-            <option value="">-</option>
-            {branches.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
+            <div>
+              <label className="label">Head branch</label>
+              <select
+                className="select"
+                value={headBranch}
+                onChange={(e) => setHeadBranch(e.target.value)}
+              >
+                <option value="">-</option>
+                {branches.map((b) => (
+                  <option key={b} value={b}>
+                    {b}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <label>Head branch</label>
-          <select
-            className="select"
-            value={headBranch}
-            onChange={(e) => setHeadBranch(e.target.value)}
-          >
-            <option value="">-</option>
-            {branches.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
-
-          <button
-            className="btn"
-            onClick={compareBranches}
-            disabled={!baseBranch || !headBranch || diffLoading}
-          >
-            {diffLoading ? "Comparing…" : "Compare"}
-          </button>
+            <button
+              className="btn"
+              onClick={compareBranches}
+              disabled={!baseBranch || !headBranch || diffLoading}
+            >
+              {diffLoading ? "Comparing…" : "Compare"}
+            </button>
+          </div>
         </div>
       </aside>
 
       {/* Main workspace: Graph + Doc Panel side-by-side */}
-      <div
-        className="graph"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 360px",
-          height: "100vh",
-          overflow: "hidden",
-        }}
-      >
+      <div className="workspace">
         {/* Left: graph area */}
         <div style={{ minWidth: 0 }}>
           {mode === "overview" ? (
-            //<OverviewList apiBase={apiBase} branch={overviewBranch} />
             <OverviewGrid apiBase={apiBase} branch={overviewBranch} base={namespace || DEFAULT_NAMESPACE} />
           ) : diffData ? (
             <>
-              <div
-                style={{
-                  padding: "6px 8px",
-                  fontSize: 12,
-                  background: "#f9fafb",
-                  borderBottom: "1px solid #e5e7eb",
-                }}
-              >
-                Base: {diffData.base.branch} ({diffData.base.sha.slice(0, 7)}) → Head:{" "}
-                {diffData.head.branch} ({diffData.head.sha.slice(0, 7)}){" "}
-                <span style={{ marginLeft: 12 }}>
-                  <span style={{ color: "#16a34a" }}>🟩 Added</span> •{" "}
-                  <span style={{ color: "#ca8a04" }}>🟨 Changed</span> •{" "}
-                  <span style={{ color: "#dc2626" }}>🟥 Removed</span>
-                </span>
+              <div className="workspace-toolbar">
+                <div>
+                  Base: {diffData.base.branch} ({diffData.base.sha.slice(0, 7)}) → Head: {diffData.head.branch}
+                  ({diffData.head.sha.slice(0, 7)})
+                </div>
+                <div className="row" style={{ gap: 10 }}>
+                  <span className="pill">🟩 Added</span>
+                  <span className="pill" style={{ background: "rgba(234, 179, 8, 0.18)", color: "#fef9c3" }}>
+                    🟨 Changed
+                  </span>
+                  <span className="pill" style={{ background: "rgba(248, 113, 113, 0.16)", color: "#fecdd3" }}>
+                    🟥 Removed
+                  </span>
+                </div>
               </div>
               <GraphView
                 nodes={diffData.head.graph.nodes}
@@ -557,9 +579,9 @@ export default function App() {
           ) : graph ? (
             <GraphView nodes={graph.nodes} edges={graph.edges} onReady={setExportHandle} />
           ) : (
-            <div style={{ padding: 24, color: "#6b7280" }}>
-              No graph yet. Select a package, load roots, pick a root, then “Build graph”; or compare
-              two branches.
+            <div className="empty-state">
+              <div style={{ fontSize: 18, marginBottom: 8 }}>Build a diagram to get started</div>
+              <div>Select a package, load roots, pick a root, then “Build graph”; or compare two branches.</div>
             </div>
           )}
         </div>
@@ -571,9 +593,9 @@ export default function App() {
             display: "flex",
             flexDirection: "column",
             height: "100vh",
-            borderLeft: "1px solid #e5e7eb",
-            padding: "4px",
-            gap: "4px"
+            borderLeft: "1px solid var(--panel-border)",
+            padding: "10px",
+            gap: "10px"
           }}
         >
           {/* TOP PANEL — about 60% */}
