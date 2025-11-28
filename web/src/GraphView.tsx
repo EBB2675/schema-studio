@@ -190,7 +190,7 @@ export default function GraphView({ nodes, edges, diff }: Props) {
             color: "#0f172a",
             label: "data(label)",
             "text-wrap": "wrap",
-            "text-max-width": 280,
+            "text-max-width": "280px",
             "font-size": 12,
             "font-family": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
             padding: "8px",
@@ -202,7 +202,7 @@ export default function GraphView({ nodes, edges, diff }: Props) {
             "shadow-color": "#94a3b8",
             "shadow-offset-x": 2,
             "shadow-offset-y": 4
-          }
+          } as any
         },
         {
           selector: "edge[type='composition']",
@@ -221,7 +221,7 @@ export default function GraphView({ nodes, edges, diff }: Props) {
             "text-margin-y": -6,
             "text-background-color": "#f5f7fa",
             "text-background-opacity": 1,
-            "text-background-padding": 2
+            "text-background-padding": "2px"
           }
         },
         { selector: ".hidden", style: { display: "none" } },
