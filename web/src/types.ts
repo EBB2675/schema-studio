@@ -1,16 +1,19 @@
-// web/src/store/selection.ts
-import { create } from 'zustand';
-
-type Selected = null | {
+export type GraphNodeData = {
   id: string;
-  kind: 'class' | 'quantity';
   name: string;
-  doc: string;
-  path?: string;
-  line?: number;
+  kind: 'class' | 'quantity';
+  doc?: string | null;
+  path?: string | null;
+  line?: number | null;
 };
 
-export const useSelection = create<{
-  selected: Selected;
-  setSelected: (s: Selected) => void;
-}>(set => ({ selected: null, setSelected: s => set(s) }));
+export type GraphEdgeData = {
+  id?: string;
+  source: string;
+  target: string;
+};
+
+export type GraphPayload = {
+  nodes: GraphNodeData[];
+  edges: GraphEdgeData[];
+};

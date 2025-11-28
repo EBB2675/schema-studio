@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { listBranches, getDiff, DiffResponse } from "./api";
+import { useEffect, useState } from "react";
+import { listBranches, getDiff, type DiffResponse } from "./api";
 
 export default function BranchDiffBar({ onDiff }: { onDiff: (d: DiffResponse) => void }) {
   const [branches, setBranches] = useState<string[]>([]);

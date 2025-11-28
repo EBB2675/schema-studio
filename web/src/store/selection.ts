@@ -20,6 +20,11 @@ export type Selected = null | {
   path?: string;
   line?: number;
   quantities?: QtyMeta[];
+  dtype?: string;
+  shape?: string | null;
+  card?: string | null;
+  owner?: string;
+  fqid?: string;
 };
 
 type SelectionState = {

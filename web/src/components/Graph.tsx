@@ -1,8 +1,9 @@
-import React from 'react';
-import cytoscape, { Core, ElementDefinition } from 'cytoscape';
+import { useEffect, useRef } from 'react';
+import cytoscape from 'cytoscape';
+import type { Core, ElementDefinition, LayoutOptions } from 'cytoscape';
 import elk from 'cytoscape-elk';
 import { useSelection } from '../store/selection';
-import { GraphPayload, GraphNodeData, GraphEdgeData } from '../types';
+import type { GraphPayload, GraphNodeData, GraphEdgeData } from '../types';
 
 cytoscape.use(elk);
 
@@ -43,11 +44,11 @@ function toCyElements(payload: GraphPayload): ElementDefinition[] {
 }
 
 export default function Graph() {
-  const containerRef = React.useRef<HTMLDivElement | null>(null);
-  const cyRef = React.useRef<Core | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const cyRef = useRef<Core | null>(null);
   const setSelected = useSelection(s => s.setSelected);
 
-  React.useEffect(() => {
+  useEffect(() => {
     let alive = true;
 
     const init = async () => {
@@ -61,7 +62,7 @@ export default function Graph() {
         layout: {
           name: 'elk',
           elk: { algorithm: 'layered', 'elk.direction': 'RIGHT' },
-        },
+        } as LayoutOptions,
         style: [
           {
             selector: 'node',
@@ -71,9 +72,9 @@ export default function Graph() {
               'border-color': '#94a3b8',
               label: 'data(name)',
               'text-wrap': 'wrap',
-              'text-max-width': 160,
+              'text-max-width': '160px',
               'font-size': 12,
-              padding: 8,
+              padding: '8px',
             },
           },
           {

@@ -1,4 +1,3 @@
-import React from "react";
 import { useSelection, type QtyMeta } from "../store/selection";
 
 function QtyRow({ q, onClick }: { q: QtyMeta; onClick: () => void }) {
