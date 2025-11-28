@@ -34,7 +34,7 @@ def build_graph_in_subprocess(
 ) -> Dict[str, Any]:
     env = os.environ.copy()
 
-    # Make nomad-simulations worktree importable AND this app’s modules (extractor/*)
+    # Make the schema worktree importable AND this app’s modules (extractor/*)
     py_paths = [
         str(worktree),
         str(worktree / "src"),

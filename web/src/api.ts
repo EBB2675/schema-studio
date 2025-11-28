@@ -1,4 +1,5 @@
 const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:5179";
+const DEFAULT_PACKAGE = import.meta.env.VITE_DEFAULT_PACKAGE ?? "nomad_simulations.schema_packages.model_method";
 
 export async function listBranches(): Promise<string[]> {
   const r = await fetch(`${BASE}/git/branches`);
@@ -28,7 +29,7 @@ export type DiffResponse = {
   };
 };
 
-export async function getDiff(base: string, head: string, pkg = "nomad_simulations.model_method") {
+export async function getDiff(base: string, head: string, pkg = DEFAULT_PACKAGE) {
   const r = await fetch(`${BASE}/graph/diff`, {
     method: "POST",
     headers: { "content-type": "application/json" },

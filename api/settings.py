@@ -1,14 +1,37 @@
 from pathlib import Path
+from urllib.parse import urlparse
 import os
+import re
 
 # Where to keep a bare clone + worktrees
 DATA_DIR = Path(os.getenv("SCHEMA_UML_DATA_DIR", Path(__file__).resolve().parent / "_data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# Local path or remote URL to your nomad-simulations repo
-NOMAD_SIM_REPO = os.getenv("NOMAD_SIM_REPO", str(Path.home() / "src/nomad-simulations"))
+# Local path or remote URL to the schema repository (supports NOMAD-compatible schemas)
+SCHEMA_REPO = (
+    os.getenv("SCHEMA_UML_REPO")
+    or os.getenv("NOMAD_SIM_REPO")
+    or os.getenv("GIT_REPO_DIR")
+    or str(Path.home() / "src/nomad-simulations")
+)
 
-# Python module you extract from (can be overridden per request)
-DEFAULT_PACKAGE = os.getenv("SCHEMA_UML_PACKAGE", "nomad_simulations.model_method")
+
+def _repo_slug(src: str) -> str:
+    """Return a filesystem-friendly slug for the bare mirror."""
+
+    path = urlparse(src).path or src
+    name = Path(path).name or "schema-repo"
+    if name.endswith(".git"):
+        name = name[:-4]
+    # Keep alnum + separators stable
+    name = re.sub(r"[^A-Za-z0-9._-]", "_", name)
+    return name or "schema-repo"
+
+
+REPO_SLUG = _repo_slug(SCHEMA_REPO)
+
+# Default base package/section can be overridden per request or via env vars
+DEFAULT_BASE_PACKAGE = os.getenv("SCHEMA_UML_BASE_PACKAGE", "nomad_simulations.schema_packages")
+DEFAULT_PACKAGE = os.getenv("SCHEMA_UML_PACKAGE", f"{DEFAULT_BASE_PACKAGE}.model_method")
 
 EXTRACTOR_ENTRY = os.getenv("SCHEMA_UML_EXTRACTOR", "extractor.graph_builder:build_graph")

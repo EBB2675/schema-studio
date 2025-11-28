@@ -16,20 +16,24 @@ type ApiGraph = {
 };
 
 const DEFAULT_API = "http://localhost:5179";
+const DEFAULT_PACKAGE = import.meta.env.VITE_DEFAULT_PACKAGE ?? "nomad_simulations.schema_packages.model_method";
+const DEFAULT_NAMESPACE = import.meta.env.VITE_DEFAULT_NAMESPACE ?? "nomad_simulations.schema_packages";
+const DEFAULT_ROOT = import.meta.env.VITE_DEFAULT_ROOT ?? "ModelMethod";
+const DEFAULT_BRANCH = import.meta.env.VITE_DEFAULT_BRANCH ?? "develop";
 
 export default function App() {
   const [apiBase, setApiBase] = useState<string>(DEFAULT_API);
-  const [pkg, setPkg] = useState<string>("nomad_simulations.schema_packages.model_method");
+  const [pkg, setPkg] = useState<string>(DEFAULT_PACKAGE);
   const [availablePkgs, setAvailablePkgs] = useState<string[]>([]);
   const [roots, setRoots] = useState<string[]>([]);
-  const [root, setRoot] = useState<string>("ModelMethod");
+  const [root, setRoot] = useState<string>(DEFAULT_ROOT);
 
   const [includeQuantities, setIncludeQuantities] = useState<boolean>(true);
   const [includeSubsections, setIncludeSubsections] = useState<boolean>(true);
   const [umlMode, setUmlMode] = useState<boolean>(true);
 
   const [crossModules, setCrossModules] = useState<boolean>(true);
-  const [namespace, setNamespace] = useState<string>("nomad_simulations.schema_packages");
+  const [namespace, setNamespace] = useState<string>(DEFAULT_NAMESPACE);
 
   const [graph, setGraph] = useState<ApiGraph | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -53,7 +57,7 @@ export default function App() {
 
   // overview mode
   const [mode, setMode] = useState<"graph" | "overview">("graph");
-  const [overviewBranch, setOverviewBranch] = useState<string>("develop");
+  const [overviewBranch, setOverviewBranch] = useState<string>(DEFAULT_BRANCH);
 
   const api = useMemo(() => axios.create({ baseURL: apiBase }), [apiBase]);
 
@@ -113,8 +117,8 @@ export default function App() {
     try {
       const r = await api.get("/git/packages", {
         params: {
-          branch: "develop",
-          base_package: "nomad_simulations.schema_packages",
+          branch: DEFAULT_BRANCH,
+          base_package: namespace || DEFAULT_NAMESPACE,
         },
       });
       const list: string[] = r.data.packages || [];
@@ -300,7 +304,7 @@ export default function App() {
                 value={overviewBranch}
                 onChange={(e) => setOverviewBranch(e.target.value)}
               >
-                {["develop", ...branches.filter((b) => b !== "develop")].map((b) => (
+                {[DEFAULT_BRANCH, ...branches.filter((b) => b !== DEFAULT_BRANCH)].map((b) => (
                   <option key={b} value={b}>{b}</option>
                 ))}
               </select>
@@ -325,13 +329,13 @@ export default function App() {
           className="input"
           value={pkg}
           onChange={(e) => setPkg(e.target.value)}
-          placeholder="nomad_simulations.schema_packages.model_method"
+          placeholder={DEFAULT_PACKAGE}
         />
 
         {availablePkgs.length > 0 && (
           <>
             <label className="label" style={{ marginTop: 8 }}>
-              Choose from develop
+              Choose from {DEFAULT_BRANCH}
             </label>
             <select
               className="select"
@@ -416,7 +420,7 @@ export default function App() {
           className="input"
           value={namespace}
           onChange={(e) => setNamespace(e.target.value)}
-          placeholder="nomad_simulations.schema_packages"
+          placeholder={DEFAULT_NAMESPACE}
         />
 
         <div className="row" style={{ marginTop: 10 }}>
@@ -524,7 +528,7 @@ export default function App() {
         <div style={{ minWidth: 0 }}>
           {mode === "overview" ? (
             //<OverviewList apiBase={apiBase} branch={overviewBranch} />
-            <OverviewGrid apiBase={apiBase} branch={overviewBranch} />
+            <OverviewGrid apiBase={apiBase} branch={overviewBranch} base={namespace || DEFAULT_NAMESPACE} />
           ) : diffData ? (
             <>
               <div

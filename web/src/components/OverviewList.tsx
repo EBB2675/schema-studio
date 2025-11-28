@@ -3,10 +3,12 @@ import { useEffect, useState } from "react";
 type OverviewItem = { package: string; classes: string[] };
 type OverviewResp = { branch: string; base: string; items: OverviewItem[] };
 
+const DEFAULT_OVERVIEW_BASE = import.meta.env.VITE_DEFAULT_NAMESPACE ?? "nomad_simulations.schema_packages";
+
 export default function OverviewList({
   apiBase,
   branch,
-  base = "nomad_simulations.schema_packages",
+  base = DEFAULT_OVERVIEW_BASE,
 }: {
   apiBase: string;
   branch: string;

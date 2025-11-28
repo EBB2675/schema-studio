@@ -1,6 +1,6 @@
 # Schema UML Viewer
 
-Interactive UML-style viewer for `nomad-simulations`. 
+Interactive UML-style viewer for NOMAD-compatible schemas (defaults to `nomad-simulations`).
 
 
 Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
@@ -39,17 +39,20 @@ conda activate schema-uml
 pip install -r requirements.txt
 ```
 
-### 3) Point to your `nomad-simulations` repo
+### 3) Point to your schema repo
 The backend reads from a local clone. Set one of:
 ```bash
-# preferred
-export NOMAD_SIM_REPO=<somethingsomething>/nomad-simulations
-# alternative var also accepted by backend
+# preferred (general)
+export SCHEMA_UML_REPO=<path-or-URL-to-your-schema-repo>
+# backwards-compatible options also accepted by backend
+# export NOMAD_SIM_REPO=/path/to/nomad-simulations
 # export GIT_REPO_DIR=/path/to/nomad-simulations
+# optional: override the default base package used in UI helpers
+# export SCHEMA_UML_BASE_PACKAGE=my_schema_root
+# optional: override the default package used in UI helpers
+# export SCHEMA_UML_PACKAGE=my_schema_root.module
 ```
 Make it persistent by adding the export to `~/.bashrc` or `~/.zshrc`.
-
-The repository should be under `nomad-simulations/` folder. Custom module names are not yet supported. 
 
 ### 4) Backend (FastAPI)
 ```bash
@@ -63,7 +66,6 @@ curl 'http://127.0.0.1:5179/schema?package=nomad_simulations.schema_packages.mod
 curl 'http://127.0.0.1:5179/git/branches'
 ```
 
-(REMINDER: The repository should be under `nomad-simulations/` folder. Custom module names are not yet supported.)
 
 ### 5) Frontend (Vite dev server)
 ```bash

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from .routes_git import router as git_router
 from extractor.usage_index import UsageEntry, get_usage_for_section
+from .settings import SCHEMA_REPO, DEFAULT_BASE_PACKAGE
 
 SUPPORTED_CUSTOM_DTYPES = {
     "bool",
@@ -69,10 +70,11 @@ def schema(
 
 
 def _repo_root() -> Path:
-    root = os.environ.get("NOMAD_SIM_REPO") or os.environ.get("GIT_REPO_DIR")
-    if not root:
-        raise RuntimeError("Set NOMAD_SIM_REPO or GIT_REPO_DIR to a local clone of nomad-simulations")
-    return Path(root).resolve()
+    if not SCHEMA_REPO:
+        raise RuntimeError(
+            "Set SCHEMA_UML_REPO / NOMAD_SIM_REPO / GIT_REPO_DIR to a local schema clone"
+        )
+    return Path(SCHEMA_REPO).resolve()
 
 def _run_git(repo: Path, *args: str) -> str:
     cp = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
@@ -254,7 +256,7 @@ def add_custom_quantity(
 @app.get("/overview", response_model=OverviewOut)
 def overview(
     branch: str = Query("develop"),
-    base: str = Query("nomad_simulations.schema_packages"),
+    base: str = Query(DEFAULT_BASE_PACKAGE),
 ):
     """
     Bird's-eye overview: packages under `base` and their top-level classes at `branch`.

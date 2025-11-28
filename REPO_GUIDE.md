@@ -6,7 +6,7 @@ A structured overview of the repository for developers to navigate, understand, 
 
 ## 0) TL;DR
 
-**Purpose:** Visualize `nomad-simulations` schema as UML diagrams, inspect docstrings and normalization helpers, and compare schema changes across Git branches.
+**Purpose:** Visualize NOMAD-compatible schemas (defaults to `nomad-simulations`) as UML diagrams, inspect docstrings and normalization helpers, and compare schema changes across Git branches.
 
 **Frontend:** React + TypeScript + Cytoscape + ELK  
 **Backend:** FastAPI + GitPython
@@ -28,9 +28,13 @@ A structured overview of the repository for developers to navigate, understand, 
 
 **Environment variables (one of):**
 ~~~bash
+export SCHEMA_UML_REPO=/path/to/your-schema
+# or (legacy envs still supported)
 export NOMAD_SIM_REPO=/path/to/nomad-simulations
-# or
 export GIT_REPO_DIR=/path/to/nomad-simulations
+# optional defaults for base package / module when the UI opens
+export SCHEMA_UML_BASE_PACKAGE=my_schema_root
+export SCHEMA_UML_PACKAGE=my_schema_root.module
 ~~~
 
 **UX highlights:**
@@ -353,13 +357,13 @@ The frontend shows these entries as a list under **Under the hood** for the curr
 **Bare mirror location**
 
 ~~~text
-api/_data/nomad-simulations.bare
+api/_data/<repo-slug>.bare  # slug derived from SCHEMA_UML_REPO
 ~~~
 
 **Worktrees**
 
 ~~~text
-api/_data/nomad-simulations.bare/worktrees/<branch>/...
+api/_data/<repo-slug>.bare/worktrees/<branch>/...
 ~~~
 
 **Rebuild mirror safely**
@@ -369,7 +373,14 @@ rm -rf api/_data
 mkdir -p api/_data
 (
   cd api/_data &&
-  git clone --bare "$NOMAD_SIM_REPO" nomad-simulations.bare
+  git clone --bare "$SCHEMA_UML_REPO" $(python - <<'PY'
+import os, re
+from urllib.parse import urlparse
+from pathlib import Path
+src = os.environ.get("SCHEMA_UML_REPO") or os.environ.get("NOMAD_SIM_REPO")
+name = Path(urlparse(src).path or src).name
+print(re.sub(r"[^A-Za-z0-9._-]", "_", name[:-4] if name.endswith('.git') else name))
+PY)
 )
 ~~~
 

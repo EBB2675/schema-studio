@@ -107,7 +107,7 @@ def build_graph(
             return
 
         # collect methods defined in your package
-        methods = _public_methods(sec_obj)
+        methods = _public_methods(sec_obj, base_namespace)
 
         # robust doc extraction
         doc = _doc_from(sec_obj)
@@ -331,14 +331,15 @@ def _module_in_namespace(obj, package_namespace: str) -> bool:
     return mod.startswith(package_namespace)
 
 
-def _public_methods(sec_obj) -> List[str]:
-    """Only public methods implemented under 'nomad_simulations*'."""
+def _public_methods(sec_obj, base_namespace: Optional[str] = None) -> List[str]:
+    """Only public methods implemented under the active base namespace."""
+    base = base_namespace or _root_namespace(getattr(sec_obj, "__module__", ""))
     names = []
     for name, member in inspect.getmembers(sec_obj, predicate=inspect.isfunction):
         if name.startswith("_"):
             continue
         mod = getattr(member, "__module__", "")
-        if not mod.startswith("nomad_simulations"):
+        if base and not mod.startswith(base):
             continue
         names.append(name)
     return sorted(set(names))
