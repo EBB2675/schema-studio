@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from pathlib import Path
 from typing import Optional, List
-from .settings import DEFAULT_PACKAGE
+from .settings import DEFAULT_PACKAGE, DEFAULT_BASE_PACKAGE
 from .git_utils import list_branches, materialize_worktree
 from .graph_runner import build_graph_in_subprocess
 from .diff import diff_graphs
@@ -28,7 +28,7 @@ def _python_root(wt: Path) -> Path:
     """
     Return the directory under which Python packages live in the worktree.
 
-    In nomad-simulations this is typically <worktree>/src.
+    In many NOMAD schemas this is typically <worktree>/src.
     If that does not exist, fall back to the worktree root.
     """
     src = wt / "src"
@@ -77,7 +77,7 @@ def api_branches():
 @router.get("/git/packages")
 def api_packages(
     branch: str = Query("develop"),
-    base_package: str = Query("nomad_simulations.schema_packages"),
+    base_package: str = Query(DEFAULT_BASE_PACKAGE),
 ):
     """
     List Python modules under `base_package` for the given branch.

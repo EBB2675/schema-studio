@@ -3,17 +3,17 @@ from pathlib import Path
 from typing import List, Tuple
 import shutil
 from git import Repo, GitCommandError
-from .settings import DATA_DIR, NOMAD_SIM_REPO
+from .settings import DATA_DIR, SCHEMA_REPO, REPO_SLUG
 
-BARE_DIR = Path(DATA_DIR) / "nomad-simulations.bare"
+BARE_DIR = Path(DATA_DIR) / f"{REPO_SLUG}.bare"
 WT_DIR   = Path(DATA_DIR) / "worktrees"
 WT_DIR.mkdir(parents=True, exist_ok=True)
 
 def ensure_bare() -> Repo:
     """Make sure we have a bare mirror of the repo with all branches fetched."""
-    src = NOMAD_SIM_REPO
+    src = SCHEMA_REPO
     if not Path(src, ".git").exists() and not (Path(src).is_dir() and (Path(src) / "HEAD").exists()):
-        raise RuntimeError(f"NOMAD_SIM_REPO={src} is not a git repository")
+        raise RuntimeError("Set SCHEMA_UML_REPO / NOMAD_SIM_REPO / GIT_REPO_DIR to a git repository")
 
     if BARE_DIR.exists():
         repo = Repo(str(BARE_DIR))
