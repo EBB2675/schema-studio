@@ -4,3 +4,4 @@ pydantic
 networkx
 gitpython
 orjson
+httpx
