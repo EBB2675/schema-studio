@@ -39,6 +39,15 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // appearance
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    if (typeof window === "undefined") return "dark";
+    const stored = window.localStorage.getItem("schema-uml-theme");
+    const initial = stored === "light" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", initial);
+    return initial;
+  });
+
   // branch diff state
   const [branches, setBranches] = useState<string[]>([]);
   const [baseBranch, setBaseBranch] = useState<string>("");
@@ -187,6 +196,11 @@ export default function App() {
     setSelected({ ...selected, quantities });
   };
 
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    window.localStorage.setItem("schema-uml-theme", theme);
+  }, [theme]);
+
   const addCustomQuantity = async ({ quantityName, dtype, docstring }: { quantityName: string; dtype: string; docstring: string }) => {
     if (!graph) {
       setAddErr("Build a graph first to add a quantity.");
@@ -292,6 +306,27 @@ export default function App() {
           <div className="row" style={{ marginTop: 10 }}>
             <span className="tag">{loading || diffLoading ? "Working…" : "Ready"}</span>
             {selectedClassName ? <span className="tag">Selected: {selectedClassName}</span> : null}
+          </div>
+        </div>
+
+        <div className="section">
+          <div className="section-title">
+            <span>Appearance</span>
+            <span className="hint">Dark vs light ambience</span>
+          </div>
+          <div className="toggle-group">
+            <button
+              className={`toggle-chip ${theme === "dark" ? "active" : ""}`}
+              onClick={() => setTheme("dark")}
+            >
+              Dark
+            </button>
+            <button
+              className={`toggle-chip ${theme === "light" ? "active" : ""}`}
+              onClick={() => setTheme("light")}
+            >
+              Light
+            </button>
           </div>
         </div>
 
