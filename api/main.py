@@ -11,6 +11,16 @@ from pydantic import BaseModel
 from .routes_git import router as git_router
 from extractor.usage_index import UsageEntry, get_usage_for_section
 
+SUPPORTED_CUSTOM_DTYPES = {
+    "bool",
+    "datetime",
+    "float",
+    "int",
+    "str",
+}
+
+
+
 app = FastAPI(title="Schema UML API", default_response_class=ORJSONResponse)
 
 app.add_middleware(
@@ -56,6 +66,7 @@ def schema(
         base_namespace=base_namespace
     )
     return data
+
 
 def _repo_root() -> Path:
     root = os.environ.get("NOMAD_SIM_REPO") or os.environ.get("GIT_REPO_DIR")
@@ -141,6 +152,104 @@ class OverviewOut(BaseModel):
     branch: str
     base: str
     items: list[PackageClasses]
+
+
+class CustomQuantityRequest(BaseModel):
+    package: str
+    class_name: str
+    quantity_name: str
+    dtype: str
+    docstring: str | None = None
+
+
+def _attach_custom_quantity(graph: dict, req: CustomQuantityRequest) -> dict:
+    """
+    Inject a synthetic quantity node and edge into the graph without rebuilding it.
+    Performs validation to ensure the target section exists and no duplicate
+    quantities are added.
+    """
+    if req.dtype not in SUPPORTED_CUSTOM_DTYPES:
+        allowed = ", ".join(sorted(SUPPORTED_CUSTOM_DTYPES))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported dtype '{req.dtype}'. Supported: {allowed}",
+        )
+
+    nodes = graph.get("nodes", [])
+    edges = graph.get("edges", [])
+
+    target_section = None
+    for node in nodes:
+        if node.get("kind") != "section":
+            continue
+        if node.get("label") != req.class_name:
+            continue
+        module = node.get("module") or ""
+        if module.startswith(req.package):
+            target_section = node
+            break
+
+    if target_section is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Section '{req.class_name}' not found in package '{req.package}'",
+        )
+
+    section_id = target_section["id"]
+    for node in nodes:
+        if node.get("kind") == "quantity" and node.get("owner") == section_id:
+            if node.get("label") == req.quantity_name:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Quantity '{req.quantity_name}' already exists on section "
+                        f"'{req.class_name}'"
+                    ),
+                )
+
+    qid = f"{section_id}.{req.quantity_name}"
+    new_node = {
+        "id": qid,
+        "kind": "quantity",
+        "label": req.quantity_name,
+        "doc": req.docstring or None,
+        "dtype": req.dtype,
+        "owner": section_id,
+        "module": target_section.get("module"),
+    }
+    nodes = nodes + [new_node]
+    edges = edges + [
+        {"source": section_id, "target": qid, "type": "hasQuantity", "card": None}
+    ]
+
+    graph = dict(graph)
+    graph["nodes"] = nodes
+    graph["edges"] = edges
+    return graph
+
+
+@app.post("/schema/custom-quantity")
+def add_custom_quantity(
+    req: CustomQuantityRequest,
+    root: str | None = Query(None),
+    include_subsections: bool = Query(True),
+    allow_cross_module: bool = Query(True),
+    base_namespace: str | None = Query(None),
+):
+    try:
+        graph = build_graph(
+            package=req.package,
+            root=root,
+            include_quantities=True,
+            include_subsections=include_subsections,
+            allow_cross_module=allow_cross_module,
+            base_namespace=base_namespace
+        )
+        return _attach_custom_quantity(graph, req)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
 
 @app.get("/overview", response_model=OverviewOut)
 def overview(
