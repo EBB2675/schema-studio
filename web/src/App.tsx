@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import GraphView from "./GraphView";
 import DocPanel from "./components/DocPanel";
 import OverviewGrid from "./components/OverviewGrid";
 import UnderTheHoodPanel from './components/UnderTheHoodPanel';
+import AddQuantityForm from "./components/AddQuantityForm";
+import { useSelection } from "./store/selection";
 
 type ApiGraph = {
   package: string;
@@ -38,6 +40,13 @@ export default function App() {
   const [headBranch, setHeadBranch] = useState<string>("");
   const [diffData, setDiffData] = useState<any | null>(null);
   const [diffLoading, setDiffLoading] = useState<boolean>(false);
+
+  // editable mode
+  const [editableMode, setEditableMode] = useState<boolean>(false);
+  const [addLoading, setAddLoading] = useState<boolean>(false);
+  const [addErr, setAddErr] = useState<string | null>(null);
+
+  const { selected, setSelected } = useSelection();
 
   // overview mode
   const [mode, setMode] = useState<"graph" | "overview">("graph");
@@ -150,12 +159,82 @@ export default function App() {
     }
   };
 
+  const refreshSelectionQuantities = (nextGraph: ApiGraph) => {
+    if (!selected || selected.kind !== "class") return;
+    const quantities = (nextGraph.nodes || [])
+      .filter((n: any) => n.kind === "quantity" && n.owner === selected.id)
+      .map((n: any) => ({
+        id: n.id,
+        name: n.label,
+        dtype: n.dtype ?? undefined,
+        shape: n.shape ?? undefined,
+        card: n.card ?? undefined,
+        doc: n.doc ?? undefined,
+        path: n.path ?? undefined,
+        line: typeof n.line === "number" ? n.line : undefined,
+        owner: n.owner ?? selected.id
+      }));
+
+    setSelected({ ...selected, quantities });
+  };
+
+  const addCustomQuantity = async ({ quantityName, dtype, docstring }: { quantityName: string; dtype: string; docstring: string }) => {
+    if (!graph) {
+      setAddErr("Build a graph first to add a quantity.");
+      return;
+    }
+    if (!selected || selected.kind !== "class") {
+      setAddErr("Select a class node to attach the quantity.");
+      return;
+    }
+
+    setAddLoading(true);
+    setAddErr(null);
+    try {
+      const r = await api.post(
+        "/schema/custom-quantity",
+        {
+          package: pkg,
+          class_name: selected.name,
+          quantity_name: quantityName,
+          dtype,
+          docstring: docstring || null,
+        },
+        {
+          params: {
+            root,
+            include_subsections: includeSubsections,
+            allow_cross_module: crossModules,
+            base_namespace: namespace || undefined,
+          },
+        }
+      );
+      const updated = r.data as ApiGraph;
+      setGraph(updated);
+      refreshSelectionQuantities(updated);
+    } catch (e: any) {
+      setAddErr(e?.response?.data?.detail || String(e));
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadRoots();
     loadBranches();
     loadPackages();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const selectedClassName = selected?.kind === "class" ? selected.name : null;
+  const addBlockedReason =
+    mode !== "graph"
+      ? "Switch to diagram view to add quantities"
+      : diffData
+        ? "Exit branch comparison to add quantities"
+        : !graph
+          ? "Build a graph first to add quantities"
+          : null;
 
   return (
     <main>
@@ -326,6 +405,30 @@ export default function App() {
         {err ? (
           <p style={{ color: "#b91c1c", marginTop: 10, whiteSpace: "pre-wrap" }}>{err}</p>
         ) : null}
+
+        <hr />
+        <div className="row" style={{ marginTop: 6 }}>
+          <label>
+            <input
+              type="checkbox"
+              checked={editableMode}
+              onChange={(e) => {
+                setEditableMode(e.target.checked);
+                setAddErr(null);
+              }}
+            />{" "}
+            Editable mode
+          </label>
+        </div>
+
+        <AddQuantityForm
+          enabled={editableMode && !addBlockedReason}
+          blockedReason={addBlockedReason}
+          targetClass={selectedClassName}
+          onSubmit={addCustomQuantity}
+          submitting={addLoading}
+          error={addErr}
+        />
 
         {/* Branch comparison */}
         <hr />

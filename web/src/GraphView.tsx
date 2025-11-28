@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import cytoscape from "cytoscape";
 import elk from "elkjs/lib/elk.bundled.js";
 import cytoscapeElk from "cytoscape-elk";
