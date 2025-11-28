@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import GraphView from "./GraphView";
+import GraphView, { type GraphExportHandle } from "./GraphView";
 import DocPanel from "./components/DocPanel";
 import OverviewGrid from "./components/OverviewGrid";
 import UnderTheHoodPanel from './components/UnderTheHoodPanel';
 import AddQuantityForm from "./components/AddQuantityForm";
 import { useSelection } from "./store/selection";
+import { jsPDF } from "jspdf";
 
 type ApiGraph = {
   package: string;
@@ -46,6 +47,8 @@ export default function App() {
   const [addLoading, setAddLoading] = useState<boolean>(false);
   const [addErr, setAddErr] = useState<string | null>(null);
 
+  const [exportHandle, setExportHandle] = useState<GraphExportHandle | null>(null);
+
   const { selected, setSelected } = useSelection();
 
   // overview mode
@@ -73,6 +76,7 @@ export default function App() {
     setErr(null);
     setLoading(true);
     setDiffData(null);
+    setExportHandle(null);
     try {
       const r = await api.get("/schema", {
         params: {
@@ -132,6 +136,7 @@ export default function App() {
     setErr(null);
     setDiffLoading(true);
     setGraph(null); // switch to diff mode
+    setExportHandle(null);
     try {
       const r = await api.post(
         "/graph/diff",
@@ -235,6 +240,40 @@ export default function App() {
         : !graph
           ? "Build a graph first to add quantities"
           : null;
+
+  const currentGraph = diffData ? diffData.head?.graph ?? null : graph;
+
+  const exportJson = () => {
+    if (!currentGraph) return;
+    const s =
+      "data:text/json;charset=utf-8," +
+      encodeURIComponent(JSON.stringify(currentGraph, null, 2));
+    const a = document.createElement("a");
+    a.href = s;
+    a.download = `${currentGraph.package}_${currentGraph.root || "all"}.json`;
+    a.click();
+  };
+
+  const exportPdf = () => {
+    if (!currentGraph || !exportHandle) return;
+
+    const png = exportHandle.toPng();
+    if (!png) return;
+
+    const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const props = pdf.getImageProperties(png);
+
+    const ratio = Math.min(pageWidth / props.width, pageHeight / props.height);
+    const w = props.width * ratio;
+    const h = props.height * ratio;
+    const x = (pageWidth - w) / 2;
+    const y = (pageHeight - h) / 2;
+
+    pdf.addImage(png, "PNG", x, y, w, h);
+    pdf.save(`${currentGraph.package}_${currentGraph.root || "all"}.pdf`);
+  };
 
   return (
     <main>
@@ -384,21 +423,20 @@ export default function App() {
           <button className="btn" onClick={loadGraph}>
             Build graph
           </button>
-          {graph ? (
-            <button
-              className="btn secondary"
-              onClick={() => {
-                const s =
-                  "data:text/json;charset=utf-8," +
-                  encodeURIComponent(JSON.stringify(graph, null, 2));
-                const a = document.createElement("a");
-                a.href = s;
-                a.download = `${graph.package}_${graph.root || "all"}.json`;
-                a.click();
-              }}
-            >
-              Export JSON
-            </button>
+          {currentGraph ? (
+            <>
+              <button className="btn secondary" onClick={exportJson}>
+                Export JSON
+              </button>
+              <button
+                className="btn secondary"
+                onClick={exportPdf}
+                disabled={!exportHandle}
+                title={exportHandle ? "Download current diagram as PDF" : "Build a graph first"}
+              >
+                Export PDF
+              </button>
+            </>
           ) : null}
         </div>
 
@@ -509,10 +547,11 @@ export default function App() {
                 nodes={diffData.head.graph.nodes}
                 edges={diffData.head.graph.edges}
                 diff={diffData.diff}
+                onReady={setExportHandle}
               />
             </>
           ) : graph ? (
-            <GraphView nodes={graph.nodes} edges={graph.edges} />
+            <GraphView nodes={graph.nodes} edges={graph.edges} onReady={setExportHandle} />
           ) : (
             <div style={{ padding: 24, color: "#6b7280" }}>
               No graph yet. Select a package, load roots, pick a root, then “Build graph”; or compare
