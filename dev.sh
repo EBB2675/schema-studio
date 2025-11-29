@@ -14,6 +14,7 @@ need_cmd() {
   fi
 }
 
+need_cmd git
 need_cmd uvicorn
 need_cmd npm
 
@@ -44,10 +45,10 @@ EOF
     exit 1
   fi
 
-  if [[ ! -d "${repo_path}/.git" && ! -f "${repo_path}/HEAD" ]]; then
+  if ! git -C "${repo_path}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     cat <<EOF
 Error: '${repo_path}' is not a git repository.
-- Point SCHEMA_UML_REPO (or NOMAD_SIM_REPO / GIT_REPO_DIR) to a local clone.
+- Point SCHEMA_UML_REPO (or NOMAD_SIM_REPO / GIT_REPO_DIR) to a local clone (a subdirectory of a clone is fine).
 EOF
     exit 1
   fi

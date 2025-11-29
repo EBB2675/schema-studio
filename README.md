@@ -68,7 +68,7 @@ Make it persistent by adding the export to `~/.bashrc` or `~/.zshrc`.
 What it does:
 
 - Starts the FastAPI backend on **5179**.
-- Verifies **SCHEMA_UML_REPO / NOMAD_SIM_REPO / GIT_REPO_DIR** points to a **local git repo** (fails fast otherwise).
+- Verifies **SCHEMA_UML_REPO / NOMAD_SIM_REPO / GIT_REPO_DIR** points to a **local git repo** (a subdirectory of a clone is fine; fails fast otherwise).
 - Ensures `web/node_modules` exists (runs `npm install` on first launch).
 - Starts the Vite frontend on **5173**.
 - Stops both together on **Ctrl+C** (no manual job control needed).
