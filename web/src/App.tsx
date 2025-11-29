@@ -20,12 +20,24 @@ const DEFAULT_API = "http://localhost:5179";
 const DEFAULT_PACKAGE = import.meta.env.VITE_DEFAULT_PACKAGE ?? "nomad_simulations.schema_packages.model_method";
 const DEFAULT_NAMESPACE =
   import.meta.env.VITE_DEFAULT_NAMESPACE ??
-  "nomad_simulations.schema_packages,nomad_measurements.schema_packages";
+  "nomad_simulations.schema_packages,nomad_measurements";
 const DEFAULT_ROOT = import.meta.env.VITE_DEFAULT_ROOT ?? "ModelMethod";
 const DEFAULT_BRANCH = import.meta.env.VITE_DEFAULT_BRANCH ?? "develop";
 const WORKSPACE_PRESETS = [
-  { label: "nomad-simulations", namespace: "nomad_simulations.schema_packages" },
-  { label: "nomad-measurements", namespace: "nomad_measurements.schema_packages" },
+  {
+    label: "nomad-simulations",
+    namespace: "nomad_simulations.schema_packages",
+    branch: "develop",
+    pkg: "nomad_simulations.schema_packages.model_method",
+    root: "ModelMethod",
+  },
+  {
+    label: "nomad-measurements",
+    namespace: "nomad_measurements",
+    branch: "main",
+    pkg: "nomad_measurements.general",
+    root: "InSituMeasurement",
+  },
 ];
 
 export default function App() {
@@ -74,6 +86,7 @@ export default function App() {
   // overview mode
   const [mode, setMode] = useState<"graph" | "overview">("graph");
   const [overviewBranch, setOverviewBranch] = useState<string>(DEFAULT_BRANCH);
+  const [packageBranch, setPackageBranch] = useState<string>(DEFAULT_BRANCH);
 
   const api = useMemo(() => axios.create({ baseURL: apiBase }), [apiBase]);
   const normalizedNamespace = useMemo(() => {
@@ -137,7 +150,7 @@ export default function App() {
     try {
       const r = await api.get("/git/packages", {
         params: {
-          branch: DEFAULT_BRANCH,
+          branch: packageBranch,
           base_package: normalizedNamespace,
         },
       });
@@ -262,7 +275,7 @@ export default function App() {
     loadBranches();
     loadPackages();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [normalizedNamespace]);
+  }, [normalizedNamespace, packageBranch]);
 
   const selectedClassName = selected?.kind === "class" ? selected.name : null;
   const addBlockedReason =
@@ -358,7 +371,7 @@ export default function App() {
                   value={overviewBranch}
                   onChange={(e) => setOverviewBranch(e.target.value)}
                 >
-                  {[DEFAULT_BRANCH, ...branches.filter((b) => b !== DEFAULT_BRANCH)].map((b) => (
+                  {[overviewBranch || DEFAULT_BRANCH, ...branches.filter((b) => b !== overviewBranch)].map((b) => (
                     <option key={b} value={b}>{b}</option>
                   ))}
                 </select>
@@ -370,7 +383,15 @@ export default function App() {
               <button
                 key={ws.namespace}
                 className={`toggle-chip ${normalizedNamespace === ws.namespace ? "active" : ""}`}
-                onClick={() => setNamespace(ws.namespace)}
+                onClick={() => {
+                  setNamespace(ws.namespace);
+                  if (ws.branch) {
+                    setOverviewBranch(ws.branch);
+                    setPackageBranch(ws.branch);
+                  }
+                  if (ws.pkg) setPkg(ws.pkg);
+                  if (ws.root) setRoot(ws.root);
+                }}
                 title={`Set base namespace to ${ws.namespace}`}
               >
                 {ws.label}
@@ -403,7 +424,7 @@ export default function App() {
 
             {availablePkgs.length > 0 && (
               <div>
-                <label className="label">Choose from {DEFAULT_BRANCH}</label>
+                <label className="label">Choose from {packageBranch}</label>
                 <select
                   className="select"
                   value={availablePkgs.includes(pkg) ? pkg : ""}
