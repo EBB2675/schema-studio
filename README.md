@@ -12,6 +12,12 @@ Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 
 ---
 
+# Overview
+
+![Schema UML homepage](assets/homepage-29.11.png)
+
+---
+
 ## ✨ Features
 
 - **UML cards**: Section name, attributes (quantity name, dtype, shape, cardinality), and optional methods.
