@@ -70,6 +70,8 @@ What it does:
 - Starts the FastAPI backend on **5179**.
 - Ensures `web/node_modules` exists (runs `npm install` on first launch).
 - Starts the Vite frontend on **5173**.
+- Stops both together on **Ctrl+C** (no manual job control needed).
+- Exits early with a helpful message if `uvicorn` or `npm` are missing (activate your virtualenv first).
 
 Stop both with **Ctrl+C**. Override ports via `API_PORT` / `WEB_PORT` env vars.
 
