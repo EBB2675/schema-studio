@@ -5,6 +5,7 @@ import DocPanel from "./components/DocPanel";
 import OverviewGrid from "./components/OverviewGrid";
 import UnderTheHoodPanel from './components/UnderTheHoodPanel';
 import AddQuantityForm from "./components/AddQuantityForm";
+import CollapsibleSection from "./components/CollapsibleSection";
 import { useSelection } from "./store/selection";
 import { jsPDF } from "jspdf";
 
@@ -309,11 +310,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="section">
-          <div className="section-title">
-            <span>Appearance</span>
-            <span className="hint">Dark vs light ambience</span>
-          </div>
+        <CollapsibleSection title="Appearance" hint="Dark vs light ambience">
           <div className="toggle-group">
             <button
               className={`toggle-chip ${theme === "dark" ? "active" : ""}`}
@@ -328,13 +325,9 @@ export default function App() {
               Light
             </button>
           </div>
-        </div>
+        </CollapsibleSection>
 
-        <div className="section">
-          <div className="section-title">
-            <span>Workspace</span>
-            <span className="hint">Switch modes on the fly</span>
-          </div>
+        <CollapsibleSection title="Workspace" hint="Switch modes on the fly">
           <div className="row" style={{ gap: 10 }}>
             <button
               className="btn"
@@ -358,13 +351,9 @@ export default function App() {
               </div>
             )}
           </div>
-        </div>
+        </CollapsibleSection>
 
-        <div className="section">
-          <div className="section-title">
-            <span>API & package</span>
-            <span className="hint">Connect to a backend</span>
-          </div>
+        <CollapsibleSection title="API & package" hint="Connect to a backend">
           <div className="action-stack">
             <div>
               <label className="label">API base</label>
@@ -424,13 +413,9 @@ export default function App() {
               </div>
             </div>
           </div>
-        </div>
+        </CollapsibleSection>
 
-        <div className="section">
-          <div className="section-title">
-            <span>Diagram filters</span>
-            <span className="hint">Fine-tune the graph</span>
-          </div>
+        <CollapsibleSection title="Diagram filters" hint="Fine-tune the graph">
           <div className="control-grid">
             <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <input
@@ -500,13 +485,9 @@ export default function App() {
           {err ? (
             <p style={{ color: "#fca5a5", marginTop: 10, whiteSpace: "pre-wrap" }}>{err}</p>
           ) : null}
-        </div>
+        </CollapsibleSection>
 
-        <div className="section">
-          <div className="section-title">
-            <span>Editable mode</span>
-            <span className="hint">Prototype new quantities</span>
-          </div>
+        <CollapsibleSection title="Editable mode" hint="Prototype new quantities">
           <div className="row" style={{ marginBottom: 6 }}>
             <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <input
@@ -530,13 +511,9 @@ export default function App() {
             submitting={addLoading}
             error={addErr}
           />
-        </div>
+        </CollapsibleSection>
 
-        <div className="section">
-          <div className="section-title">
-            <span>Compare branches</span>
-            <span className="hint">Diff diagrams across git</span>
-          </div>
+        <CollapsibleSection title="Compare branches" hint="Diff diagrams across git">
           <div className="action-stack">
             <div>
               <label className="label">Base branch</label>
@@ -578,7 +555,7 @@ export default function App() {
               {diffLoading ? "Comparing…" : "Compare"}
             </button>
           </div>
-        </div>
+        </CollapsibleSection>
       </aside>
 
       {/* Main workspace: Graph + Doc Panel side-by-side */}
@@ -641,9 +618,9 @@ export default function App() {
               overflowY: "auto"
             }}
           >
-            <div className="panel">
+            <CollapsibleSection title="Documentation" hint="Inspect the selected class" className="panel">
               <DocPanel />
-            </div>
+            </CollapsibleSection>
           </div>
 
           {/* BOTTOM PANEL — about 40% */}
@@ -654,9 +631,9 @@ export default function App() {
               overflowY: "auto"
             }}
           >
-            <div className="panel">
+            <CollapsibleSection title="Under the hood" hint="Raw schema structure" className="panel">
               <UnderTheHoodPanel apiBase={apiBase} />
-            </div>
+            </CollapsibleSection>
           </div>
         </div>
       </div>
