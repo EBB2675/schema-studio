@@ -18,9 +18,27 @@ type ApiGraph = {
 
 const DEFAULT_API = "http://localhost:5179";
 const DEFAULT_PACKAGE = import.meta.env.VITE_DEFAULT_PACKAGE ?? "nomad_simulations.schema_packages.model_method";
-const DEFAULT_NAMESPACE = import.meta.env.VITE_DEFAULT_NAMESPACE ?? "nomad_simulations.schema_packages";
+const DEFAULT_NAMESPACE =
+  import.meta.env.VITE_DEFAULT_NAMESPACE ??
+  "nomad_simulations.schema_packages,nomad_measurements";
 const DEFAULT_ROOT = import.meta.env.VITE_DEFAULT_ROOT ?? "ModelMethod";
 const DEFAULT_BRANCH = import.meta.env.VITE_DEFAULT_BRANCH ?? "develop";
+const WORKSPACE_PRESETS = [
+  {
+    label: "nomad-simulations",
+    namespace: "nomad_simulations.schema_packages",
+    branch: "develop",
+    pkg: "nomad_simulations.schema_packages.model_method",
+    root: "ModelMethod",
+  },
+  {
+    label: "nomad-measurements",
+    namespace: "nomad_measurements",
+    branch: "main",
+    pkg: "nomad_measurements.general",
+    root: "InSituMeasurement",
+  },
+];
 
 export default function App() {
   const [apiBase, setApiBase] = useState<string>(DEFAULT_API);
@@ -68,8 +86,13 @@ export default function App() {
   // overview mode
   const [mode, setMode] = useState<"graph" | "overview">("graph");
   const [overviewBranch, setOverviewBranch] = useState<string>(DEFAULT_BRANCH);
+  const [packageBranch, setPackageBranch] = useState<string>(DEFAULT_BRANCH);
 
   const api = useMemo(() => axios.create({ baseURL: apiBase }), [apiBase]);
+  const normalizedNamespace = useMemo(() => {
+    const parts = namespace.split(",").map((p) => p.trim()).filter(Boolean);
+    return parts.length > 0 ? parts.join(",") : DEFAULT_NAMESPACE;
+  }, [namespace]);
 
   // roots for selected package
   const loadRoots = async () => {
@@ -99,7 +122,7 @@ export default function App() {
           include_quantities: includeQuantities,
           include_subsections: includeSubsections,
           allow_cross_module: crossModules,
-          base_namespace: namespace || undefined,
+          base_namespace: normalizedNamespace || undefined,
         },
       });
       setGraph(r.data);
@@ -114,7 +137,7 @@ export default function App() {
   // fetch git branches
   const loadBranches = async () => {
     try {
-      const r = await api.get("/git/branches");
+      const r = await api.get("/git/branches", { params: { base_package: normalizedNamespace } });
       setBranches(r.data.branches || []);
     } catch (e) {
       // keep silent in UI; dropdown will just be empty
@@ -127,8 +150,8 @@ export default function App() {
     try {
       const r = await api.get("/git/packages", {
         params: {
-          branch: DEFAULT_BRANCH,
-          base_package: namespace || DEFAULT_NAMESPACE,
+          branch: packageBranch,
+          base_package: normalizedNamespace,
         },
       });
       const list: string[] = r.data.packages || [];
@@ -165,7 +188,7 @@ export default function App() {
             include_quantities: includeQuantities,
             include_subsections: includeSubsections,
             allow_cross_module: crossModules,
-            base_namespace: namespace || undefined,
+            base_namespace: normalizedNamespace || undefined,
           },
         }
       );
@@ -226,13 +249,13 @@ export default function App() {
         },
         {
           params: {
-            root,
-            include_subsections: includeSubsections,
-            allow_cross_module: crossModules,
-            base_namespace: namespace || undefined,
-          },
-        }
-      );
+          root,
+          include_subsections: includeSubsections,
+          allow_cross_module: crossModules,
+          base_namespace: normalizedNamespace || undefined,
+        },
+      }
+    );
       const updated = r.data as ApiGraph;
       setGraph(updated);
       refreshSelectionQuantities(updated);
@@ -245,10 +268,14 @@ export default function App() {
 
   useEffect(() => {
     loadRoots();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     loadBranches();
     loadPackages();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [normalizedNamespace, packageBranch]);
 
   const selectedClassName = selected?.kind === "class" ? selected.name : null;
   const addBlockedReason =
@@ -344,12 +371,32 @@ export default function App() {
                   value={overviewBranch}
                   onChange={(e) => setOverviewBranch(e.target.value)}
                 >
-                  {[DEFAULT_BRANCH, ...branches.filter((b) => b !== DEFAULT_BRANCH)].map((b) => (
+                  {[overviewBranch || DEFAULT_BRANCH, ...branches.filter((b) => b !== overviewBranch)].map((b) => (
                     <option key={b} value={b}>{b}</option>
                   ))}
                 </select>
               </div>
             )}
+          </div>
+          <div className="toggle-group" style={{ marginTop: 10 }}>
+            {WORKSPACE_PRESETS.map((ws) => (
+              <button
+                key={ws.namespace}
+                className={`toggle-chip ${normalizedNamespace === ws.namespace ? "active" : ""}`}
+                onClick={() => {
+                  setNamespace(ws.namespace);
+                  if (ws.branch) {
+                    setOverviewBranch(ws.branch);
+                    setPackageBranch(ws.branch);
+                  }
+                  if (ws.pkg) setPkg(ws.pkg);
+                  if (ws.root) setRoot(ws.root);
+                }}
+                title={`Set base namespace to ${ws.namespace}`}
+              >
+                {ws.label}
+              </button>
+            ))}
           </div>
         </CollapsibleSection>
 
@@ -377,7 +424,7 @@ export default function App() {
 
             {availablePkgs.length > 0 && (
               <div>
-                <label className="label">Choose from {DEFAULT_BRANCH}</label>
+                <label className="label">Choose from {packageBranch}</label>
                 <select
                   className="select"
                   value={availablePkgs.includes(pkg) ? pkg : ""}
@@ -452,7 +499,7 @@ export default function App() {
           </div>
 
           <div style={{ marginTop: 10 }}>
-            <label className="label">Base namespace (optional)</label>
+            <label className="label">Base namespace (supports comma-separated)</label>
             <input
               className="input"
               value={namespace}
@@ -563,7 +610,7 @@ export default function App() {
         {/* Left: graph area */}
         <div style={{ minWidth: 0 }}>
           {mode === "overview" ? (
-            <OverviewGrid apiBase={apiBase} branch={overviewBranch} base={namespace || DEFAULT_NAMESPACE} />
+            <OverviewGrid apiBase={apiBase} branch={overviewBranch} base={normalizedNamespace} />
           ) : diffData ? (
             <>
               <div className="workspace-toolbar">

@@ -15,6 +15,9 @@ SCHEMA_REPO = (
     or str(Path.home() / "src/nomad-simulations")
 )
 
+# Optional: secondary repo for nomad-measurements
+MEASURE_REPO = os.getenv("NOMAD_MEASURE_REPO") or str(Path.home() / "src/nomad-measurements")
+
 
 def _repo_slug(src: str) -> str:
     """Return a filesystem-friendly slug for the bare mirror."""
@@ -31,7 +34,33 @@ def _repo_slug(src: str) -> str:
 REPO_SLUG = _repo_slug(SCHEMA_REPO)
 
 # Default base package/section can be overridden per request or via env vars
-DEFAULT_BASE_PACKAGE = os.getenv("SCHEMA_UML_BASE_PACKAGE", "nomad_simulations.schema_packages")
-DEFAULT_PACKAGE = os.getenv("SCHEMA_UML_PACKAGE", f"{DEFAULT_BASE_PACKAGE}.model_method")
+DEFAULT_BASE_PACKAGE = os.getenv(
+    "SCHEMA_UML_BASE_PACKAGE",
+    "nomad_simulations.schema_packages,nomad_measurements",
+)
+
+
+def _primary_base_package(base_packages: str) -> str:
+    """Return the first non-empty base package from a comma-separated list."""
+
+    for chunk in base_packages.split(","):
+        candidate = chunk.strip()
+        if candidate:
+            return candidate
+    return "nomad_simulations.schema_packages"
+
+
+DEFAULT_PACKAGE = os.getenv(
+    "SCHEMA_UML_PACKAGE", f"{_primary_base_package(DEFAULT_BASE_PACKAGE)}.model_method"
+)
 
 EXTRACTOR_ENTRY = os.getenv("SCHEMA_UML_EXTRACTOR", "extractor.graph_builder:build_graph")
+
+
+def repo_for_base_namespace(base_package: str) -> str:
+    """Return the repository source that owns the given base namespace."""
+
+    base = base_package.strip()
+    if base.startswith("nomad_measurements"):
+        return MEASURE_REPO
+    return SCHEMA_REPO

@@ -3,38 +3,44 @@ from pathlib import Path
 from typing import List, Tuple
 import shutil
 from git import Repo, GitCommandError
-from .settings import DATA_DIR, SCHEMA_REPO, REPO_SLUG
+from .settings import DATA_DIR, SCHEMA_REPO, _repo_slug
 
-BARE_DIR = Path(DATA_DIR) / f"{REPO_SLUG}.bare"
-WT_DIR   = Path(DATA_DIR) / "worktrees"
-WT_DIR.mkdir(parents=True, exist_ok=True)
+def _bare_dir(src: str) -> Path:
+    return Path(DATA_DIR) / f"{_repo_slug(src)}.bare"
 
-def ensure_bare() -> Repo:
+
+def _wt_dir(src: str) -> Path:
+    root = Path(DATA_DIR) / "worktrees" / _repo_slug(src)
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+def ensure_bare(src: str = SCHEMA_REPO) -> Repo:
     """Make sure we have a bare mirror of the repo with all branches fetched."""
-    src = SCHEMA_REPO
-    if not Path(src, ".git").exists() and not (Path(src).is_dir() and (Path(src) / "HEAD").exists()):
-        raise RuntimeError("Set SCHEMA_UML_REPO / NOMAD_SIM_REPO / GIT_REPO_DIR to a git repository")
+    bare_dir = _bare_dir(src)
 
-    if BARE_DIR.exists():
-        repo = Repo(str(BARE_DIR))
+    if not Path(src, ".git").exists() and not (Path(src).is_dir() and (Path(src) / "HEAD").exists()):
+        raise RuntimeError("Set SCHEMA_UML_REPO / NOMAD_SIM_REPO / NOMAD_MEASURE_REPO / GIT_REPO_DIR to a git repository")
+
+    if bare_dir.exists():
+        repo = Repo(str(bare_dir))
         try:
             repo.git.fetch("--all", "--prune")
         except Exception as e:
             print("DEBUG: fetch failed, recreating bare repo:", e)
-            shutil.rmtree(BARE_DIR)
-            repo = Repo.clone_from(src, str(BARE_DIR), bare=True)
+            shutil.rmtree(bare_dir)
+            repo = Repo.clone_from(src, str(bare_dir), bare=True)
         return repo
 
     # First-time clone
-    print(f"DEBUG: Cloning bare mirror from {src} → {BARE_DIR}")
-    repo = Repo.clone_from(src, str(BARE_DIR), bare=True)
+    print(f"DEBUG: Cloning bare mirror from {src} → {bare_dir}")
+    repo = Repo.clone_from(src, str(bare_dir), bare=True)
     repo.git.fetch("--all", "--prune")
     return repo
 
 
-def list_branches() -> List[str]:
+def list_branches(src: str = SCHEMA_REPO) -> List[str]:
     """Return all local + remote branches available in the mirrored repo."""
-    repo = ensure_bare()
+    repo = ensure_bare(src)
     names = set()
 
     # include local branches
@@ -52,12 +58,12 @@ def list_branches() -> List[str]:
     print("DEBUG: branches seen by backend:", sorted(names))
     return sorted(names)
 
-def materialize_worktree(branch: str) -> Tuple[Path, str]:
+def materialize_worktree(branch: str, src: str = SCHEMA_REPO) -> Tuple[Path, str]:
     """
     Create or update a worktree for the given branch.
     Works both for local branches and bare mirrors without remotes.
     """
-    repo = ensure_bare()
+    repo = ensure_bare(src)
 
     # make sure refs exist locally
     try:
@@ -75,7 +81,8 @@ def materialize_worktree(branch: str) -> Tuple[Path, str]:
         except Exception as e:
             raise RuntimeError(f"Branch '{branch}' not found in bare repo ({repo.git_dir}): {e}")
 
-    wt = WT_DIR / branch.replace("/", "__")
+    wt_root = _wt_dir(src)
+    wt = wt_root / branch.replace("/", "__")
 
     # recreate if stale
     if wt.exists():
