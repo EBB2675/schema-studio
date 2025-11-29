@@ -46,7 +46,7 @@ pip install -r requirements.txt
 ```
 
 ### 3) Point to your schema repo
-The backend reads from a local clone. Set one of:
+The backend reads from a local clone. Set one of (required before starting the stack):
 ```bash
 # preferred (general)
 export SCHEMA_UML_REPO=<path-or-URL-to-your-schema-repo>
@@ -60,26 +60,28 @@ export SCHEMA_UML_REPO=<path-or-URL-to-your-schema-repo>
 ```
 Make it persistent by adding the export to `~/.bashrc` or `~/.zshrc`.
 
-### 4) Backend (FastAPI)
+### 4) Run everything with one command
 ```bash
-uvicorn api.main:app --reload --port 5179
+./dev.sh
 ```
 
-Sanity checks:
+What it does:
+
+- Starts the FastAPI backend on **5179**.
+- Verifies **SCHEMA_UML_REPO / NOMAD_SIM_REPO / GIT_REPO_DIR** points to a **local git repo** (a subdirectory of a clone is fine; fails fast otherwise).
+- Ensures `web/node_modules` exists (runs `npm install` on first launch).
+- Starts the Vite frontend on **5173**.
+- Stops both together on **Ctrl+C** (no manual job control needed).
+- Exits early with a helpful message if `uvicorn` or `npm` are missing (activate your virtualenv first).
+
+Stop both with **Ctrl+C**. Override ports via `API_PORT` / `WEB_PORT` env vars.
+
+Sanity checks (optional, while `./dev.sh` is running):
 ```bash
 curl 'http://127.0.0.1:5179/roots?package=nomad_simulations.schema_packages.model_method'
 curl 'http://127.0.0.1:5179/schema?package=nomad_simulations.schema_packages.model_method&root=ModelMethod&include_quantities=true'
 curl 'http://127.0.0.1:5179/git/branches'
 ```
-
-
-### 5) Frontend (Vite dev server)
-```bash
-cd web
-npm install
-npm run dev
-```
-Open: <http://localhost:5173/>
 
 ---
 
