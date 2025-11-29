@@ -12,7 +12,7 @@ export default function CollapsibleSection({
   title,
   hint,
   children,
-  defaultOpen = true,
+  defaultOpen = false,
   className = "",
 }: CollapsibleSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
