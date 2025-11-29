@@ -37,8 +37,10 @@ export SCHEMA_UML_BASE_PACKAGE=my_schema_root
 export SCHEMA_UML_PACKAGE=my_schema_root.module
 ~~~
 
+**Unified dev command:** `./dev.sh` starts the FastAPI backend (**5179**) and Vite frontend (**5173**), installs frontend deps on first run, and stops both on **Ctrl+C**. Override ports via `API_PORT` / `WEB_PORT`.
+
 **UX highlights:**
-- UML cards show **sections**; **quantities** appear as attributes inside the card (not separate nodes).  
+- UML cards show **sections**; **quantities** appear as attributes inside the card (not separate nodes).
 - Right **Doc Panel** shows the **class docstring** and a **clickable list of quantities**; clicking a quantity shows its docstring.  
 - Right **Under-the-hood Panel** shows **normalization methods and helper functions** that act on the selected section (based on `/usage`).  
 - Branch diff highlights: 🟩 Added, 🟨 Changed, 🟥 Removed (edges dashed red).
