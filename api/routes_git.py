@@ -66,6 +66,12 @@ def _list_modules_under(root: Path, base_package: str) -> List[str]:
     return sorted(modules)
 
 
+def _parse_base_packages(raw: str) -> list[str]:
+    """Normalize a comma-separated list of base packages."""
+
+    return [chunk.strip() for chunk in raw.split(",") if chunk.strip()]
+
+
 @router.get("/git/branches")
 def api_branches():
     try:
@@ -91,14 +97,21 @@ def api_packages(
         # Work out where Python packages live (usually <worktree>/src)
         root = _python_root(wt)
 
-        # Use the helper to list all modules under the base package
-        packages = _list_modules_under(root, base_package)
+        base_packages = _parse_base_packages(base_package)
+        if not base_packages:
+            raise HTTPException(400, "Provide at least one base package")
+
+        # Use the helper to list all modules under each base package
+        packages: set[str] = set()
+        for base in base_packages:
+            packages.update(_list_modules_under(root, base))
 
         return {
             "branch": branch,
             "sha": sha,
             "base_package": base_package,
-            "packages": packages,
+            "base_packages": base_packages,
+            "packages": sorted(packages),
         }
     except Exception as e:
         raise HTTPException(500, str(e))

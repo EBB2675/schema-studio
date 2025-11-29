@@ -146,6 +146,13 @@ def _collect_classes_from_file(py_path: Path) -> list[str]:
     except Exception:
         return []
 
+
+def _parse_base_packages(raw: str) -> list[str]:
+    """Normalize a comma-separated list of base packages."""
+
+    return [chunk.strip() for chunk in raw.split(",") if chunk.strip()]
+
+
 class PackageClasses(BaseModel):
     package: str
     classes: list[str]
@@ -264,44 +271,56 @@ def overview(
     """
     try:
         repo = _repo_root()
-        base_path = base.replace(".", "/")
+        base_packages = _parse_base_packages(base)
+        if not base_packages:
+            raise HTTPException(status_code=400, detail="Provide at least one base package")
 
-        # resolve actual tree path (handles src/ layout)
-        resolved_tree = _resolve_base_tree(repo, branch, base_path)
+        packages: dict[str, set[str]] = {}
 
-        with tempfile.TemporaryDirectory() as td_str:
-            td = Path(td_str)
-            try:
-                _export_subtree(repo, branch, resolved_tree, td)
-            except subprocess.CalledProcessError as e:
-                raise HTTPException(status_code=404, detail=f"Cannot export {resolved_tree} at {branch}") from e
+        for base_pkg in base_packages:
+            base_path = base_pkg.replace(".", "/")
 
-            # the extracted folder root is td / <resolved_tree>
-            extract_root = td / resolved_tree
-            if not extract_root.exists():
-                raise HTTPException(status_code=404, detail=f"Extracted path missing: {resolved_tree}")
+            # resolve actual tree path (handles src/ layout)
+            resolved_tree = _resolve_base_tree(repo, branch, base_path)
 
-            items: list[PackageClasses] = []
-            for dirpath, dirnames, filenames in os.walk(extract_root):
-                pkg_dir = Path(dirpath)
-                if "__init__.py" not in filenames:
-                    continue
+            with tempfile.TemporaryDirectory() as td_str:
+                td = Path(td_str)
+                try:
+                    _export_subtree(repo, branch, resolved_tree, td)
+                except subprocess.CalledProcessError as e:
+                    raise HTTPException(status_code=404, detail=f"Cannot export {resolved_tree} at {branch}") from e
 
-                # rel path from the resolved tree root
-                rel_from_resolved = pkg_dir.relative_to(extract_root)
-                # Build full dotted package name: base + (optional tail)
-                tail = str(rel_from_resolved).replace("/", ".")
-                package_name = base if tail in ("", ".") else f"{base}.{tail}"
+                # the extracted folder root is td / <resolved_tree>
+                extract_root = td / resolved_tree
+                if not extract_root.exists():
+                    raise HTTPException(status_code=404, detail=f"Extracted path missing: {resolved_tree}")
 
-                cls_names: set[str] = set()
-                for f in filenames:
-                    if f.endswith(".py"):
-                        cls_names.update(_collect_classes_from_file(pkg_dir / f))
+                for dirpath, dirnames, filenames in os.walk(extract_root):
+                    pkg_dir = Path(dirpath)
+                    if "__init__.py" not in filenames:
+                        continue
 
-                items.append(PackageClasses(package=package_name, classes=sorted(cls_names)))
+                    # rel path from the resolved tree root
+                    rel_from_resolved = pkg_dir.relative_to(extract_root)
+                    # Build full dotted package name: base + (optional tail)
+                    tail = str(rel_from_resolved).replace("/", ".")
+                    package_name = base_pkg if tail in ("", ".") else f"{base_pkg}.{tail}"
 
-            items.sort(key=lambda x: x.package)
-            return OverviewOut(branch=branch, base=base, items=items)
+                    cls_names: set[str] = set()
+                    for f in filenames:
+                        if f.endswith(".py"):
+                            cls_names.update(_collect_classes_from_file(pkg_dir / f))
+
+                    if package_name not in packages:
+                        packages[package_name] = set()
+                    packages[package_name].update(cls_names)
+
+        items = [
+            PackageClasses(package=pkg, classes=sorted(classes))
+            for pkg, classes in sorted(packages.items())
+        ]
+
+        return OverviewOut(branch=branch, base=",".join(base_packages), items=items)
 
     except HTTPException:
         raise

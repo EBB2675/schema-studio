@@ -18,7 +18,9 @@ type ApiGraph = {
 
 const DEFAULT_API = "http://localhost:5179";
 const DEFAULT_PACKAGE = import.meta.env.VITE_DEFAULT_PACKAGE ?? "nomad_simulations.schema_packages.model_method";
-const DEFAULT_NAMESPACE = import.meta.env.VITE_DEFAULT_NAMESPACE ?? "nomad_simulations.schema_packages";
+const DEFAULT_NAMESPACE =
+  import.meta.env.VITE_DEFAULT_NAMESPACE ??
+  "nomad_simulations.schema_packages,nomad_measurements.schema_packages";
 const DEFAULT_ROOT = import.meta.env.VITE_DEFAULT_ROOT ?? "ModelMethod";
 const DEFAULT_BRANCH = import.meta.env.VITE_DEFAULT_BRANCH ?? "develop";
 
@@ -70,6 +72,10 @@ export default function App() {
   const [overviewBranch, setOverviewBranch] = useState<string>(DEFAULT_BRANCH);
 
   const api = useMemo(() => axios.create({ baseURL: apiBase }), [apiBase]);
+  const normalizedNamespace = useMemo(() => {
+    const parts = namespace.split(",").map((p) => p.trim()).filter(Boolean);
+    return parts.length > 0 ? parts.join(",") : DEFAULT_NAMESPACE;
+  }, [namespace]);
 
   // roots for selected package
   const loadRoots = async () => {
@@ -99,7 +105,7 @@ export default function App() {
           include_quantities: includeQuantities,
           include_subsections: includeSubsections,
           allow_cross_module: crossModules,
-          base_namespace: namespace || undefined,
+          base_namespace: normalizedNamespace || undefined,
         },
       });
       setGraph(r.data);
@@ -128,7 +134,7 @@ export default function App() {
       const r = await api.get("/git/packages", {
         params: {
           branch: DEFAULT_BRANCH,
-          base_package: namespace || DEFAULT_NAMESPACE,
+          base_package: normalizedNamespace,
         },
       });
       const list: string[] = r.data.packages || [];
@@ -165,7 +171,7 @@ export default function App() {
             include_quantities: includeQuantities,
             include_subsections: includeSubsections,
             allow_cross_module: crossModules,
-            base_namespace: namespace || undefined,
+            base_namespace: normalizedNamespace || undefined,
           },
         }
       );
@@ -226,13 +232,13 @@ export default function App() {
         },
         {
           params: {
-            root,
-            include_subsections: includeSubsections,
-            allow_cross_module: crossModules,
-            base_namespace: namespace || undefined,
-          },
-        }
-      );
+          root,
+          include_subsections: includeSubsections,
+          allow_cross_module: crossModules,
+          base_namespace: normalizedNamespace || undefined,
+        },
+      }
+    );
       const updated = r.data as ApiGraph;
       setGraph(updated);
       refreshSelectionQuantities(updated);
@@ -452,7 +458,7 @@ export default function App() {
           </div>
 
           <div style={{ marginTop: 10 }}>
-            <label className="label">Base namespace (optional)</label>
+            <label className="label">Base namespace (supports comma-separated)</label>
             <input
               className="input"
               value={namespace}
@@ -563,7 +569,7 @@ export default function App() {
         {/* Left: graph area */}
         <div style={{ minWidth: 0 }}>
           {mode === "overview" ? (
-            <OverviewGrid apiBase={apiBase} branch={overviewBranch} base={namespace || DEFAULT_NAMESPACE} />
+            <OverviewGrid apiBase={apiBase} branch={overviewBranch} base={normalizedNamespace} />
           ) : diffData ? (
             <>
               <div className="workspace-toolbar">
