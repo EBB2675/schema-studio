@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from pathlib import Path
 from typing import Optional, List
-from .settings import DEFAULT_PACKAGE, DEFAULT_BASE_PACKAGE
+from .settings import DEFAULT_PACKAGE, DEFAULT_BASE_PACKAGE, repo_for_base_namespace
 from .git_utils import list_branches, materialize_worktree
 from .graph_runner import build_graph_in_subprocess
 from .diff import diff_graphs
@@ -72,10 +72,44 @@ def _parse_base_packages(raw: str) -> list[str]:
     return [chunk.strip() for chunk in raw.split(",") if chunk.strip()]
 
 
+def _bases_by_repo(base_packages: list[str]) -> dict[str, list[str]]:
+    mapping: dict[str, list[str]] = {}
+    for base in base_packages:
+        repo = repo_for_base_namespace(base)
+        mapping.setdefault(repo, []).append(base)
+    return mapping
+
+
+def _primary_repo(package: str | None, base_namespace: str | None) -> str:
+    if base_namespace:
+        bases = _parse_base_packages(base_namespace)
+        if bases:
+            return repo_for_base_namespace(bases[0])
+    if package:
+        # Use the top-level namespace to infer the owning repository
+        prefix = package.split(".")
+        for i in range(len(prefix), 0, -1):
+            candidate = ".".join(prefix[:i])
+            if candidate.startswith("nomad_measurements"):
+                return repo_for_base_namespace(candidate)
+        return repo_for_base_namespace(package)
+
+    defaults = _parse_base_packages(DEFAULT_BASE_PACKAGE)
+    if defaults:
+        return repo_for_base_namespace(defaults[0])
+    return repo_for_base_namespace(DEFAULT_BASE_PACKAGE)
+
+
 @router.get("/git/branches")
-def api_branches():
+def api_branches(base_package: str = Query(DEFAULT_BASE_PACKAGE)):
     try:
-        return {"branches": list_branches()}
+        bases = _parse_base_packages(base_package)
+        repos = _bases_by_repo(bases) if bases else {repo_for_base_namespace(DEFAULT_BASE_PACKAGE): []}
+
+        names: set[str] = set()
+        for repo_src in repos:
+            names.update(list_branches(repo_src))
+        return {"branches": sorted(names)}
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -92,23 +126,25 @@ def api_packages(
     """
     try:
         # materialize_worktree returns (worktree_path, sha)
-        wt, sha = materialize_worktree(branch)
-
-        # Work out where Python packages live (usually <worktree>/src)
-        root = _python_root(wt)
-
         base_packages = _parse_base_packages(base_package)
         if not base_packages:
             raise HTTPException(400, "Provide at least one base package")
 
-        # Use the helper to list all modules under each base package
         packages: set[str] = set()
-        for base in base_packages:
-            packages.update(_list_modules_under(root, base))
+        repo_shas: list[dict] = []
+
+        for repo_src, bases in _bases_by_repo(base_packages).items():
+            wt, sha = materialize_worktree(branch, repo_src)
+            repo_shas.append({"source": repo_src, "sha": sha})
+
+            root = _python_root(wt)
+            for base in bases:
+                packages.update(_list_modules_under(root, base))
 
         return {
             "branch": branch,
-            "sha": sha,
+            "sha": repo_shas[0]["sha"] if repo_shas else None,
+            "repositories": repo_shas,
             "base_package": base_package,
             "base_packages": base_packages,
             "packages": sorted(packages),
@@ -118,11 +154,12 @@ def api_packages(
 
 
 @router.post("/graph")
-def api_graph(req: GraphRequest):
+def api_graph(req: GraphRequest, base_namespace: str | None = Query(None)):
     pkg = req.package or DEFAULT_PACKAGE
     try:
-        wt, sha = materialize_worktree(req.branch)
-        graph = build_graph_in_subprocess(wt, pkg, req.extractor)
+        repo_src = _primary_repo(pkg, base_namespace)
+        wt, sha = materialize_worktree(req.branch, repo_src)
+        graph = build_graph_in_subprocess(wt, pkg, req.extractor, base_namespace=base_namespace)
         return {"branch": req.branch, "sha": sha, "graph": graph}
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -139,8 +176,9 @@ def api_diff(
 ):
     pkg = req.package or DEFAULT_PACKAGE
     try:
-        wtb, shab = materialize_worktree(req.base)
-        wth, shah = materialize_worktree(req.head)
+        repo_src = _primary_repo(pkg, base_namespace)
+        wtb, shab = materialize_worktree(req.base, repo_src)
+        wth, shah = materialize_worktree(req.head, repo_src)
 
         opts = {
             "root": root,

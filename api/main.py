@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from .routes_git import router as git_router
 from extractor.usage_index import UsageEntry, get_usage_for_section
-from .settings import SCHEMA_REPO, DEFAULT_BASE_PACKAGE
+from .settings import SCHEMA_REPO, DEFAULT_BASE_PACKAGE, repo_for_base_namespace
 
 SUPPORTED_CUSTOM_DTYPES = {
     "bool",
@@ -69,12 +69,23 @@ def schema(
     return data
 
 
-def _repo_root() -> Path:
-    if not SCHEMA_REPO:
+def _repo_root(base_package: str | None = None) -> Path:
+    if base_package:
+        repo_src = repo_for_base_namespace(base_package)
+    else:
+        repo_src = SCHEMA_REPO
+
+    if not repo_src:
         raise RuntimeError(
-            "Set SCHEMA_UML_REPO / NOMAD_SIM_REPO / GIT_REPO_DIR to a local schema clone"
+            "Set SCHEMA_UML_REPO / NOMAD_SIM_REPO / NOMAD_MEASURE_REPO / GIT_REPO_DIR to a local schema clone"
         )
-    return Path(SCHEMA_REPO).resolve()
+
+    repo_path = Path(repo_src).expanduser().resolve()
+    if not (repo_path / ".git").exists():
+        raise RuntimeError(
+            "Set SCHEMA_UML_REPO / NOMAD_SIM_REPO / NOMAD_MEASURE_REPO / GIT_REPO_DIR to a local schema clone"
+        )
+    return repo_path
 
 def _run_git(repo: Path, *args: str) -> str:
     cp = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
@@ -270,7 +281,6 @@ def overview(
     Resolves repo layout prefixes (e.g., src/).
     """
     try:
-        repo = _repo_root()
         base_packages = _parse_base_packages(base)
         if not base_packages:
             raise HTTPException(status_code=400, detail="Provide at least one base package")
@@ -278,6 +288,7 @@ def overview(
         packages: dict[str, set[str]] = {}
 
         for base_pkg in base_packages:
+            repo = _repo_root(base_pkg)
             base_path = base_pkg.replace(".", "/")
 
             # resolve actual tree path (handles src/ layout)

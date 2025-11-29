@@ -23,6 +23,10 @@ const DEFAULT_NAMESPACE =
   "nomad_simulations.schema_packages,nomad_measurements.schema_packages";
 const DEFAULT_ROOT = import.meta.env.VITE_DEFAULT_ROOT ?? "ModelMethod";
 const DEFAULT_BRANCH = import.meta.env.VITE_DEFAULT_BRANCH ?? "develop";
+const WORKSPACE_PRESETS = [
+  { label: "nomad-simulations", namespace: "nomad_simulations.schema_packages" },
+  { label: "nomad-measurements", namespace: "nomad_measurements.schema_packages" },
+];
 
 export default function App() {
   const [apiBase, setApiBase] = useState<string>(DEFAULT_API);
@@ -120,7 +124,7 @@ export default function App() {
   // fetch git branches
   const loadBranches = async () => {
     try {
-      const r = await api.get("/git/branches");
+      const r = await api.get("/git/branches", { params: { base_package: normalizedNamespace } });
       setBranches(r.data.branches || []);
     } catch (e) {
       // keep silent in UI; dropdown will just be empty
@@ -251,10 +255,14 @@ export default function App() {
 
   useEffect(() => {
     loadRoots();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     loadBranches();
     loadPackages();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [normalizedNamespace]);
 
   const selectedClassName = selected?.kind === "class" ? selected.name : null;
   const addBlockedReason =
@@ -356,6 +364,18 @@ export default function App() {
                 </select>
               </div>
             )}
+          </div>
+          <div className="toggle-group" style={{ marginTop: 10 }}>
+            {WORKSPACE_PRESETS.map((ws) => (
+              <button
+                key={ws.namespace}
+                className={`toggle-chip ${normalizedNamespace === ws.namespace ? "active" : ""}`}
+                onClick={() => setNamespace(ws.namespace)}
+                title={`Set base namespace to ${ws.namespace}`}
+              >
+                {ws.label}
+              </button>
+            ))}
           </div>
         </CollapsibleSection>
 

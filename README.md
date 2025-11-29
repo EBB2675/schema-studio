@@ -50,6 +50,8 @@ The backend reads from a local clone. Set one of (required before starting the s
 ```bash
 # preferred (general)
 export SCHEMA_UML_REPO=<path-or-URL-to-your-schema-repo>
+# optional: explicitly point to nomad-measurements when using both namespaces
+# export NOMAD_MEASURE_REPO=/path/to/nomad-measurements
 # backwards-compatible options also accepted by backend
 # export NOMAD_SIM_REPO=/path/to/nomad-simulations
 # export GIT_REPO_DIR=/path/to/nomad-simulations
