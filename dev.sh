@@ -90,15 +90,25 @@ cd "${ROOT_DIR}"
 
 echo "Both services launched. Press Ctrl+C to stop."
 
-# Wait until one of the services exits (or the user hits Ctrl+C)
+# Wait until one of the services exits (or the user hits Ctrl+C). macOS ships with
+# Bash 3.x, which lacks `wait -n`, so poll the processes for portability.
+status_api=""
+status_web=""
 while true; do
-  if ! wait -n; then
-    echo "A service stopped with a non-zero exit code. Shutting down the stack..."
+  if [[ -z "${status_api}" ]] && ! ps -p "${API_PID}" >/dev/null 2>&1; then
+    wait "${API_PID}" || status_api=$?
     break
   fi
-  # If we reach here, a service exited cleanly (unlikely during dev); continue waiting.
-  if ! ps -p "${API_PID}" >/dev/null 2>&1 || ! ps -p "${WEB_PID}" >/dev/null 2>&1; then
+
+  if [[ -z "${status_web}" ]] && ! ps -p "${WEB_PID}" >/dev/null 2>&1; then
+    wait "${WEB_PID}" || status_web=$?
     break
   fi
+
+  sleep 1
 done
+
+if [[ -n "${status_api}" || -n "${status_web}" ]]; then
+  echo "A service stopped with a non-zero exit code. Shutting down the stack..."
+fi
 
