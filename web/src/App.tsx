@@ -49,7 +49,6 @@ export default function App() {
 
   const [includeQuantities, setIncludeQuantities] = useState<boolean>(true);
   const [includeSubsections, setIncludeSubsections] = useState<boolean>(true);
-  const [umlMode, setUmlMode] = useState<boolean>(true);
 
   const [crossModules, setCrossModules] = useState<boolean>(true);
   const [namespace, setNamespace] = useState<string>(DEFAULT_NAMESPACE);
@@ -479,14 +478,6 @@ export default function App() {
                 onChange={(e) => setIncludeSubsections(e.target.checked)}
               />
               Subsections
-            </label>
-            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={umlMode}
-                onChange={(e) => setUmlMode(e.target.checked)}
-              />
-              UML mode
             </label>
             <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <input
