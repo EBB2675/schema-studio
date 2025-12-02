@@ -5,7 +5,6 @@ import DocPanel from "./components/DocPanel";
 import OverviewGrid from "./components/OverviewGrid";
 import UnderTheHoodPanel from "./components/UnderTheHoodPanel";
 import AddQuantityForm from "./components/AddQuantityForm";
-import QuantityEditPanel from "./components/QuantityEditPanel";
 import type { QuantityFormData } from "./components/quantityShared";
 import CollapsibleSection from "./components/CollapsibleSection";
 import { useSelection } from "./store/selection";
@@ -744,11 +743,13 @@ export default function App() {
               overflowY: "auto"
             }}
           >
-            <CollapsibleSection title="Documentation" hint="Inspect the selected class" className="panel">
+            <CollapsibleSection title="Documentation" hint="Browse docs and edit quantities" className="panel">
               <DocPanel
                 editableMode={editableMode}
                 onRemoveQuantity={removeQuantity}
+                onEditQuantity={editQuantity}
                 blockedReason={addBlockedReason}
+                actionError={quantityActionErr}
                 clearActionError={clearQuantityActionError}
               />
             </CollapsibleSection>
@@ -764,7 +765,7 @@ export default function App() {
           >
             <CollapsibleSection
               title="Editable mode"
-              hint="Enable editing, add quantities, or modify existing ones"
+              hint="Enable editing and add new quantities"
               className="panel"
             >
               <div className="action-stack" style={{ gap: 14 }}>
@@ -791,22 +792,6 @@ export default function App() {
                   onSubmit={addCustomQuantity}
                   submitting={addLoading}
                   error={addErr}
-                />
-
-                <div
-                  style={{
-                    borderTop: "1px solid var(--panel-border)",
-                    margin: "4px 0",
-                  }}
-                />
-
-                <QuantityEditPanel
-                  editableMode={editableMode}
-                  blockedReason={addBlockedReason}
-                  actionError={quantityActionErr}
-                  clearActionError={clearQuantityActionError}
-                  onEditQuantity={editQuantity}
-                  onRemoveQuantity={removeQuantity}
                 />
               </div>
             </CollapsibleSection>

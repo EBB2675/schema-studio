@@ -1,10 +1,13 @@
-import { useEffect, useMemo } from "react";
-import { useSelection, type QtyMeta } from "../store/selection";
+import { useEffect, useMemo, useState } from "react";
+import QuantityEditPanel from "./QuantityEditPanel";
+import { useSelection, type QtyMeta, type Selected } from "../store/selection";
 
 type Props = {
   editableMode: boolean;
   blockedReason?: string | null;
+  actionError?: string | null;
   onRemoveQuantity: (id: string) => void;
+  onEditQuantity: (id: string, updates: { quantityName: string; dtype: string; docstring: string }) => void;
   clearActionError: () => void;
 };
 
@@ -45,12 +48,26 @@ function QtyRow({ q, onClick, onEdit, onRemove, editableMode, disabled }: { q: Q
   );
 }
 
-export default function DocPanel({ editableMode, onRemoveQuantity, blockedReason, clearActionError }: Props) {
+export default function DocPanel({
+  editableMode,
+  onRemoveQuantity,
+  onEditQuantity,
+  blockedReason,
+  actionError,
+  clearActionError,
+}: Props) {
   const { selected, setSelected } = useSelection();
+  const [classContext, setClassContext] = useState<Selected | null>(null);
 
   useEffect(() => {
     clearActionError();
   }, [selected, clearActionError]);
+
+  useEffect(() => {
+    if (selected?.kind === "class") {
+      setClassContext(selected);
+    }
+  }, [selected]);
 
   const disableActions = useMemo(() => !!blockedReason || !editableMode, [blockedReason, editableMode]);
 
@@ -62,6 +79,9 @@ export default function DocPanel({ editableMode, onRemoveQuantity, blockedReason
   };
 
   const showQuantity = (q: QtyMeta) => {
+    if (selected?.kind === "class") {
+      setClassContext(selected);
+    }
     setSelected({
       id: q.id,
       kind: "quantity",
@@ -74,6 +94,14 @@ export default function DocPanel({ editableMode, onRemoveQuantity, blockedReason
       card: q.card,
       owner: q.owner
     });
+  };
+
+  const goBackToClass = () => {
+    if (classContext) {
+      setSelected(classContext);
+    } else {
+      setSelected(null);
+    }
   };
 
   return (
@@ -116,15 +144,22 @@ export default function DocPanel({ editableMode, onRemoveQuantity, blockedReason
         </>
       ) : (
         <>
-          <div className="doc-header">
-            <div className="meta-label">Quantity</div>
+          <div className="doc-header" style={{ justifyContent: "space-between", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button className="btn secondary" type="button" onClick={goBackToClass} disabled={!classContext}>
+                ← Back
+              </button>
+              <div>
+                <div className="meta-label">Quantity</div>
+                <h2 className="doc-title" style={{ margin: "4px 0" }}>{selected.name}</h2>
+              </div>
+            </div>
             {(selected.path || selected.line) && (
               <div className="code-badge">
                 {selected.path}{selected.line ? `:${selected.line}` : ""}
               </div>
             )}
           </div>
-          <h2 className="doc-title">{selected.name}</h2>
           <div className="doc-meta">
             {[selected.dtype, selected.shape && selected.shape !== "[]"
               ? selected.shape
@@ -132,6 +167,17 @@ export default function DocPanel({ editableMode, onRemoveQuantity, blockedReason
               .filter(Boolean).join("  ")}
           </div>
           <pre className="doc-docstring">{selected.doc || "No docstring available."}</pre>
+
+          <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--panel-border)" }}>
+            <QuantityEditPanel
+              editableMode={editableMode}
+              blockedReason={blockedReason}
+              actionError={actionError}
+              clearActionError={clearActionError}
+              onEditQuantity={onEditQuantity}
+              onRemoveQuantity={onRemoveQuantity}
+            />
+          </div>
         </>
       )}
     </div>
