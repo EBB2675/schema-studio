@@ -216,7 +216,7 @@ export default function App() {
       .map((n: any) => ({
         id: n.id,
         name: n.label,
-        dtype: n.dtype ?? undefined,
+        dtype: n.dtype ?? n.data_type ?? n.type ?? undefined,
         shape: n.shape ?? undefined,
         card: n.card ?? undefined,
         doc: n.doc ?? undefined,

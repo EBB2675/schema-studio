@@ -115,7 +115,7 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
       const list = attrs.get(q.owner) ?? [];
       list.push({
         name: q.label,
-        dtype: q.dtype ?? undefined,
+        dtype: q.dtype ?? q.data_type ?? q.type ?? undefined,
         shape: q.shape ?? undefined,
         card: q.card ?? undefined
       });
@@ -126,7 +126,7 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
       metaList.push({
         id: q.id,
         name: q.label,
-        dtype: q.dtype ?? undefined,
+        dtype: q.dtype ?? q.data_type ?? q.type ?? undefined,
         shape: q.shape ?? undefined,
         card: q.card ?? undefined,
         doc: q.doc ?? undefined,
