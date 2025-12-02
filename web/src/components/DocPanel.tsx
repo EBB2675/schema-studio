@@ -16,9 +16,17 @@ function QtyRow({ q, onClick, onEdit, onRemove, editableMode, disabled }: { q: Q
   if (q.dtype) meta.push(q.dtype);
   if (q.shape && q.shape !== "[]") meta.push(q.shape);
   if (q.card) meta.push(`[${q.card}]`);
+  const handleClick = () => {
+    if (editableMode && !disabled) {
+      onEdit();
+      onClick();
+      return;
+    }
+    onClick();
+  };
   return (
     <div className="qty-row" style={{ gap: 8 }}>
-      <button className="qty-row" onClick={onClick} style={{ flex: 1 }}>
+      <button className="qty-row" type="button" onClick={handleClick} style={{ flex: 1 }}>
         <div style={{ flex: 1 }} className="qty-mono">
           <div style={{ fontSize: 13 }}>{q.name}</div>
           <div style={{ fontSize: 11, opacity: 0.7 }}>{meta.join("  ")}</div>
@@ -28,10 +36,10 @@ function QtyRow({ q, onClick, onEdit, onRemove, editableMode, disabled }: { q: Q
 
       {editableMode && (
         <div className="row" style={{ gap: 6 }}>
-          <button className="btn secondary" style={{ padding: "6px 10px" }} onClick={onEdit} disabled={disabled}>
+          <button className="btn secondary" type="button" style={{ padding: "6px 10px" }} onClick={onEdit} disabled={disabled}>
             Edit
           </button>
-          <button className="btn secondary" style={{ padding: "6px 10px" }} onClick={onRemove} disabled={disabled}>
+          <button className="btn secondary" type="button" style={{ padding: "6px 10px" }} onClick={onRemove} disabled={disabled}>
             Remove
           </button>
         </div>
