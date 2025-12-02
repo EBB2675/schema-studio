@@ -639,33 +639,6 @@ export default function App() {
           <UnderTheHoodPanel apiBase={apiBase} />
         </CollapsibleSection>
 
-        <CollapsibleSection title="Editable mode" hint="Prototype new quantities">
-          <div className="row" style={{ marginBottom: 6 }}>
-            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={editableMode}
-                onChange={(e) => {
-                  setEditableMode(e.target.checked);
-                  setAddErr(null);
-                  setQuantityActionErr(null);
-                }}
-              />
-              Editable mode
-            </label>
-            {addBlockedReason && <span className="small">{addBlockedReason}</span>}
-          </div>
-
-          <AddQuantityForm
-            enabled={editableMode && !addBlockedReason}
-            blockedReason={addBlockedReason}
-            targetClass={selectedClassName}
-            onSubmit={addCustomQuantity}
-            submitting={addLoading}
-            error={addErr}
-          />
-        </CollapsibleSection>
-
         <CollapsibleSection title="Compare branches" hint="Diff diagrams across git">
           <div className="action-stack">
             <div>
@@ -751,7 +724,7 @@ export default function App() {
           )}
         </div>
 
-        {/* Right: DocPanel (top) + Under-the-hood (bottom) */}
+        {/* Right: Documentation + quantity editing */}
         <div
           style={{
             minWidth: 0,
@@ -763,10 +736,10 @@ export default function App() {
             gap: "10px"
           }}
         >
-          {/* TOP PANEL — about 60% */}
+          {/* TOP PANEL — about half */}
           <div
             style={{
-              flex: 6,
+              flex: 5,
               minHeight: 0,
               overflowY: "auto"
             }}
@@ -781,23 +754,61 @@ export default function App() {
             </CollapsibleSection>
           </div>
 
-          {/* BOTTOM PANEL — about 40% */}
+          {/* BOTTOM PANEL — editable mode controls */}
           <div
             style={{
-              flex: 4,
+              flex: 5,
               minHeight: 0,
               overflowY: "auto"
             }}
           >
-            <CollapsibleSection title="Edit quantity" hint="Modify or remove a selected quantity" className="panel">
-              <QuantityEditPanel
-                editableMode={editableMode}
-                blockedReason={addBlockedReason}
-                actionError={quantityActionErr}
-                clearActionError={clearQuantityActionError}
-                onEditQuantity={editQuantity}
-                onRemoveQuantity={removeQuantity}
-              />
+            <CollapsibleSection
+              title="Editable mode"
+              hint="Enable editing, add quantities, or modify existing ones"
+              className="panel"
+            >
+              <div className="action-stack" style={{ gap: 14 }}>
+                <div className="row" style={{ alignItems: "center", gap: 10 }}>
+                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={editableMode}
+                      onChange={(e) => {
+                        setEditableMode(e.target.checked);
+                        setAddErr(null);
+                        setQuantityActionErr(null);
+                      }}
+                    />
+                    Editable mode
+                  </label>
+                  {addBlockedReason && <span className="small">{addBlockedReason}</span>}
+                </div>
+
+                <AddQuantityForm
+                  enabled={editableMode && !addBlockedReason}
+                  blockedReason={addBlockedReason}
+                  targetClass={selectedClassName}
+                  onSubmit={addCustomQuantity}
+                  submitting={addLoading}
+                  error={addErr}
+                />
+
+                <div
+                  style={{
+                    borderTop: "1px solid var(--panel-border)",
+                    margin: "4px 0",
+                  }}
+                />
+
+                <QuantityEditPanel
+                  editableMode={editableMode}
+                  blockedReason={addBlockedReason}
+                  actionError={quantityActionErr}
+                  clearActionError={clearQuantityActionError}
+                  onEditQuantity={editQuantity}
+                  onRemoveQuantity={removeQuantity}
+                />
+              </div>
             </CollapsibleSection>
           </div>
         </div>
