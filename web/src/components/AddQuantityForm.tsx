@@ -1,21 +1,14 @@
 import React, { useMemo, useState } from "react";
-
-type FormData = {
-  quantityName: string;
-  dtype: string;
-  docstring: string;
-};
+import { SUPPORTED_DTYPES, type QuantityFormData } from "./quantityShared";
 
 type Props = {
   enabled: boolean;
   targetClass: string | null;
-  onSubmit: (data: FormData) => Promise<void>;
+  onSubmit: (data: QuantityFormData) => Promise<void>;
   submitting: boolean;
   error: string | null;
   blockedReason?: string | null;
 };
-
-const SUPPORTED_DTYPES = ["bool", "datetime", "float", "int", "str"];
 
 export default function AddQuantityForm({ enabled, targetClass, onSubmit, submitting, error, blockedReason }: Props) {
   const [quantityName, setQuantityName] = useState("");

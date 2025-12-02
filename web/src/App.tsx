@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import GraphView, { type GraphExportHandle } from "./GraphView";
 import DocPanel from "./components/DocPanel";
 import OverviewGrid from "./components/OverviewGrid";
 import UnderTheHoodPanel from './components/UnderTheHoodPanel';
 import AddQuantityForm from "./components/AddQuantityForm";
+import type { QuantityFormData } from "./components/quantityShared";
 import CollapsibleSection from "./components/CollapsibleSection";
 import { useSelection } from "./store/selection";
 import { jsPDF } from "jspdf";
@@ -77,10 +78,13 @@ export default function App() {
   const [editableMode, setEditableMode] = useState<boolean>(false);
   const [addLoading, setAddLoading] = useState<boolean>(false);
   const [addErr, setAddErr] = useState<string | null>(null);
+  const [quantityActionErr, setQuantityActionErr] = useState<string | null>(null);
 
   const [exportHandle, setExportHandle] = useState<GraphExportHandle | null>(null);
 
   const { selected, setSelected } = useSelection();
+
+  const clearQuantityActionError = useCallback(() => setQuantityActionErr(null), []);
 
   // overview mode
   const [mode, setMode] = useState<"graph" | "overview">("graph");
@@ -110,6 +114,7 @@ export default function App() {
   // build single-branch graph (resets diff view)
   const loadGraph = async () => {
     setErr(null);
+    setQuantityActionErr(null);
     setLoading(true);
     setDiffData(null);
     setExportHandle(null);
@@ -170,6 +175,7 @@ export default function App() {
   const compareBranches = async () => {
     if (!baseBranch || !headBranch) return;
     setErr(null);
+    setQuantityActionErr(null);
     setDiffLoading(true);
     setGraph(null); // switch to diff mode
     setExportHandle(null);
@@ -248,16 +254,17 @@ export default function App() {
         },
         {
           params: {
-          root,
-          include_subsections: includeSubsections,
-          allow_cross_module: crossModules,
-          base_namespace: normalizedNamespace || undefined,
-        },
-      }
-    );
+            root,
+            include_subsections: includeSubsections,
+            allow_cross_module: crossModules,
+            base_namespace: normalizedNamespace || undefined,
+          },
+        }
+      );
       const updated = r.data as ApiGraph;
       setGraph(updated);
       refreshSelectionQuantities(updated);
+      setQuantityActionErr(null);
     } catch (e: any) {
       setAddErr(e?.response?.data?.detail || String(e));
     } finally {
@@ -279,14 +286,107 @@ export default function App() {
   const selectedClassName = selected?.kind === "class" ? selected.name : null;
   const addBlockedReason =
     mode !== "graph"
-      ? "Switch to diagram view to add quantities"
+      ? "Switch to diagram view to modify quantities"
       : diffData
-        ? "Exit branch comparison to add quantities"
+        ? "Exit branch comparison to modify quantities"
         : !graph
-          ? "Build a graph first to add quantities"
+          ? "Build a graph first to modify quantities"
           : null;
 
   const currentGraph = diffData ? diffData.head?.graph ?? null : graph;
+
+  const ensureEditableReady = () => {
+    if (addBlockedReason) {
+      setQuantityActionErr(addBlockedReason);
+      return null;
+    }
+    if (!editableMode) {
+      setQuantityActionErr("Enable editable mode to edit or remove quantities.");
+      return null;
+    }
+    if (!graph) {
+      setQuantityActionErr("Build a graph first to modify quantities.");
+      return null;
+    }
+    return graph;
+  };
+
+  const editQuantity = (quantityId: string, updates: QuantityFormData) => {
+    const current = ensureEditableReady();
+    if (!current) return;
+
+    const target = current.nodes.find((n) => n.id === quantityId && n.kind === "quantity");
+    if (!target) {
+      setQuantityActionErr("Quantity not found in current graph.");
+      return;
+    }
+    if (!target.owner) {
+      setQuantityActionErr("Cannot edit a quantity without an owner.");
+      return;
+    }
+
+    const trimmedName = updates.quantityName.trim();
+    if (!trimmedName) {
+      setQuantityActionErr("Quantity name cannot be empty.");
+      return;
+    }
+
+    const newId = `${target.owner}.${trimmedName}`;
+    const conflict = current.nodes.some(
+      (n) => n.kind === "quantity" && n.owner === target.owner && n.id !== quantityId && (n.id === newId || n.label === trimmedName)
+    );
+    if (conflict) {
+      setQuantityActionErr("A quantity with that name already exists on this class.");
+      return;
+    }
+
+    const nextNodes = current.nodes.map((n) => {
+      if (n.id !== quantityId) return n;
+      return { ...n, id: newId, label: trimmedName, doc: updates.docstring || null, dtype: updates.dtype };
+    });
+
+    const nextEdges = current.edges.map((e) => {
+      if (e.source === quantityId) return { ...e, source: newId };
+      if (e.target === quantityId) return { ...e, target: newId };
+      return e;
+    });
+
+    const nextGraph = { ...current, nodes: nextNodes, edges: nextEdges };
+    setGraph(nextGraph);
+    refreshSelectionQuantities(nextGraph);
+    setQuantityActionErr(null);
+
+    if (selected?.kind === "quantity" && selected.id === quantityId) {
+      setSelected({ ...selected, id: newId, name: trimmedName, doc: updates.docstring, dtype: updates.dtype, owner: selected.owner });
+    }
+  };
+
+  const removeQuantity = (quantityId: string) => {
+    const current = ensureEditableReady();
+    if (!current) return;
+
+    const target = current.nodes.find((n) => n.id === quantityId && n.kind === "quantity");
+    if (!target) {
+      setQuantityActionErr("Quantity not found in current graph.");
+      return;
+    }
+    if (!target.owner) {
+      setQuantityActionErr("Cannot remove a quantity without an owner.");
+      return;
+    }
+
+    const nextNodes = current.nodes.filter((n) => n.id !== quantityId);
+    const nextEdges = current.edges.filter((e) => e.source !== quantityId && e.target !== quantityId);
+    const nextGraph = { ...current, nodes: nextNodes, edges: nextEdges };
+
+    setGraph(nextGraph);
+    refreshSelectionQuantities(nextGraph);
+    setQuantityActionErr(null);
+
+    if (selected?.kind === "quantity" && selected.id === quantityId) {
+      setSelected(null);
+    }
+  };
 
   const exportJson = () => {
     if (!currentGraph) return;
@@ -534,6 +634,7 @@ export default function App() {
                 onChange={(e) => {
                   setEditableMode(e.target.checked);
                   setAddErr(null);
+                  setQuantityActionErr(null);
                 }}
               />
               Editable mode
@@ -657,7 +758,14 @@ export default function App() {
             }}
           >
             <CollapsibleSection title="Documentation" hint="Inspect the selected class" className="panel">
-              <DocPanel />
+              <DocPanel
+                editableMode={editableMode}
+                onEditQuantity={editQuantity}
+                onRemoveQuantity={removeQuantity}
+                blockedReason={addBlockedReason}
+                actionError={quantityActionErr}
+                clearActionError={clearQuantityActionError}
+              />
             </CollapsibleSection>
           </div>
 
