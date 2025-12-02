@@ -512,7 +512,7 @@ export default function App() {
             </div>
 
             <div>
-              <label className="label">Package (module)</label>
+              <label className="label">Package</label>
               <input
                 className="input"
                 value={pkg}
@@ -521,23 +521,41 @@ export default function App() {
               />
             </div>
 
-            {availablePkgs.length > 0 && (
-              <div>
-                <label className="label">Choose from {packageBranch}</label>
+            <div className="row" style={{ gap: 10, alignItems: "flex-end" }}>
+              <div style={{ flex: 1 }}>
+                <label className="label">Choose from branch</label>
                 <select
                   className="select"
-                  value={availablePkgs.includes(pkg) ? pkg : ""}
-                  onChange={(e) => setPkg(e.target.value)}
+                  value={packageBranch}
+                  onChange={(e) => setPackageBranch(e.target.value)}
                 >
-                  <option value="">Custom module...</option>
-                  {availablePkgs.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
+                  {[packageBranch || DEFAULT_BRANCH, ...branches.filter((b) => b !== packageBranch)].map((b) => (
+                    <option key={b} value={b}>
+                      {b}
                     </option>
                   ))}
                 </select>
               </div>
-            )}
+              <button className="btn secondary" onClick={loadPackages} style={{ whiteSpace: "nowrap" }}>
+                Refresh packages
+              </button>
+            </div>
+
+            <div>
+              <label className="label">Choose from {packageBranch || DEFAULT_BRANCH}</label>
+              <select
+                className="select"
+                value={availablePkgs.includes(pkg) ? pkg : ""}
+                onChange={(e) => setPkg(e.target.value)}
+              >
+                <option value="">Custom package...</option>
+                {availablePkgs.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             <div className="row" style={{ justifyContent: "space-between" }}>
               <div>
