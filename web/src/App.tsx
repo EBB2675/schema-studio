@@ -151,6 +151,7 @@ export default function App() {
 
   // fetch available schema packages from develop branch
   const loadPackages = async () => {
+    setErr(null);
     try {
       const r = await api.get("/git/packages", {
         params: {
@@ -168,6 +169,8 @@ export default function App() {
     } catch (e) {
       // silent failure is fine; user can still type manually
       console.error("Failed to load packages", e);
+      // surface the error so users know why the dropdown is empty
+      setErr((e as any)?.response?.data?.detail || String(e));
     }
   };
 
@@ -275,7 +278,7 @@ export default function App() {
   useEffect(() => {
     loadRoots();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pkg, apiBase]);
 
   useEffect(() => {
     loadBranches();

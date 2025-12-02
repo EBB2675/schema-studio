@@ -107,9 +107,18 @@ def api_branches(base_package: str = Query(DEFAULT_BASE_PACKAGE)):
         repos = _bases_by_repo(bases) if bases else {repo_for_base_namespace(DEFAULT_BASE_PACKAGE): []}
 
         names: set[str] = set()
+        errors: list[str] = []
+
         for repo_src in repos:
-            names.update(list_branches(repo_src))
-        return {"branches": sorted(names)}
+            try:
+                names.update(list_branches(repo_src))
+            except Exception as e:
+                errors.append(f"{repo_src}: {e}")
+
+        if not names and errors:
+            raise HTTPException(500, "; ".join(errors))
+
+        return {"branches": sorted(names), "errors": errors or None}
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -132,14 +141,23 @@ def api_packages(
 
         packages: set[str] = set()
         repo_shas: list[dict] = []
+        errors: list[str] = []
 
         for repo_src, bases in _bases_by_repo(base_packages).items():
-            wt, sha = materialize_worktree(branch, repo_src)
+            try:
+                wt, sha = materialize_worktree(branch, repo_src)
+            except Exception as e:
+                errors.append(f"{repo_src}: {e}")
+                continue
+
             repo_shas.append({"source": repo_src, "sha": sha})
 
             root = _python_root(wt)
             for base in bases:
                 packages.update(_list_modules_under(root, base))
+
+        if not packages and errors:
+            raise HTTPException(500, "; ".join(errors))
 
         return {
             "branch": branch,
@@ -148,6 +166,7 @@ def api_packages(
             "base_package": base_package,
             "base_packages": base_packages,
             "packages": sorted(packages),
+            "errors": errors or None,
         }
     except Exception as e:
         raise HTTPException(500, str(e))
