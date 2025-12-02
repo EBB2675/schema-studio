@@ -12,12 +12,25 @@ from .routes_git import router as git_router
 from extractor.usage_index import UsageEntry, get_usage_for_section
 from .settings import SCHEMA_REPO, DEFAULT_BASE_PACKAGE, repo_for_base_namespace
 
+# Keep this list in sync with `web/src/components/quantityShared.ts`.
 SUPPORTED_CUSTOM_DTYPES = {
+    # Booleans / strings / datetime
     "bool",
-    "datetime",
-    "float",
-    "int",
     "str",
+    "datetime",
+    # Generic numbers
+    "int",
+    "float",
+    # NumPy-style integers
+    "int32",
+    "int64",
+    "np.int32",
+    "np.int64",
+    # NumPy-style floats
+    "float32",
+    "float64",
+    "np.float32",
+    "np.float64",
 }
 
 
