@@ -1,12 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useSelection, type QtyMeta } from "../store/selection";
-import { SUPPORTED_DTYPES, type QuantityFormData } from "./quantityShared";
 
 type Props = {
   editableMode: boolean;
   blockedReason?: string | null;
-  actionError?: string | null;
-  onEditQuantity: (id: string, updates: QuantityFormData) => void;
   onRemoveQuantity: (id: string) => void;
   clearActionError: () => void;
 };
@@ -48,40 +45,19 @@ function QtyRow({ q, onClick, onEdit, onRemove, editableMode, disabled }: { q: Q
   );
 }
 
-export default function DocPanel({ editableMode, onEditQuantity, onRemoveQuantity, blockedReason, actionError, clearActionError }: Props) {
+export default function DocPanel({ editableMode, onRemoveQuantity, blockedReason, clearActionError }: Props) {
   const { selected, setSelected } = useSelection();
-  const [editing, setEditing] = useState<QtyMeta | null>(null);
-  const [formName, setFormName] = useState("");
-  const [formDtype, setFormDtype] = useState(SUPPORTED_DTYPES[0]);
-  const [formDoc, setFormDoc] = useState("");
 
   useEffect(() => {
-    // Preserve the edit session when switching from a class to one of its quantities.
-    if (selected?.kind !== "quantity") {
-      setEditing(null);
-    }
     clearActionError();
   }, [selected, clearActionError]);
 
-  useEffect(() => {
-    if (!editing) return;
-    setFormName(editing.name);
-    setFormDtype(editing.dtype || SUPPORTED_DTYPES[0]);
-    setFormDoc(editing.doc || "");
-  }, [editing]);
-
   const disableActions = useMemo(() => !!blockedReason || !editableMode, [blockedReason, editableMode]);
-
-  const commitEdit = () => {
-    if (!editing) return;
-    onEditQuantity(editing.id, { quantityName: formName, dtype: formDtype, docstring: formDoc });
-  };
 
   const confirmRemove = (id: string) => {
     if (!editableMode || disableActions) return;
     if (confirm("Remove this quantity from the current diagram?")) {
       onRemoveQuantity(id);
-      setEditing(null);
     }
   };
 
@@ -99,66 +75,6 @@ export default function DocPanel({ editableMode, onEditQuantity, onRemoveQuantit
       owner: q.owner
     });
   };
-
-  const renderEditPanel = () => (
-    <div className="panel" style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
-      <div className="doc-subtitle" style={{ margin: 0 }}>Edit quantity</div>
-      <div>
-        <label className="label" htmlFor="edit-name">Name</label>
-        <input
-          id="edit-name"
-          className="input"
-          value={formName}
-          onChange={(e) => setFormName(e.target.value)}
-          disabled={disableActions}
-        />
-      </div>
-      <div>
-        <label className="label" htmlFor="edit-dtype">Type</label>
-        <select
-          id="edit-dtype"
-          className="select"
-          value={formDtype}
-          onChange={(e) => setFormDtype(e.target.value)}
-          disabled={disableActions}
-        >
-          {SUPPORTED_DTYPES.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className="label" htmlFor="edit-doc">Docstring</label>
-        <textarea
-          id="edit-doc"
-          className="input"
-          style={{ minHeight: 80, resize: "vertical" }}
-          value={formDoc}
-          onChange={(e) => setFormDoc(e.target.value)}
-          disabled={disableActions}
-        />
-      </div>
-
-      {actionError && <div style={{ color: "#b91c1c", fontSize: 13 }}>{actionError}</div>}
-      {blockedReason && <div style={{ color: "#6b7280", fontSize: 13 }}>{blockedReason}</div>}
-
-      <div className="row" style={{ justifyContent: "space-between", gap: 8 }}>
-        <button className="btn secondary" type="button" onClick={() => setEditing(null)}>
-          Cancel
-        </button>
-        <div className="row" style={{ gap: 6 }}>
-          {editing ? (
-            <button className="btn secondary" type="button" onClick={() => confirmRemove(editing.id)} disabled={disableActions}>
-              Remove
-            </button>
-          ) : null}
-          <button className="btn" type="button" onClick={commitEdit} disabled={disableActions || !formName.trim()}>
-            Save changes
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <div className="doc-shell">
@@ -187,7 +103,7 @@ export default function DocPanel({ editableMode, onEditQuantity, onRemoveQuantit
                 key={q.id}
                 q={q}
                 onClick={() => showQuantity(q)}
-                onEdit={() => setEditing(q)}
+                onEdit={() => showQuantity(q)}
                 onRemove={() => confirmRemove(q.id)}
                 editableMode={editableMode}
                 disabled={disableActions}
@@ -197,18 +113,6 @@ export default function DocPanel({ editableMode, onEditQuantity, onRemoveQuantit
               <div style={{ fontSize: 12, opacity: 0.6 }}>No quantities found.</div>
             )}
           </div>
-
-          {editableMode && (
-            editing ? (
-              renderEditPanel()
-            ) : (
-              <div className="panel" style={{ marginTop: 10 }}>
-                <div style={{ color: "#6b7280", fontSize: 13 }}>
-                  {blockedReason || "Pick a quantity to edit or remove it from the current diagram."}
-                </div>
-              </div>
-            )
-          )}
         </>
       ) : (
         <>
@@ -228,18 +132,6 @@ export default function DocPanel({ editableMode, onEditQuantity, onRemoveQuantit
               .filter(Boolean).join("  ")}
           </div>
           <pre className="doc-docstring">{selected.doc || "No docstring available."}</pre>
-
-          {editableMode && selected.owner ? (
-            editing ? (
-              renderEditPanel()
-            ) : (
-              <div className="row" style={{ marginTop: 10, justifyContent: "flex-end" }}>
-                <button className="btn" onClick={() => setEditing({ ...selected, owner: selected.owner || "", id: selected.id })} disabled={disableActions}>
-                  Edit this quantity
-                </button>
-              </div>
-            )
-          ) : null}
         </>
       )}
     </div>

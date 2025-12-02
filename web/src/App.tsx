@@ -3,8 +3,9 @@ import axios from "axios";
 import GraphView, { type GraphExportHandle } from "./GraphView";
 import DocPanel from "./components/DocPanel";
 import OverviewGrid from "./components/OverviewGrid";
-import UnderTheHoodPanel from './components/UnderTheHoodPanel';
+import UnderTheHoodPanel from "./components/UnderTheHoodPanel";
 import AddQuantityForm from "./components/AddQuantityForm";
+import QuantityEditPanel from "./components/QuantityEditPanel";
 import type { QuantityFormData } from "./components/quantityShared";
 import CollapsibleSection from "./components/CollapsibleSection";
 import { useSelection } from "./store/selection";
@@ -634,6 +635,10 @@ export default function App() {
           </div>
         </CollapsibleSection>
 
+        <CollapsibleSection title="Under the hood" hint="Raw schema structure">
+          <UnderTheHoodPanel apiBase={apiBase} />
+        </CollapsibleSection>
+
         <CollapsibleSection title="Editable mode" hint="Prototype new quantities">
           <div className="row" style={{ marginBottom: 6 }}>
             <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -769,10 +774,8 @@ export default function App() {
             <CollapsibleSection title="Documentation" hint="Inspect the selected class" className="panel">
               <DocPanel
                 editableMode={editableMode}
-                onEditQuantity={editQuantity}
                 onRemoveQuantity={removeQuantity}
                 blockedReason={addBlockedReason}
-                actionError={quantityActionErr}
                 clearActionError={clearQuantityActionError}
               />
             </CollapsibleSection>
@@ -786,8 +789,15 @@ export default function App() {
               overflowY: "auto"
             }}
           >
-            <CollapsibleSection title="Under the hood" hint="Raw schema structure" className="panel">
-              <UnderTheHoodPanel apiBase={apiBase} />
+            <CollapsibleSection title="Edit quantity" hint="Modify or remove a selected quantity" className="panel">
+              <QuantityEditPanel
+                editableMode={editableMode}
+                blockedReason={addBlockedReason}
+                actionError={quantityActionErr}
+                clearActionError={clearQuantityActionError}
+                onEditQuantity={editQuantity}
+                onRemoveQuantity={removeQuantity}
+              />
             </CollapsibleSection>
           </div>
         </div>
