@@ -499,7 +499,7 @@ export default function App() {
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection title="API & package" hint="Connect to a backend">
+        <CollapsibleSection title="API, package & filters" hint="Connect to a backend and fine-tune the graph">
           <div className="action-stack">
             <div>
               <label className="label">API base</label>
@@ -558,71 +558,59 @@ export default function App() {
                 <div className="small">{roots.length ? `${roots.length} sections` : ""}</div>
               </div>
             </div>
-          </div>
-        </CollapsibleSection>
 
-        <CollapsibleSection title="Diagram filters" hint="Fine-tune the graph">
-          <div className="control-grid">
-            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={includeQuantities}
-                onChange={(e) => setIncludeQuantities(e.target.checked)}
-              />
-              Quantities
-            </label>
-            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={includeSubsections}
-                onChange={(e) => setIncludeSubsections(e.target.checked)}
-              />
-              Subsections
-            </label>
-            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={crossModules}
-                onChange={(e) => setCrossModules(e.target.checked)}
-              />
-              Cross-modules
-            </label>
-          </div>
+            <div className="control-grid" style={{ marginTop: 4 }}>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={includeQuantities}
+                  onChange={(e) => setIncludeQuantities(e.target.checked)}
+                />
+                Quantities
+              </label>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={includeSubsections}
+                  onChange={(e) => setIncludeSubsections(e.target.checked)}
+                />
+                Subsections
+              </label>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={crossModules}
+                  onChange={(e) => setCrossModules(e.target.checked)}
+                />
+                Cross-modules
+              </label>
+            </div>
 
-          <div style={{ marginTop: 10 }}>
-            <label className="label">Base namespace (supports comma-separated)</label>
-            <input
-              className="input"
-              value={namespace}
-              onChange={(e) => setNamespace(e.target.value)}
-              placeholder={DEFAULT_NAMESPACE}
-            />
-          </div>
+            <div className="row" style={{ marginTop: 14, justifyContent: "space-between", gap: 10 }}>
+              <button className="btn" onClick={loadGraph}>
+                Build graph
+              </button>
+              {currentGraph ? (
+                <div className="row" style={{ flex: 1, justifyContent: "flex-end" }}>
+                  <button className="btn secondary" onClick={exportJson}>
+                    Export JSON
+                  </button>
+                  <button
+                    className="btn secondary"
+                    onClick={exportPdf}
+                    disabled={!exportHandle}
+                    title={exportHandle ? "Download current diagram as PDF" : "Build a graph first"}
+                  >
+                    Export PDF
+                  </button>
+                </div>
+              ) : null}
+            </div>
 
-          <div className="row" style={{ marginTop: 14, justifyContent: "space-between", gap: 10 }}>
-            <button className="btn" onClick={loadGraph}>
-              Build graph
-            </button>
-            {currentGraph ? (
-              <div className="row" style={{ flex: 1, justifyContent: "flex-end" }}>
-                <button className="btn secondary" onClick={exportJson}>
-                  Export JSON
-                </button>
-                <button
-                  className="btn secondary"
-                  onClick={exportPdf}
-                  disabled={!exportHandle}
-                  title={exportHandle ? "Download current diagram as PDF" : "Build a graph first"}
-                >
-                  Export PDF
-                </button>
-              </div>
+            {err ? (
+              <p style={{ color: "#fca5a5", marginTop: 10, whiteSpace: "pre-wrap" }}>{err}</p>
             ) : null}
           </div>
-
-          {err ? (
-            <p style={{ color: "#fca5a5", marginTop: 10, whiteSpace: "pre-wrap" }}>{err}</p>
-          ) : null}
         </CollapsibleSection>
 
         <CollapsibleSection title="Editable mode" hint="Prototype new quantities">
