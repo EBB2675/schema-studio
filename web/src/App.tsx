@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import GraphView, { type GraphExportHandle } from "./GraphView";
 import DocPanel from "./components/DocPanel";
 import OverviewGrid from "./components/OverviewGrid";
-import UnderTheHoodPanel from './components/UnderTheHoodPanel';
+import UnderTheHoodPanel from "./components/UnderTheHoodPanel";
 import AddQuantityForm from "./components/AddQuantityForm";
+import type { QuantityFormData } from "./components/quantityShared";
 import CollapsibleSection from "./components/CollapsibleSection";
 import { useSelection } from "./store/selection";
 import { jsPDF } from "jspdf";
@@ -77,10 +78,13 @@ export default function App() {
   const [editableMode, setEditableMode] = useState<boolean>(false);
   const [addLoading, setAddLoading] = useState<boolean>(false);
   const [addErr, setAddErr] = useState<string | null>(null);
+  const [quantityActionErr, setQuantityActionErr] = useState<string | null>(null);
 
   const [exportHandle, setExportHandle] = useState<GraphExportHandle | null>(null);
 
   const { selected, setSelected } = useSelection();
+
+  const clearQuantityActionError = useCallback(() => setQuantityActionErr(null), []);
 
   // overview mode
   const [mode, setMode] = useState<"graph" | "overview">("graph");
@@ -110,6 +114,7 @@ export default function App() {
   // build single-branch graph (resets diff view)
   const loadGraph = async () => {
     setErr(null);
+    setQuantityActionErr(null);
     setLoading(true);
     setDiffData(null);
     setExportHandle(null);
@@ -146,6 +151,7 @@ export default function App() {
 
   // fetch available schema packages from develop branch
   const loadPackages = async () => {
+    setErr(null);
     try {
       const r = await api.get("/git/packages", {
         params: {
@@ -163,6 +169,8 @@ export default function App() {
     } catch (e) {
       // silent failure is fine; user can still type manually
       console.error("Failed to load packages", e);
+      // surface the error so users know why the dropdown is empty
+      setErr((e as any)?.response?.data?.detail || String(e));
     }
   };
 
@@ -170,6 +178,7 @@ export default function App() {
   const compareBranches = async () => {
     if (!baseBranch || !headBranch) return;
     setErr(null);
+    setQuantityActionErr(null);
     setDiffLoading(true);
     setGraph(null); // switch to diff mode
     setExportHandle(null);
@@ -207,7 +216,7 @@ export default function App() {
       .map((n: any) => ({
         id: n.id,
         name: n.label,
-        dtype: n.dtype ?? undefined,
+        dtype: n.dtype ?? n.data_type ?? n.type ?? undefined,
         shape: n.shape ?? undefined,
         card: n.card ?? undefined,
         doc: n.doc ?? undefined,
@@ -248,16 +257,17 @@ export default function App() {
         },
         {
           params: {
-          root,
-          include_subsections: includeSubsections,
-          allow_cross_module: crossModules,
-          base_namespace: normalizedNamespace || undefined,
-        },
-      }
-    );
+            root,
+            include_subsections: includeSubsections,
+            allow_cross_module: crossModules,
+            base_namespace: normalizedNamespace || undefined,
+          },
+        }
+      );
       const updated = r.data as ApiGraph;
       setGraph(updated);
       refreshSelectionQuantities(updated);
+      setQuantityActionErr(null);
     } catch (e: any) {
       setAddErr(e?.response?.data?.detail || String(e));
     } finally {
@@ -268,7 +278,7 @@ export default function App() {
   useEffect(() => {
     loadRoots();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pkg, apiBase]);
 
   useEffect(() => {
     loadBranches();
@@ -279,14 +289,107 @@ export default function App() {
   const selectedClassName = selected?.kind === "class" ? selected.name : null;
   const addBlockedReason =
     mode !== "graph"
-      ? "Switch to diagram view to add quantities"
+      ? "Switch to diagram view to modify quantities"
       : diffData
-        ? "Exit branch comparison to add quantities"
+        ? "Exit branch comparison to modify quantities"
         : !graph
-          ? "Build a graph first to add quantities"
+          ? "Build a graph first to modify quantities"
           : null;
 
   const currentGraph = diffData ? diffData.head?.graph ?? null : graph;
+
+  const ensureEditableReady = () => {
+    if (addBlockedReason) {
+      setQuantityActionErr(addBlockedReason);
+      return null;
+    }
+    if (!editableMode) {
+      setQuantityActionErr("Enable editable mode to edit or remove quantities.");
+      return null;
+    }
+    if (!graph) {
+      setQuantityActionErr("Build a graph first to modify quantities.");
+      return null;
+    }
+    return graph;
+  };
+
+  const editQuantity = (quantityId: string, updates: QuantityFormData) => {
+    const current = ensureEditableReady();
+    if (!current) return;
+
+    const target = current.nodes.find((n) => n.id === quantityId && n.kind === "quantity");
+    if (!target) {
+      setQuantityActionErr("Quantity not found in current graph.");
+      return;
+    }
+    if (!target.owner) {
+      setQuantityActionErr("Cannot edit a quantity without an owner.");
+      return;
+    }
+
+    const trimmedName = updates.quantityName.trim();
+    if (!trimmedName) {
+      setQuantityActionErr("Quantity name cannot be empty.");
+      return;
+    }
+
+    const newId = `${target.owner}.${trimmedName}`;
+    const conflict = current.nodes.some(
+      (n) => n.kind === "quantity" && n.owner === target.owner && n.id !== quantityId && (n.id === newId || n.label === trimmedName)
+    );
+    if (conflict) {
+      setQuantityActionErr("A quantity with that name already exists on this class.");
+      return;
+    }
+
+    const nextNodes = current.nodes.map((n) => {
+      if (n.id !== quantityId) return n;
+      return { ...n, id: newId, label: trimmedName, doc: updates.docstring || null, dtype: updates.dtype };
+    });
+
+    const nextEdges = current.edges.map((e) => {
+      if (e.source === quantityId) return { ...e, source: newId };
+      if (e.target === quantityId) return { ...e, target: newId };
+      return e;
+    });
+
+    const nextGraph = { ...current, nodes: nextNodes, edges: nextEdges };
+    setGraph(nextGraph);
+    refreshSelectionQuantities(nextGraph);
+    setQuantityActionErr(null);
+
+    if (selected?.kind === "quantity" && selected.id === quantityId) {
+      setSelected({ ...selected, id: newId, name: trimmedName, doc: updates.docstring, dtype: updates.dtype, owner: selected.owner });
+    }
+  };
+
+  const removeQuantity = (quantityId: string) => {
+    const current = ensureEditableReady();
+    if (!current) return;
+
+    const target = current.nodes.find((n) => n.id === quantityId && n.kind === "quantity");
+    if (!target) {
+      setQuantityActionErr("Quantity not found in current graph.");
+      return;
+    }
+    if (!target.owner) {
+      setQuantityActionErr("Cannot remove a quantity without an owner.");
+      return;
+    }
+
+    const nextNodes = current.nodes.filter((n) => n.id !== quantityId);
+    const nextEdges = current.edges.filter((e) => e.source !== quantityId && e.target !== quantityId);
+    const nextGraph = { ...current, nodes: nextNodes, edges: nextEdges };
+
+    setGraph(nextGraph);
+    refreshSelectionQuantities(nextGraph);
+    setQuantityActionErr(null);
+
+    if (selected?.kind === "quantity" && selected.id === quantityId) {
+      setSelected(null);
+    }
+  };
 
   const exportJson = () => {
     if (!currentGraph) return;
@@ -399,7 +502,7 @@ export default function App() {
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection title="API & package" hint="Connect to a backend">
+        <CollapsibleSection title="API, package & filters" hint="Connect to a backend and fine-tune the graph">
           <div className="action-stack">
             <div>
               <label className="label">API base</label>
@@ -412,7 +515,7 @@ export default function App() {
             </div>
 
             <div>
-              <label className="label">Package (module)</label>
+              <label className="label">Package</label>
               <input
                 className="input"
                 value={pkg}
@@ -421,23 +524,41 @@ export default function App() {
               />
             </div>
 
-            {availablePkgs.length > 0 && (
-              <div>
-                <label className="label">Choose from {packageBranch}</label>
+            <div className="row" style={{ gap: 10, alignItems: "flex-end" }}>
+              <div style={{ flex: 1 }}>
+                <label className="label">Choose from branch</label>
                 <select
                   className="select"
-                  value={availablePkgs.includes(pkg) ? pkg : ""}
-                  onChange={(e) => setPkg(e.target.value)}
+                  value={packageBranch}
+                  onChange={(e) => setPackageBranch(e.target.value)}
                 >
-                  <option value="">Custom module...</option>
-                  {availablePkgs.map((name) => (
-                    <option key={name} value={name}>
-                      {name}
+                  {[packageBranch || DEFAULT_BRANCH, ...branches.filter((b) => b !== packageBranch)].map((b) => (
+                    <option key={b} value={b}>
+                      {b}
                     </option>
                   ))}
                 </select>
               </div>
-            )}
+              <button className="btn secondary" onClick={loadPackages} style={{ whiteSpace: "nowrap" }}>
+                Refresh packages
+              </button>
+            </div>
+
+            <div>
+              <label className="label">Choose from {packageBranch || DEFAULT_BRANCH}</label>
+              <select
+                className="select"
+                value={availablePkgs.includes(pkg) ? pkg : ""}
+                onChange={(e) => setPkg(e.target.value)}
+              >
+                <option value="">Custom package...</option>
+                {availablePkgs.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             <div className="row" style={{ justifyContent: "space-between" }}>
               <div>
@@ -458,97 +579,63 @@ export default function App() {
                 <div className="small">{roots.length ? `${roots.length} sections` : ""}</div>
               </div>
             </div>
-          </div>
-        </CollapsibleSection>
 
-        <CollapsibleSection title="Diagram filters" hint="Fine-tune the graph">
-          <div className="control-grid">
-            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={includeQuantities}
-                onChange={(e) => setIncludeQuantities(e.target.checked)}
-              />
-              Quantities
-            </label>
-            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={includeSubsections}
-                onChange={(e) => setIncludeSubsections(e.target.checked)}
-              />
-              Subsections
-            </label>
-            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={crossModules}
-                onChange={(e) => setCrossModules(e.target.checked)}
-              />
-              Cross-modules
-            </label>
-          </div>
+            <div className="control-grid" style={{ marginTop: 4 }}>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={includeQuantities}
+                  onChange={(e) => setIncludeQuantities(e.target.checked)}
+                />
+                Quantities
+              </label>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={includeSubsections}
+                  onChange={(e) => setIncludeSubsections(e.target.checked)}
+                />
+                Subsections
+              </label>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={crossModules}
+                  onChange={(e) => setCrossModules(e.target.checked)}
+                />
+                Cross-modules
+              </label>
+            </div>
 
-          <div style={{ marginTop: 10 }}>
-            <label className="label">Base namespace (supports comma-separated)</label>
-            <input
-              className="input"
-              value={namespace}
-              onChange={(e) => setNamespace(e.target.value)}
-              placeholder={DEFAULT_NAMESPACE}
-            />
-          </div>
+            <div className="row" style={{ marginTop: 14, justifyContent: "space-between", gap: 10 }}>
+              <button className="btn" onClick={loadGraph}>
+                Build graph
+              </button>
+              {currentGraph ? (
+                <div className="row" style={{ flex: 1, justifyContent: "flex-end" }}>
+                  <button className="btn secondary" onClick={exportJson}>
+                    Export JSON
+                  </button>
+                  <button
+                    className="btn secondary"
+                    onClick={exportPdf}
+                    disabled={!exportHandle}
+                    title={exportHandle ? "Download current diagram as PDF" : "Build a graph first"}
+                  >
+                    Export PDF
+                  </button>
+                </div>
+              ) : null}
+            </div>
 
-          <div className="row" style={{ marginTop: 14, justifyContent: "space-between", gap: 10 }}>
-            <button className="btn" onClick={loadGraph}>
-              Build graph
-            </button>
-            {currentGraph ? (
-              <div className="row" style={{ flex: 1, justifyContent: "flex-end" }}>
-                <button className="btn secondary" onClick={exportJson}>
-                  Export JSON
-                </button>
-                <button
-                  className="btn secondary"
-                  onClick={exportPdf}
-                  disabled={!exportHandle}
-                  title={exportHandle ? "Download current diagram as PDF" : "Build a graph first"}
-                >
-                  Export PDF
-                </button>
-              </div>
+            {err ? (
+              <p style={{ color: "#fca5a5", marginTop: 10, whiteSpace: "pre-wrap" }}>{err}</p>
             ) : null}
           </div>
-
-          {err ? (
-            <p style={{ color: "#fca5a5", marginTop: 10, whiteSpace: "pre-wrap" }}>{err}</p>
-          ) : null}
         </CollapsibleSection>
 
-        <CollapsibleSection title="Editable mode" hint="Prototype new quantities">
-          <div className="row" style={{ marginBottom: 6 }}>
-            <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={editableMode}
-                onChange={(e) => {
-                  setEditableMode(e.target.checked);
-                  setAddErr(null);
-                }}
-              />
-              Editable mode
-            </label>
-            {addBlockedReason && <span className="small">{addBlockedReason}</span>}
-          </div>
-
-          <AddQuantityForm
-            enabled={editableMode && !addBlockedReason}
-            blockedReason={addBlockedReason}
-            targetClass={selectedClassName}
-            onSubmit={addCustomQuantity}
-            submitting={addLoading}
-            error={addErr}
-          />
+        <CollapsibleSection title="Under the hood" hint="Raw schema structure">
+          <UnderTheHoodPanel apiBase={apiBase} />
         </CollapsibleSection>
 
         <CollapsibleSection title="Compare branches" hint="Diff diagrams across git">
@@ -636,7 +723,7 @@ export default function App() {
           )}
         </div>
 
-        {/* Right: DocPanel (top) + Under-the-hood (bottom) */}
+        {/* Right: Documentation + quantity editing */}
         <div
           style={{
             minWidth: 0,
@@ -648,29 +735,65 @@ export default function App() {
             gap: "10px"
           }}
         >
-          {/* TOP PANEL — about 60% */}
+          {/* TOP PANEL — about half */}
           <div
             style={{
-              flex: 6,
+              flex: 5,
               minHeight: 0,
               overflowY: "auto"
             }}
           >
-            <CollapsibleSection title="Documentation" hint="Inspect the selected class" className="panel">
-              <DocPanel />
+            <CollapsibleSection title="Documentation" hint="Browse docs and edit quantities" className="panel">
+              <DocPanel
+                editableMode={editableMode}
+                onRemoveQuantity={removeQuantity}
+                onEditQuantity={editQuantity}
+                blockedReason={addBlockedReason}
+                actionError={quantityActionErr}
+                clearActionError={clearQuantityActionError}
+              />
             </CollapsibleSection>
           </div>
 
-          {/* BOTTOM PANEL — about 40% */}
+          {/* BOTTOM PANEL — editable mode controls */}
           <div
             style={{
-              flex: 4,
+              flex: 5,
               minHeight: 0,
               overflowY: "auto"
             }}
           >
-            <CollapsibleSection title="Under the hood" hint="Raw schema structure" className="panel">
-              <UnderTheHoodPanel apiBase={apiBase} />
+            <CollapsibleSection
+              title="Editable mode"
+              hint="Enable editing and add new quantities"
+              className="panel"
+            >
+              <div className="action-stack" style={{ gap: 14 }}>
+                <div className="row" style={{ alignItems: "center", gap: 10 }}>
+                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="checkbox"
+                      checked={editableMode}
+                      onChange={(e) => {
+                        setEditableMode(e.target.checked);
+                        setAddErr(null);
+                        setQuantityActionErr(null);
+                      }}
+                    />
+                    Editable mode
+                  </label>
+                  {addBlockedReason && <span className="small">{addBlockedReason}</span>}
+                </div>
+
+                <AddQuantityForm
+                  enabled={editableMode && !addBlockedReason}
+                  blockedReason={addBlockedReason}
+                  targetClass={selectedClassName}
+                  onSubmit={addCustomQuantity}
+                  submitting={addLoading}
+                  error={addErr}
+                />
+              </div>
             </CollapsibleSection>
           </div>
         </div>
