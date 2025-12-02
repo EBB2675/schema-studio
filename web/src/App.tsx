@@ -9,11 +9,192 @@ import CollapsibleSection from "./components/CollapsibleSection";
 import { useSelection } from "./store/selection";
 import { jsPDF } from "jspdf";
 
+type SectionNode = {
+  id: string;
+  kind: "section";
+  label: string;
+  doc?: string | null;
+  module?: string | null;
+  methods?: string[] | null;
+  path?: string | null;
+  line?: number | null;
+};
+
+type QuantityNode = {
+  id: string;
+  kind: "quantity";
+  label: string;
+  doc?: string | null;
+  module?: string | null;
+  dtype?: string | null;
+  shape?: string | null;
+  card?: string | null;
+  owner?: string | null;
+  path?: string | null;
+  line?: number | null;
+};
+
+type GraphNode = SectionNode | QuantityNode;
+
+type GraphEdge = {
+  source: string;
+  target: string;
+  type: "hasQuantity" | "hasSubSection";
+  card?: string | null;
+};
+
 type ApiGraph = {
   package: string;
   root: string | null;
-  nodes: any[];
-  edges: any[];
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+};
+
+type Cardinality = {
+  min: number;
+  max: number | null;
+  multiple: boolean;
+};
+
+const JSON_SCHEMA_VERSION = "https://json-schema.org/draft/2020-12/schema";
+
+const normalizeDtype = (dtype?: string | null): { type?: string; format?: string } => {
+  if (!dtype) return {};
+  const lower = dtype.toLowerCase();
+
+  if (lower.includes("int")) return { type: "integer" };
+  if (lower.includes("float") || lower.includes("double") || lower.includes("number")) return { type: "number" };
+  if (lower.includes("bool")) return { type: "boolean" };
+  if (lower.includes("datetime") || lower.includes("date") || lower.includes("time")) {
+    return { type: "string", format: "date-time" };
+  }
+
+  return { type: "string" };
+};
+
+const parseCardinality = (card?: string | null): Cardinality => {
+  if (!card) return { min: 0, max: 1, multiple: false };
+
+  const rangeMatch = card.match(/(\d+)\.\.(\*|\d+)/);
+  if (rangeMatch) {
+    const min = parseInt(rangeMatch[1], 10);
+    const max = rangeMatch[2] === "*" ? null : parseInt(rangeMatch[2], 10);
+    return { min, max, multiple: max === null || max > 1 };
+  }
+
+  const numeric = Number(card);
+  if (!Number.isNaN(numeric)) {
+    return { min: numeric, max: numeric, multiple: numeric > 1 };
+  }
+
+  return { min: 0, max: 1, multiple: false };
+};
+
+const definitionKeyFor = (section: SectionNode): string => {
+  const raw = `${section.module ? `${section.module}.` : ""}${section.label}`;
+  return raw.replace(/[^a-zA-Z0-9_]/g, "_");
+};
+
+const buildQuantitySchema = (quantity: QuantityNode, card: Cardinality) => {
+  const base: Record<string, unknown> = { ...normalizeDtype(quantity.dtype) };
+  if (quantity.doc) base.description = quantity.doc;
+  if (quantity.shape) base["x-shape"] = quantity.shape;
+  if (quantity.module) base["x-module"] = quantity.module;
+
+  if (card.multiple) {
+    const arraySchema: Record<string, unknown> = {
+      type: "array",
+      items: Object.keys(base).length > 0 ? base : {},
+    };
+    if (card.min > 0) arraySchema.minItems = card.min;
+    if (card.max !== null) arraySchema.maxItems = card.max;
+    return arraySchema;
+  }
+
+  return Object.keys(base).length > 0 ? base : {};
+};
+
+const buildJsonSchema = (graph: ApiGraph) => {
+  const sections = (graph.nodes || []).filter((n): n is SectionNode => n.kind === "section");
+  const quantities = (graph.nodes || []).filter((n): n is QuantityNode => n.kind === "quantity");
+  const sectionById = new Map(sections.map(s => [s.id, s]));
+  const quantityById = new Map(quantities.map(q => [q.id, q]));
+
+  const defs: Record<string, unknown> = {};
+  const keyBySection = new Map<string, string>();
+  sections.forEach(sec => keyBySection.set(sec.id, definitionKeyFor(sec)));
+
+  sections.forEach(section => {
+    const properties: Record<string, unknown> = {};
+    const required: string[] = [];
+
+    const qtyEdges = (graph.edges || []).filter(e => e.type === "hasQuantity" && e.source === section.id);
+    qtyEdges.forEach(edge => {
+      const qty = quantityById.get(edge.target);
+      if (!qty) return;
+      const card = parseCardinality(edge.card ?? qty.card ?? undefined);
+      properties[qty.label] = buildQuantitySchema(qty, card);
+      if (card.min >= 1) required.push(qty.label);
+    });
+
+    const subsectionEdges = (graph.edges || []).filter(e => e.type === "hasSubSection" && e.source === section.id);
+    subsectionEdges.forEach(edge => {
+      const targetSection = sectionById.get(edge.target);
+      if (!targetSection) return;
+      const targetKey = keyBySection.get(targetSection.id);
+      if (!targetKey) return;
+
+      const card = parseCardinality(edge.card ?? undefined);
+      const ref: Record<string, unknown> = { $ref: `#/$defs/${targetKey}` };
+      let schema: Record<string, unknown> = ref;
+      if (card.multiple) {
+        schema = {
+          type: "array",
+          items: ref,
+        };
+        if (card.min > 0) schema.minItems = card.min;
+        if (card.max !== null) schema.maxItems = card.max;
+      }
+
+      properties[targetSection.label] = schema;
+      if (card.min >= 1) required.push(targetSection.label);
+    });
+
+    const sectionSchema: Record<string, unknown> = {
+      type: "object",
+      properties,
+    };
+    if (required.length) sectionSchema.required = required;
+    if (section.doc) sectionSchema.description = section.doc;
+    if (section.module) sectionSchema["x-module"] = section.module;
+
+    const key = keyBySection.get(section.id);
+    if (key) defs[key] = sectionSchema;
+  });
+
+  const rootSection = graph.root
+    ? sections.find(sec => sec.label === graph.root)
+    : sections.find(sec => sec.label.toLowerCase().includes("root")) ?? sections[0];
+  const rootRef = rootSection ? keyBySection.get(rootSection.id) : null;
+
+  const title = graph.root || graph.package;
+  const description = rootSection?.doc
+    ? rootSection.doc
+    : `JSON Schema generated from ${graph.package}${graph.root ? `:${graph.root}` : ""}`;
+
+  const schema: Record<string, unknown> = {
+    $schema: JSON_SCHEMA_VERSION,
+    $id: `urn:schema-uml:${graph.package}${graph.root ? `:${graph.root}` : ""}`,
+    title,
+    description,
+    $defs: defs,
+  };
+
+  if (rootRef) {
+    schema.$ref = `#/$defs/${rootRef}`;
+  }
+
+  return schema;
 };
 
 const DEFAULT_API = "http://localhost:5179";
@@ -124,7 +305,7 @@ export default function App() {
           base_namespace: normalizedNamespace || undefined,
         },
       });
-      setGraph(r.data);
+      setGraph(r.data as ApiGraph);
     } catch (e: any) {
       setErr(e?.response?.data?.detail || String(e));
       setGraph(null);
@@ -203,17 +384,17 @@ export default function App() {
   const refreshSelectionQuantities = (nextGraph: ApiGraph) => {
     if (!selected || selected.kind !== "class") return;
     const quantities = (nextGraph.nodes || [])
-      .filter((n: any) => n.kind === "quantity" && n.owner === selected.id)
-      .map((n: any) => ({
-        id: n.id,
-        name: n.label,
-        dtype: n.dtype ?? undefined,
-        shape: n.shape ?? undefined,
-        card: n.card ?? undefined,
-        doc: n.doc ?? undefined,
-        path: n.path ?? undefined,
-        line: typeof n.line === "number" ? n.line : undefined,
-        owner: n.owner ?? selected.id
+      .filter((n): n is QuantityNode => n.kind === "quantity" && n.owner === selected.id)
+      .map(q => ({
+        id: q.id,
+        name: q.label,
+        dtype: q.dtype ?? undefined,
+        shape: q.shape ?? undefined,
+        card: q.card ?? undefined,
+        doc: q.doc ?? undefined,
+        path: q.path ?? undefined,
+        line: typeof q.line === "number" ? q.line : undefined,
+        owner: q.owner ?? selected.id
       }));
 
     setSelected({ ...selected, quantities });
@@ -286,16 +467,17 @@ export default function App() {
           ? "Build a graph first to add quantities"
           : null;
 
-  const currentGraph = diffData ? diffData.head?.graph ?? null : graph;
+  const currentGraph: ApiGraph | null = diffData ? (diffData.head?.graph as ApiGraph) ?? null : graph;
 
-  const exportJson = () => {
+  const exportJsonSchema = () => {
     if (!currentGraph) return;
-    const s =
-      "data:text/json;charset=utf-8," +
-      encodeURIComponent(JSON.stringify(currentGraph, null, 2));
+    const schema = buildJsonSchema(currentGraph);
+    const serialized = JSON.stringify(schema, null, 2);
+    const s = "data:text/json;charset=utf-8," + encodeURIComponent(serialized);
     const a = document.createElement("a");
     a.href = s;
-    a.download = `${currentGraph.package}_${currentGraph.root || "all"}.json`;
+    const base = `${currentGraph.package}_${currentGraph.root || "all"}`;
+    a.download = `${base}.schema.json`;
     a.click();
   };
 
@@ -505,8 +687,8 @@ export default function App() {
             </button>
             {currentGraph ? (
               <div className="row" style={{ flex: 1, justifyContent: "flex-end" }}>
-                <button className="btn secondary" onClick={exportJson}>
-                  Export JSON
+                <button className="btn secondary" onClick={exportJsonSchema}>
+                  Export JSON Schema
                 </button>
                 <button
                   className="btn secondary"

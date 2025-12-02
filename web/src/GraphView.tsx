@@ -11,7 +11,7 @@ type RawNode = {
   id: string;
   kind: "section" | "quantity";
   label: string;
-  module?: string;
+  module?: string | null;
   dtype?: string | null;
   shape?: string | null;
   card?: string | null;
