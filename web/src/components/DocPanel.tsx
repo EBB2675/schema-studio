@@ -56,7 +56,10 @@ export default function DocPanel({ editableMode, onEditQuantity, onRemoveQuantit
   const [formDoc, setFormDoc] = useState("");
 
   useEffect(() => {
-    setEditing(null);
+    // Preserve the edit session when switching from a class to one of its quantities.
+    if (selected?.kind !== "quantity") {
+      setEditing(null);
+    }
     clearActionError();
   }, [selected, clearActionError]);
 
