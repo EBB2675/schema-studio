@@ -5,6 +5,8 @@ import cytoscapeElk from "cytoscape-elk";
 import type { Core, ElementDefinition } from "cytoscape";
 import { useSelection, type QtyMeta, type QtySnapshot } from "./store/selection";
 
+type QtyDiffState = QtyMeta["diff"] extends { state: infer S } ? S : undefined;
+
 cytoscapeElk(cytoscape, elk as any);
 
 type RawNode = {
@@ -58,7 +60,7 @@ const cleanType = (t?: string | null) => {
 
 function umlLabel(
   name: string,
-  attrs: { name: string; dtype?: string; shape?: string | null; card?: string | null }[],
+  attrs: { name: string; dtype?: string; shape?: string | null; card?: string | null; diff?: QtyDiffState }[],
   methods: string[]
 ) {
   const MAX_A = 18;
@@ -67,7 +69,12 @@ function umlLabel(
   const shownM = methods.slice(0, MAX_M);
 
   const attrLines = shownA.map(a => {
-    const parts = [a.name];
+    const parts = [] as string[];
+    if (a.diff === "added") parts.push("+ ");
+    if (a.diff === "removed") parts.push("- ");
+    if (a.diff === "changed") parts.push("~ ");
+
+    parts.push(a.name);
     const dt = cleanType(a.dtype);
     if (dt) parts.push(`: ${dt}`);
     if (a.shape && a.shape !== "[]") parts.push(` ${a.shape}`);
@@ -123,6 +130,17 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
     return map;
   }, [diff]);
 
+  const graphNodes = useMemo(() => {
+    const base = [...nodes];
+    if (diff?.nodes?.removed?.length) {
+      diff.nodes.removed.forEach((n: any) => {
+        if (!n?.id || (n?.kind !== "section" && n?.kind !== "quantity")) return;
+        base.push(n as RawNode);
+      });
+    }
+    return base;
+  }, [nodes, diff]);
+
   // Build:
   // - sectionsMap: id -> section node
   // - attrsMap: section id -> display lines for UML
@@ -130,7 +148,10 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
   // - quantitiesByOwner: section id -> QtyMeta[]  (for DocPanel)
   const { sectionsMap, attrsMap, methodsMap, compEdges, quantitiesByOwner } = useMemo(() => {
     const sections = new Map<string, RawNode>();
-    const attrs = new Map<string, { name: string; dtype?: string; shape?: string | null; card?: string | null }[]>();
+    const attrs = new Map<
+      string,
+      { name: string; dtype?: string; shape?: string | null; card?: string | null; diff?: QtyDiffState }[]
+    >();
     const methods = new Map<string, string[]>();
     const qByOwner = new Map<string, QtyMeta[]>();
 
@@ -145,7 +166,7 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
       };
     };
 
-    for (const n of nodes) {
+    for (const n of graphNodes) {
       if (n.kind === "section") {
         sections.set(n.id, n);
         attrs.set(n.id, attrs.get(n.id) ?? []);
@@ -154,7 +175,7 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
       }
     }
 
-    for (const q of nodes) {
+    for (const q of graphNodes) {
       if (q.kind !== "quantity" || !q.owner) continue;
 
       const diffInfo = quantityDiffs.get(q.id);
@@ -165,7 +186,8 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
         name: q.label,
         dtype: q.dtype ?? q.data_type ?? q.type ?? undefined,
         shape: q.shape ?? undefined,
-        card: q.card ?? undefined
+        card: q.card ?? undefined,
+        diff: diffInfo?.state,
       });
       attrs.set(q.owner, list);
 
@@ -216,9 +238,22 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
       qByOwner.set(owner, metaList);
     }
 
-    const subs = edges.filter(e => e.type === "hasSubSection");
+    const baseEdges = [...edges];
+    if (diff?.edges?.removed?.length) {
+      diff.edges.removed.forEach((e: any) => {
+        if (!e?.source || !e?.target) return;
+        baseEdges.push({
+          source: e.source,
+          target: e.target,
+          type: (e.type as any) ?? "hasSubSection",
+          card: e.card ?? undefined
+        });
+      });
+    }
+
+    const subs = baseEdges.filter(e => e.type === "hasSubSection");
     return { sectionsMap: sections, attrsMap: attrs, methodsMap: methods, compEdges: subs, quantitiesByOwner: qByOwner };
-  }, [nodes, edges, quantityDiffs]);
+  }, [graphNodes, edges, quantityDiffs, diff]);
 
   useEffect(() => {
     if (!containerRef.current) return;
