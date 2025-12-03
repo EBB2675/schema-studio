@@ -2,13 +2,15 @@
 
 Interactive UML-style viewer for NOMAD-compatible schemas (defaults to `nomad-simulations`).
 
-
 Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 
 - Visualizes **sections** as UML cards (attributes = quantities, edges = subsections).
 - Right-hand **Doc Panel** shows the **class docstring** and a **clickable list of quantities**.
 - Right-hand **Under the hood** panel shows **normalization and helper functions** that act on the selected section.
-- **Branch diff** (base → head) highlights **added/changed/removed** nodes/edges.
+- **Branch diff** (base → head) highlights **added/changed/removed** nodes/edges, including quantity changes.
+- **Bird's-eye overview**: inspect packages/classes across branches without building a full graph.
+- **Editable mode**: add, rename, or remove quantities directly in the UI (server validates supported dtypes).
+- **Export**: download the current graph as JSON or a PDF snapshot.
 
 ---
 
@@ -27,6 +29,9 @@ Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
   - Information is derived from `nomad-simulations` via a small introspection/indexing step in the backend.
 - **Branch comparison**: Choose two Git branches and render the diff with visual highlights.
 - **Namespace filtering**: Limit traversal to a base namespace; optionally include cross-module links.
+- **Bird's-eye overview**: Switch to Overview mode to list packages/classes for any branch.
+- **Editable quantities**: Toggle Editable mode to add, rename, or remove quantities from the selected class card.
+- **Export**: Save the current graph as JSON or a PDF (PNG-backed) snapshot.
 
 ---
 
@@ -78,6 +83,8 @@ What it does:
 
 Stop both with **Ctrl+C**. Override ports via `API_PORT` / `WEB_PORT` env vars.
 
+Branch-specific render (no diff): set **Package branch** to load `/graph` for a chosen branch instead of the working tree.
+
 Sanity checks (optional, while `./dev.sh` is running):
 ```bash
 curl 'http://127.0.0.1:5179/roots?package=nomad_simulations.schema_packages.model_method'
@@ -95,27 +102,32 @@ curl 'http://127.0.0.1:5179/git/branches'
 4. **Build graph**: Render UML cards and composition edges.
 5. **Doc panel**: Click a class → see its docstring + list of quantities; click a quantity to view its docstring.
 6. **Under the hood panel**: Click a class → see which normalizers and module-level helpers are associated with that section.
-7. **Compare branches**: Choose **Base** and **Head** → **Compare** to see a visual diff.
+7. **Editable mode** (Doc panel): Toggle **Editable mode**, then add/rename/remove quantities on the selected class (supported dtypes are validated server-side).
+8. **Compare branches**: Choose **Base** and **Head** → **Compare** to see a visual diff.
+9. **Export**: Download the current graph as **JSON** or a **PDF** snapshot from the sidebar.
 
 Legend:
-- 🟩 **Added** (green border / edges)  
-- 🟨 **Changed** (amber border)  
+- 🟩 **Added** (green border / edges)
+- 🟨 **Changed** (amber border)
 - 🟥 **Removed** (shown in diff banner; removed edges dashed red)
 
 ---
 
 ## ⚙️ Backend Endpoints (summary)
 
-- `GET /roots?package=...` → `{"sections": [...]}`  
-- `GET /schema`  
-  Params: `package, root?, include_quantities?, include_subsections?, allow_cross_module?, base_namespace?`  
+- `GET /roots?package=...` → `{\"sections\": [...]}`
+- `GET /schema`
+  Params: `package, root?, include_quantities?, include_subsections?, allow_cross_module?, base_namespace?`
   Returns: `{ package, root, nodes, edges }` where:
-  - `nodes[*].kind ∈ {"section","quantity"}`
+  - `nodes[*].kind ∈ {\"section\",\"quantity\"}`
   - `nodes[*].doc` is populated for **both sections and quantities**
-- `GET /git/branches` → `{"branches":[...], "active": "...", "head": "SHA"}`  
+- `POST /graph` → build a graph from a specific branch/worktree
+- `GET /git/branches` → `{\"branches\":[...], \"active\": \"...\", \"head\": \"SHA\"}`
 - `POST /graph/diff` → `{ base:{branch,sha,graph}, head:{...}, diff:{nodes:{added,removed,changed}, edges:{added,removed}} }`
+- `POST /schema/custom-quantity` → inject a validated quantity onto a class (used by Editable mode)
+- `GET /usage` → list normalize methods / helper functions for a given section class
 
-> Quantity docstrings are embedded directly in `/schema`.  
+> Quantity docstrings are embedded directly in `/schema`.
 > The builder that does this is `extractor/graph_builder.py`.
 
 ---
@@ -126,9 +138,10 @@ Legend:
   - Serializes sections and quantities with robust doc extraction (`description`, `m_def.description`, `__doc__`).
   - Quantities are **not rendered as separate boxes** in the canvas. They are folded into the class card and listed in the Doc Panel.
 - **Frontend**
-  - `web/src/GraphView.tsx`: builds Cytoscape graph (sections + composition edges), wires selection to the store.
-  - `web/src/components/DocPanel.tsx`: shows class/quantity docs; lists quantities with dtype/shape/card.
-  - `web/src/components/UnderTheHoodPanel.tsx`: for the selected class, calls /usage on API base and renders the normalization list.
+  - `web/src/GraphView.tsx`: builds Cytoscape graph (sections + composition edges), wires selection to the store, supports diff overlays and export hook.
+  - `web/src/components/DocPanel.tsx`: shows class/quantity docs; lists quantities with dtype/shape/card; inline actions for editable mode.
+  - `web/src/components/UnderTheHoodPanel.tsx`: for the selected class, calls `/usage` on API base and renders the normalization list.
+  - `web/src/components/AddQuantityForm.tsx` and `web/src/components/QuantityEditPanel.tsx`: UI for adding/renaming/removing quantities.
   - `web/src/store/selection.ts`: Zustand store for selected node.
 - **ELK Layout**: layered, right-directed; label size is included in node dimensions.
 
@@ -160,16 +173,16 @@ These are temporary and should **not** be committed.
 
 ## 🧪 Example
 
-Package: `nomad_simulations.schema_packages.model_method`  
-Root: `ModelMethod`  
-- Toggle **Quantities** and **Subsections** as needed.  
+Package: `nomad_simulations.schema_packages.model_method`
+Root: `ModelMethod`
+- Toggle **Quantities** and **Subsections** as needed.
 - Compare `develop` → `sprint-dft-qchem` to see DFT/solvation updates reflected in UML and doc panel.
 
 ---
 
 ## 👩‍💻 Author
 
-**Dr. Esma Birsen Boydaş**  
+**Dr. Esma Birsen Boydaş**
 NOMAD Laboratory (FAIRmat), Humboldt-Universität zu Berlin
 
 > Work in progress — scope and UI may evolve.

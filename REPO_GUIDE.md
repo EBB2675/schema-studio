@@ -6,9 +6,9 @@ A structured overview of the repository for developers to navigate, understand, 
 
 ## 0) TL;DR
 
-**Purpose:** Visualize NOMAD-compatible schemas (defaults to `nomad-simulations`) as UML diagrams, inspect docstrings and normalization helpers, and compare schema changes across Git branches.
+**Purpose:** Visualize NOMAD-compatible schemas (defaults to `nomad-simulations`) as UML diagrams, inspect docstrings and normalization helpers, edit quantities inline, and compare schema changes across Git branches.
 
-**Frontend:** React + TypeScript + Cytoscape + ELK  
+**Frontend:** React + TypeScript + Cytoscape + ELK
 **Backend:** FastAPI + GitPython
 
 **Main directories:**
@@ -18,13 +18,15 @@ A structured overview of the repository for developers to navigate, understand, 
 - `api/_data/` — auto-generated bare mirror + worktrees (gitignored)
 
 **Key endpoints:**
-- `GET /roots` — list section roots for a package  
-- `GET /schema` — build a graph (single branch)  
-- `GET /overview` — bird’s-eye list of packages and top-level classes at a branch  
-- `GET /git/branches` — list local branches of the repo  
-- `GET /git/packages` — list Python modules under a base package  
-- `POST /graph/diff` — compare two branches and return a diff  
-- `GET /usage` — list normalize methods / helper functions for a given section class  
+- `GET /roots` — list section roots for a package
+- `GET /schema` — build a graph from the working tree (single branch)
+- `POST /graph` — build a graph from a specific branch/worktree (single branch)
+- `POST /graph/diff` — compare two branches and return a diff
+- `POST /schema/custom-quantity` — inject a validated quantity onto a class (used by editable mode)
+- `GET /overview` — bird’s-eye list of packages and top-level classes at a branch
+- `GET /git/branches` — list local branches of the repo
+- `GET /git/packages` — list Python modules under a base package
+- `GET /usage` — list normalize methods / helper functions for a given section class
 
 **Environment variables (one of):**
 ~~~bash
@@ -41,9 +43,12 @@ export SCHEMA_UML_PACKAGE=my_schema_root.module
 
 **UX highlights:**
 - UML cards show **sections**; **quantities** appear as attributes inside the card (not separate nodes).
-- Right **Doc Panel** shows the **class docstring** and a **clickable list of quantities**; clicking a quantity shows its docstring.  
-- Right **Under-the-hood Panel** shows **normalization methods and helper functions** that act on the selected section (based on `/usage`).  
-- Branch diff highlights: 🟩 Added, 🟨 Changed, 🟥 Removed (edges dashed red).
+- Right **Doc Panel** shows the **class docstring** and a **clickable list of quantities**; clicking a quantity shows its docstring.
+- Right **Under-the-hood Panel** shows **normalization methods and helper functions** that act on the selected section (based on `/usage`).
+- **Editable mode**: add, rename, or remove quantities on the selected class; dtype is validated against a supported allowlist.
+- **Bird’s-eye overview** renders packages/classes for a branch without building the full graph.
+- **Exports**: download the current graph JSON or a PDF snapshot.
+- Branch diff highlights: 🟩 Added, 🟨 Changed, 🟥 Removed (edges dashed red; quantity deltas are included).
 
 ---
 
@@ -52,8 +57,8 @@ export SCHEMA_UML_PACKAGE=my_schema_root.module
 ~~~text
 schema-uml/
 ├─ api/                         # FastAPI backend
-│  ├─ main.py                   # App entry, CORS, /roots, /schema, /overview, /usage
-│  ├─ routes_git.py             # /git/branches, /git/packages and /graph/diff
+│  ├─ main.py                   # App entry, CORS, /roots, /schema, /overview, /usage, /schema/custom-quantity
+│  ├─ routes_git.py             # /git/branches, /git/packages, /graph, /graph/diff
 │  ├─ graph_runner.py           # Runs extractor in a worktree subprocess
 │  ├─ git_utils.py              # Bare mirror & worktree management
 │  ├─ diff.py                   # Graph comparison logic
@@ -159,9 +164,10 @@ Example (shortened):
 
 **Frontend rendering policy**
 
-- Added sections → green border (`.diff-added`)  
-- Changed sections → amber border (`.diff-changed`)  
+- Added sections → green border (`.diff-added`)
+- Changed sections → amber border (`.diff-changed`)
 - Removed sections/edges → shown in the diff banner/summary (removed edges dashed red)
+- Quantity changes are represented as `kind="quantity"` entries within the same `diff.nodes` structure; `nodes.changed` may carry `before`/`after` payloads for quantity metadata.
 
 ### 2.3 Usage JSON (`GET /usage` → used by Under-the-hood panel)
 
@@ -186,8 +192,8 @@ Example (shortened):
 
 **Notes**
 
-- Request: `GET /usage?section_id=<fully-qualified-section-class-name>`  
-  Example: `section_id=nomad_simulations.schema_packages.model_method.DFT`  
+- Request: `GET /usage?section_id=<fully-qualified-section-class-name>`
+  Example: `section_id=nomad_simulations.schema_packages.model_method.DFT`
 - Response elements:
   - `kind`: `"normalize_method"` or `"normalize_function"` (later also `"utility_function"`).  
   - `qualname`: fully-qualified Python name of the callable.  
@@ -197,49 +203,74 @@ Example (shortened):
 
 The frontend shows these entries as a list under **Under the hood** for the currently selected section.
 
+### 2.4 Custom quantity request (`POST /schema/custom-quantity`)
+
+~~~json
+{
+  "package": "nomad_simulations.schema_packages.model_method",
+  "class_name": "ModelMethod",
+  "quantity_name": "my_quantity",
+  "dtype": "float",
+  "docstring": "Optional docstring here"
+}
+~~~
+
+**Notes**
+
+- Supported dtypes are validated server-side (`SUPPORTED_CUSTOM_DTYPES` in `api/main.py`).
+- The endpoint rebuilds the graph once, injects the quantity, and returns the updated graph payload used by editable mode in the UI.
+
 ---
 
 ## 3) Backend Flow
 
-1. **`GET /git/branches`**  
-   - Opens repo from `$NOMAD_SIM_REPO` or `$GIT_REPO_DIR` (falls back to current working dir, searching parents).  
+1. **`GET /git/branches`**
+   - Opens repo from `$NOMAD_SIM_REPO` or `$GIT_REPO_DIR` (falls back to current working dir, searching parents).
    - Returns local branch names plus active and HEAD SHA.
 
-2. **`GET /git/packages`**  
-   - Inspects the repo at a given branch.  
-   - Returns importable Python packages under a given base (e.g. `nomad_simulations.schema_packages`).  
+2. **`GET /git/packages`**
+   - Inspects the repo at a given branch.
+   - Returns importable Python packages under a given base (e.g. `nomad_simulations.schema_packages`).
    - Used for the “Choose from develop” dropdown.
 
-3. **`GET /overview`**  
-   - Exports the subtree for a given branch and base package (handles `src/` layout).  
-   - Walks packages under the base and collects top-level class names.  
+3. **`GET /overview`**
+   - Exports the subtree for a given branch and base package (handles `src/` layout).
+   - Walks packages under the base and collects top-level class names.
    - Frontend uses this to render a bird’s-eye `OverviewGrid` of packages vs. classes.
 
-4. **`POST /graph/diff`**  
-   - Creates two worktrees for `{base, head}` (under `api/_data/…`).  
-   - Runs the extractor in each worktree via `graph_runner.py`.  
-   - Computes node/edge deltas in `diff.py`.  
+4. **`POST /graph`**
+   - Materializes a worktree for a requested branch and builds the graph there (single-branch render without diff).
+   - Used when the UI sets **Package branch** to a specific branch.
+
+5. **`POST /graph/diff`**
+   - Creates two worktrees for `{base, head}` (under `api/_data/…`).
+   - Runs the extractor in each worktree via `graph_runner.py`.
+   - Computes node/edge deltas in `diff.py`.
    - Returns `{ base, head, diff }`.
 
-5. **`GET /schema`**  
-   - Runs extractor once (no diff) for interactive browsing.  
+6. **`GET /schema`**
+   - Runs extractor once from the working tree (no diff) for interactive browsing.
    - Options control whether quantities and subsections are included and whether cross-module traversal is allowed.
 
-6. **`GET /usage`**  
-   - Resolves a section class from its fully-qualified name.  
+7. **`POST /schema/custom-quantity`**
+   - Rebuilds the graph for the active package/root, validates the requested dtype, and injects a synthetic quantity node/edge.
+   - Returns the updated graph used by editable mode.
+
+8. **`GET /usage`**
+   - Resolves a section class from its fully-qualified name.
    - Uses `extractor/usage_index.py` to:
-     - Detect a `normalize(...)` method on the class itself.  
-     - Detect module-level helper functions whose names look like normalizers for this class (e.g. `normalize_dft`, `normalize_xc_component`).  
+     - Detect a `normalize(...)` method on the class itself.
+     - Detect module-level helper functions whose names look like normalizers for this class (e.g. `normalize_dft`, `normalize_xc_component`).
    - Returns a small JSON list of `UsageEntry` objects for the selected section.
 
 **Key files**
 
-- `api/main.py` — FastAPI app; `/health`, `/roots`, `/schema`, `/overview`, `/usage`, mounts Git router.  
-- `api/routes_git.py` — `/git/branches`, `/git/packages`, `/graph/diff`.  
-- `api/git_utils.py` — bare clone + worktree management.  
-- `api/graph_runner.py` — subprocess wrapper to call extractor within a worktree.  
-- `api/diff.py` — graph indexing and set diffs.  
-- `extractor/graph_builder.py` — embeds docstrings and source info for sections and quantities.  
+- `api/main.py` — FastAPI app; `/health`, `/roots`, `/schema`, `/schema/custom-quantity`, `/overview`, `/usage`, mounts Git router.
+- `api/routes_git.py` — `/git/branches`, `/git/packages`, `/graph`, `/graph/diff`.
+- `api/git_utils.py` — bare clone + worktree management.
+- `api/graph_runner.py` — subprocess wrapper to call extractor within a worktree.
+- `api/diff.py` — graph indexing and set diffs.
+- `extractor/graph_builder.py` — embeds docstrings and source info for sections and quantities.
 - `extractor/usage_index.py` — introspects normalize methods and helpers; exposes `get_usage_for_section`.
 
 ---
@@ -247,31 +278,35 @@ The frontend shows these entries as a list under **Under the hood** for the curr
 ## 4) Frontend Flow
 
 - **`App.tsx`**
-  - Sidebar controls: API base, package, roots, toggles (quantities / subsections / UML), cross-module, base namespace.  
-  - **Build graph:** calls `/schema` with current filters and renders it in `GraphView`.  
-  - **Compare branches:** calls `/graph/diff` and renders the head graph with diff highlights and a banner.  
-  - **Bird’s-eye view:** calls `/overview` and renders an `OverviewGrid` of packages/classes.  
+  - Sidebar controls: API base, package, package branch (uses `/graph`), roots, toggles (quantities / subsections / UML), cross-module, base namespace, theme.
+  - **Build graph:** calls `/schema` (working tree) or `/graph` (specific branch) with current filters and renders it in `GraphView`.
+  - **Compare branches:** calls `/graph/diff` and renders the head graph with diff highlights and a banner.
+  - **Bird’s-eye view:** calls `/overview` and renders an `OverviewGrid` of packages/classes.
+  - **Exports:** JSON download and PDF snapshot (via `GraphView` export handle).
   - Right column:
-    - Top: `DocPanel` (schema docs + quantities).  
+    - Top: `DocPanel` (schema docs + quantities, includes inline edit/remove hooks).
     - Bottom: `UnderTheHoodPanel` (normalize/helpers list; needs `apiBase`).
+  - **Editable mode:** toggles whether quantity add/edit/remove actions are enabled; uses `/schema/custom-quantity` for adds and client-side updates for rename/delete.
 
 - **`GraphView.tsx`**
-  - Renders sections as UML cards using Cytoscape + ELK.  
-  - Folds quantity metadata into each section’s card label (attributes) and into a `quantitiesByOwner` map for the Doc Panel.  
+  - Renders sections as UML cards using Cytoscape + ELK.
+  - Folds quantity metadata into each section’s card label (attributes) and into a `quantitiesByOwner` map for the Doc Panel.
   - On node tap:
     - Builds a `Selected` object with:
-      - `id = fully-qualified section name`.  
-      - `kind = "class"`.  
-      - `name`, `doc`, `path`, `line`.  
-      - `quantities` for that section.  
-    - Calls `useSelection.getState().setSelected(...)`.  
+      - `id = fully-qualified section name`.
+      - `kind = "class"`.
+      - `name`, `doc`, `path`, `line`.
+      - `quantities` for that section.
+    - Calls `useSelection.getState().setSelected(...)`.
   - Styles: composition edges (diamonds), diff classes (colored outlines), removed edges dashed red.
+  - Exposes `toPng()` via `GraphExportHandle` for PDF export in the sidebar.
 
 - **`components/DocPanel.tsx`**
-  - Reads `selected` from `useSelection`.  
+  - Reads `selected` from `useSelection`.
   - For a selected class:
-    - Shows class name + docstring.  
-    - Lists quantities (name + dtype/shape/card); clicking a quantity displays its docstring.  
+    - Shows class name + docstring.
+    - Lists quantities (name + dtype/shape/card); clicking a quantity displays its docstring.
+    - Provides inline edit/remove controls when editable mode is on.
   - For a selected quantity:
     - Shows that quantity’s docstring and type info.
 
@@ -286,12 +321,15 @@ The frontend shows these entries as a list under **Under the hood** for the curr
     - Shows `short_name`, module, and a short doc summary for each entry.  
   - If nothing or a quantity is selected: shows a placeholder.
 
+- **`components/AddQuantityForm.tsx` & `components/QuantityEditPanel.tsx`**
+  - Form helpers for editable mode (add/rename/remove quantities with validation messaging).
+
 - **`store/selection.ts`**
   - Zustand store with:
-    - `selected: Selected | null`  
-    - `setSelected(s: Selected | null)`  
+    - `selected: Selected | null`
+    - `setSelected(s: Selected | null)`
   - `Selected` holds:
-    - `id`, `kind`, `name`, `doc`, `path`, `line`  
+    - `id`, `kind`, `name`, `doc`, `path`, `line`
     - optional `quantities` (for class nodes).
 
 **Performance tips**
