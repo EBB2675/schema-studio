@@ -61,8 +61,17 @@ export default function OverviewGrid({
   if (!data) return <div className="p-2 text-sm">No data.</div>;
 
   return (
-    <div className="flex flex-col gap-2 h-full">
-      <div className="flex items-center gap-8">
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        height: "100%",
+        minHeight: 0,
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <input
           className="border rounded px-2 py-1"
           placeholder="Filter package or class…"
@@ -81,10 +90,11 @@ export default function OverviewGrid({
           gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
           gap: 12,
           alignContent: "start",
-          overflow: "auto",
+          overflowY: "auto",
           paddingBottom: 8,
+          flex: 1,
+          minHeight: 0,
         }}
-        className="flex-1"
       >
         {items.map((it) => (
           <div

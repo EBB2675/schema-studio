@@ -722,11 +722,11 @@ export default function App() {
             display: "flex",
             flexDirection: "column",
             height: "100vh",
-            overflow: "hidden",
+            overflow: mode === "overview" ? "auto" : "hidden",
           }}
         >
           {mode === "overview" ? (
-            <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+            <div style={{ flex: 1, minHeight: 0 }}>
               <OverviewGrid
                 apiBase={apiBase}
                 branch={overviewBranch}
