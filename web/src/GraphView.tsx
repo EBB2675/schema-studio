@@ -70,9 +70,9 @@ function umlLabel(
 
   const attrLines = shownA.map(a => {
     const parts = [] as string[];
-    if (a.diff === "added") parts.push("+ ");
-    if (a.diff === "removed") parts.push("- ");
-    if (a.diff === "changed") parts.push("~ ");
+    if (a.diff === "added") parts.push("🟢 ");
+    if (a.diff === "removed") parts.push("🔴 ");
+    if (a.diff === "changed") parts.push("🟠 ");
 
     parts.push(a.name);
     const dt = cleanType(a.dtype);
