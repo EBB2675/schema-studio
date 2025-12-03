@@ -27,6 +27,7 @@ Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
   - Information is derived from `nomad-simulations` via a small introspection/indexing step in the backend.
 - **Branch comparison**: Choose two Git branches and render the diff with visual highlights.
 - **Namespace filtering**: Limit traversal to a base namespace; optionally include cross-module links.
+- **RDFS I/O**: Import RDFS schema files into the editor and export edited diagrams back to RDFS.
 
 ---
 

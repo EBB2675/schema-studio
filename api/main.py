@@ -1,7 +1,7 @@
 from typing import List, Optional
 
 from fastapi import FastAPI, Query, HTTPException
-from fastapi.responses import ORJSONResponse
+from fastapi.responses import ORJSONResponse, PlainTextResponse
 from extractor.graph_builder import build_graph, list_sections
 from fastapi.middleware.cors import CORSMiddleware
 import os, subprocess, tempfile, shutil, ast
@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from .routes_git import router as git_router
 from extractor.usage_index import UsageEntry, get_usage_for_section
 from .settings import SCHEMA_REPO, DEFAULT_BASE_PACKAGE, repo_for_base_namespace
+from .rdfs_io import graph_to_rdfs, rdfs_to_graph
 
 # Keep this list in sync with `web/src/components/quantityShared.ts`.
 SUPPORTED_CUSTOM_DTYPES = {
@@ -193,6 +194,43 @@ class CustomQuantityRequest(BaseModel):
     quantity_name: str
     dtype: str
     docstring: str | None = None
+
+
+class RdfsExportRequest(BaseModel):
+    graph: dict
+    base_uri: str | None = None
+    format: str = "turtle"
+
+
+class RdfsImportRequest(BaseModel):
+    data: str
+    format: str = "turtle"
+    package: str | None = None
+    base_uri: str | None = None
+
+
+@app.post("/schema/rdfs/export")
+def export_rdfs(req: RdfsExportRequest):
+    """Serialize the current graph payload to an RDFS document."""
+    try:
+        rdf_text = graph_to_rdfs(req.graph, base_uri=req.base_uri, rdf_format=req.format or "turtle")
+        return PlainTextResponse(rdf_text, media_type="text/plain")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
+
+
+@app.post("/schema/rdfs/import")
+def import_rdfs(req: RdfsImportRequest):
+    """Read an RDFS document and convert it to the graph payload format used in the UI."""
+    try:
+        return rdfs_to_graph(
+            req.data,
+            rdf_format=req.format or "turtle",
+            package_hint=req.package,
+            base_uri=req.base_uri,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
 
 
 def _attach_custom_quantity(graph: dict, req: CustomQuantityRequest) -> dict:

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import axios from "axios";
 import GraphView, { type GraphExportHandle } from "./GraphView";
 import DocPanel from "./components/DocPanel";
@@ -81,6 +81,8 @@ export default function App() {
   const [quantityActionErr, setQuantityActionErr] = useState<string | null>(null);
 
   const [exportHandle, setExportHandle] = useState<GraphExportHandle | null>(null);
+  const [rdfsWorking, setRdfsWorking] = useState<boolean>(false);
+  const rdfsInputRef = useRef<HTMLInputElement | null>(null);
 
   const { selected, setSelected } = useSelection();
 
@@ -391,6 +393,78 @@ export default function App() {
     }
   };
 
+  const inferRdfsFormat = (filename: string) => {
+    const lower = filename.toLowerCase();
+    if (lower.endsWith(".rdf") || lower.endsWith(".rdfs") || lower.endsWith(".owl")) return "xml";
+    if (lower.endsWith(".ttl") || lower.endsWith(".turtle")) return "turtle";
+    return "turtle";
+  };
+
+  const exportRdfs = async () => {
+    if (!currentGraph) return;
+
+    setErr(null);
+    setRdfsWorking(true);
+    const baseUri =
+      (currentGraph as any).base_uri || `https://schema-uml.nomad-lab.eu/${currentGraph.package || "schema"}#`;
+
+    try {
+      const r = await api.post(
+        "/schema/rdfs/export",
+        { graph: currentGraph, base_uri: baseUri, format: "turtle" },
+        { responseType: "text" }
+      );
+
+      const blob = new Blob([r.data], { type: "text/turtle" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${currentGraph.package}_${currentGraph.root || "all"}.ttl`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setErr(e?.response?.data?.detail || String(e));
+    } finally {
+      setRdfsWorking(false);
+    }
+  };
+
+  const importRdfsFromFile = async (file: File) => {
+    setErr(null);
+    setRdfsWorking(true);
+    try {
+      const text = await file.text();
+      const r = await api.post(
+        "/schema/rdfs/import",
+        { data: text, format: inferRdfsFormat(file.name), package: pkg || undefined, base_uri: undefined },
+        { responseType: "json" }
+      );
+
+      setGraph(r.data);
+      setDiffData(null);
+      setMode("graph");
+      setSelected(null);
+      setQuantityActionErr(null);
+      setAddErr(null);
+      if (r.data?.package) setPkg(r.data.package);
+    } catch (e: any) {
+      setErr(e?.response?.data?.detail || String(e));
+    } finally {
+      setRdfsWorking(false);
+    }
+  };
+
+  const onRdfsFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      await importRdfsFromFile(file);
+    }
+    // allow re-uploading the same file
+    if (rdfsInputRef.current) {
+      rdfsInputRef.current.value = "";
+    }
+  };
+
   const exportJson = () => {
     if (!currentGraph) return;
     const s =
@@ -607,12 +681,12 @@ export default function App() {
               </label>
             </div>
 
-            <div className="row" style={{ marginTop: 14, justifyContent: "space-between", gap: 10 }}>
+            <div className="row" style={{ marginTop: 14, justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
               <button className="btn" onClick={loadGraph}>
                 Build graph
               </button>
               {currentGraph ? (
-                <div className="row" style={{ flex: 1, justifyContent: "flex-end" }}>
+                <div className="row" style={{ flex: 1, justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
                   <button className="btn secondary" onClick={exportJson}>
                     Export JSON
                   </button>
@@ -624,8 +698,28 @@ export default function App() {
                   >
                     Export PDF
                   </button>
+                  <button className="btn secondary" onClick={exportRdfs} disabled={rdfsWorking}>
+                    {rdfsWorking ? "Exporting…" : "Export RDFS"}
+                  </button>
                 </div>
               ) : null}
+            </div>
+            <div className="row" style={{ marginTop: 8, justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+              <input
+                ref={rdfsInputRef}
+                type="file"
+                accept=".ttl,.rdf,.rdfs,.owl,text/turtle,application/rdf+xml"
+                style={{ display: "none" }}
+                onChange={onRdfsFileChange}
+              />
+              <button
+                className="btn secondary"
+                type="button"
+                onClick={() => rdfsInputRef.current?.click()}
+                disabled={rdfsWorking}
+              >
+                {rdfsWorking ? "Working…" : "Import RDFS"}
+              </button>
             </div>
 
             {err ? (
