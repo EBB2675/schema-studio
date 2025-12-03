@@ -6,6 +6,17 @@ def index_graph(graph: Dict[str, Any]) -> Tuple[Dict[str, Dict], Set[Tuple[str,s
     edges = set((e["source"], e["target"], e.get("type","")) for e in graph.get("edges", []))
     return nodes, edges
 
+def _node_signature(node: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a reduced view of a node that captures meaningful diff fields."""
+
+    base_keys = ["label", "module", "kind"]
+    quantity_keys = ["dtype", "data_type", "type", "shape", "card", "owner", "doc"]
+    section_keys = ["doc", "methods"]
+
+    keys = base_keys + (quantity_keys if node.get("kind") == "quantity" else section_keys)
+    return {k: node.get(k) for k in keys}
+
+
 def diff_graphs(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
     an, ae = index_graph(a)
     bn, be = index_graph(b)
@@ -16,9 +27,8 @@ def diff_graphs(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
     common = set(an) & set(bn)
     changed_nodes = []
     for k in common:
-        # Compare minimal label fields (tweak as you like)
-        av = {x: an[k].get(x) for x in ("label", "module", "kind")}
-        bv = {x: bn[k].get(x) for x in ("label", "module", "kind")}
+        av = _node_signature(an[k])
+        bv = _node_signature(bn[k])
         if av != bv:
             changed_nodes.append({"id": k, "before": an[k], "after": bn[k]})
 

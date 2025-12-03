@@ -1,5 +1,13 @@
 import { create } from 'zustand';
 
+export type QtySnapshot = {
+  name?: string;
+  dtype?: string;
+  shape?: string | null;
+  card?: string | null;
+  doc?: string | null;
+};
+
 export type QtyMeta = {
   id: string;
   name: string;
@@ -10,6 +18,7 @@ export type QtyMeta = {
   path?: string;
   line?: number;
   owner: string;
+  diff?: { state: 'added' | 'removed' | 'changed'; before?: QtySnapshot; after?: QtySnapshot };
 };
 
 export type Selected = null | {
@@ -25,6 +34,7 @@ export type Selected = null | {
   card?: string | null;
   owner?: string;
   fqid?: string;
+  diff?: QtyMeta['diff'];
 };
 
 type SelectionState = {
