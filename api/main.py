@@ -298,7 +298,7 @@ def overview(
         if not base_packages:
             raise HTTPException(status_code=400, detail="Provide at least one base package")
 
-        packages: dict[str, set[str]] = {}
+        modules: dict[str, set[str]] = {}
 
         for base_pkg in base_packages:
             repo = _repo_root(base_pkg)
@@ -330,18 +330,25 @@ def overview(
                     tail = str(rel_from_resolved).replace("/", ".")
                     package_name = base_pkg if tail in ("", ".") else f"{base_pkg}.{tail}"
 
-                    cls_names: set[str] = set()
                     for f in filenames:
-                        if f.endswith(".py"):
-                            cls_names.update(_collect_classes_from_file(pkg_dir / f))
+                        if not f.endswith(".py"):
+                            continue
 
-                    if package_name not in packages:
-                        packages[package_name] = set()
-                    packages[package_name].update(cls_names)
+                        module_name = package_name
+                        if f != "__init__.py":
+                            module_name = f"{package_name}.{Path(f).stem}"
+
+                        cls_names = _collect_classes_from_file(pkg_dir / f)
+                        if not cls_names:
+                            continue
+
+                        if module_name not in modules:
+                            modules[module_name] = set()
+                        modules[module_name].update(cls_names)
 
         items = [
-            PackageClasses(package=pkg, classes=sorted(classes))
-            for pkg, classes in sorted(packages.items())
+            PackageClasses(package=module, classes=sorted(classes))
+            for module, classes in sorted(modules.items())
         ]
 
         return OverviewOut(branch=branch, base=",".join(base_packages), items=items)
