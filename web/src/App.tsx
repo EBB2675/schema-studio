@@ -112,27 +112,50 @@ export default function App() {
   };
 
   // build single-branch graph (resets diff view)
-  const loadGraph = async (overrides?: { pkg?: string; root?: string; namespace?: string }) => {
+  const loadGraph = async (
+    overrides?: { pkg?: string; root?: string; namespace?: string; branch?: string }
+  ) => {
     const pkgToUse = overrides?.pkg ?? pkg;
     const rootToUse = overrides?.root ?? root;
     const namespaceToUse = overrides?.namespace ?? normalizedNamespace;
+    const branchToUse = overrides?.branch ?? "";
     setErr(null);
     setQuantityActionErr(null);
     setLoading(true);
     setDiffData(null);
     setExportHandle(null);
     try {
-      const r = await api.get("/schema", {
-        params: {
-          package: pkgToUse,
-          root: rootToUse,
-          include_quantities: includeQuantities,
-          include_subsections: includeSubsections,
-          allow_cross_module: crossModules,
-          base_namespace: namespaceToUse || undefined,
-        },
-      });
-      setGraph(r.data);
+      if (branchToUse) {
+        const r = await api.post(
+          "/graph",
+          {
+            branch: branchToUse,
+            package: pkgToUse,
+          },
+          {
+            params: {
+              root: rootToUse,
+              include_quantities: includeQuantities,
+              include_subsections: includeSubsections,
+              allow_cross_module: crossModules,
+              base_namespace: namespaceToUse || undefined,
+            },
+          }
+        );
+        setGraph(r.data?.graph ?? null);
+      } else {
+        const r = await api.get("/schema", {
+          params: {
+            package: pkgToUse,
+            root: rootToUse,
+            include_quantities: includeQuantities,
+            include_subsections: includeSubsections,
+            allow_cross_module: crossModules,
+            base_namespace: namespaceToUse || undefined,
+          },
+        });
+        setGraph(r.data);
+      }
     } catch (e: any) {
       setErr(e?.response?.data?.detail || String(e));
       setGraph(null);
@@ -305,8 +328,14 @@ export default function App() {
     setMode("graph");
     setPkg(pkgName);
     setRoot(className);
+    setPackageBranch((prev) => prev || overviewBranch);
     setRoots((prev) => (prev.includes(className) ? prev : [className, ...prev]));
-    loadGraph({ pkg: pkgName, root: className, namespace: normalizedNamespace });
+    loadGraph({
+      pkg: pkgName,
+      root: className,
+      namespace: normalizedNamespace,
+      branch: overviewBranch,
+    });
   };
 
   const ensureEditableReady = () => {
