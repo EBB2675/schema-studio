@@ -158,6 +158,9 @@ Legend:
 - **Vite overlay / missing deps**
   - Install: `npm i zustand cytoscape cytoscape-elk elkjs` (and `react-markdown` if you render markdown docs).
   - Clear cache: `rm -rf web/node_modules web/node_modules/.vite && npm i`.
+- **Pydantic import error (`model_validator`)**
+  - The backend relies on **Pydantic v2** (`pydantic>=2,<3`).
+  - If you see `ImportError: cannot import name 'model_validator'`, an older global install may be shadowing your environment; reinstall requirements inside a clean virtualenv/conda env to pick up v2.
 
 ---
 
