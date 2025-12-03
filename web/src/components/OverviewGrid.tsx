@@ -11,10 +11,12 @@ export default function OverviewGrid({
   apiBase,
   branch,
   base = DEFAULT_OVERVIEW_BASE,
+  onClassSelect,
 }: {
   apiBase: string;
   branch: string;
   base?: string;
+  onClassSelect?: (pkg: string, className: string) => void;
 }) {
   const [data, setData] = useState<OverviewResp | null>(null);
   const [q, setQ] = useState("");
@@ -59,8 +61,17 @@ export default function OverviewGrid({
   if (!data) return <div className="p-2 text-sm">No data.</div>;
 
   return (
-    <div className="flex flex-col gap-2 h-full">
-      <div className="flex items-center gap-8">
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        height: "100%",
+        minHeight: 0,
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <input
           className="border rounded px-2 py-1"
           placeholder="Filter package or class…"
@@ -79,10 +90,11 @@ export default function OverviewGrid({
           gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
           gap: 12,
           alignContent: "start",
-          overflow: "auto",
+          overflowY: "auto",
           paddingBottom: 8,
+          flex: 1,
+          minHeight: 0,
         }}
-        className="flex-1"
       >
         {items.map((it) => (
           <div
@@ -128,19 +140,23 @@ export default function OverviewGrid({
               }}
             >
               {it.classes.map((c) => (
-                <span
+                <button
                   key={`${it.package}.${c}`}
+                  type="button"
+                  onClick={() => onClassSelect?.(it.package, c)}
                   style={{
                     fontSize: 11,
                     border: "1px solid #e5e7eb",
                     borderRadius: 9999,
-                    padding: "2px 8px",
-                    background: "#f9fafb",
+                    padding: "4px 10px",
+                    background: onClassSelect ? "#eef2ff" : "#f9fafb",
+                    cursor: onClassSelect ? "pointer" : "default",
+                    color: "#1f2937",
                   }}
                   title={c}
                 >
                   {c}
-                </span>
+                </button>
               ))}
             </div>
           </div>

@@ -12,7 +12,7 @@ type Props = {
 
 export default function AddQuantityForm({ enabled, targetClass, onSubmit, submitting, error, blockedReason }: Props) {
   const [quantityName, setQuantityName] = useState("");
-  const [dtype, setDtype] = useState(SUPPORTED_DTYPES[0]);
+  const [dtype, setDtype] = useState<string>(SUPPORTED_DTYPES[0]);
   const [docstring, setDocstring] = useState("");
 
   const disabledReason = useMemo(() => {

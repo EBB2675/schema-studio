@@ -173,12 +173,28 @@ def api_packages(
 
 
 @router.post("/graph")
-def api_graph(req: GraphRequest, base_namespace: str | None = Query(None)):
+def api_graph(
+    req: GraphRequest,
+    base_namespace: str | None = Query(None),
+    root: str | None = Query(None),
+    include_quantities: bool = Query(True),
+    include_subsections: bool = Query(True),
+    allow_cross_module: bool = Query(True),
+):
     pkg = req.package or DEFAULT_PACKAGE
     try:
         repo_src = _primary_repo(pkg, base_namespace)
         wt, sha = materialize_worktree(req.branch, repo_src)
-        graph = build_graph_in_subprocess(wt, pkg, req.extractor, base_namespace=base_namespace)
+        graph = build_graph_in_subprocess(
+            wt,
+            pkg,
+            req.extractor,
+            base_namespace=base_namespace,
+            root=root,
+            include_quantities=include_quantities,
+            include_subsections=include_subsections,
+            allow_cross_module=allow_cross_module,
+        )
         return {"branch": req.branch, "sha": sha, "graph": graph}
     except Exception as e:
         raise HTTPException(500, str(e))

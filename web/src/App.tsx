@@ -21,7 +21,7 @@ const DEFAULT_API = "http://localhost:5179";
 const DEFAULT_PACKAGE = import.meta.env.VITE_DEFAULT_PACKAGE ?? "nomad_simulations.schema_packages.model_method";
 const DEFAULT_NAMESPACE =
   import.meta.env.VITE_DEFAULT_NAMESPACE ??
-  "nomad_simulations.schema_packages,nomad_measurements";
+  "nomad_simulations.schema_packages";
 const DEFAULT_ROOT = import.meta.env.VITE_DEFAULT_ROOT ?? "ModelMethod";
 const DEFAULT_BRANCH = import.meta.env.VITE_DEFAULT_BRANCH ?? "develop";
 const WORKSPACE_PRESETS = [
@@ -42,7 +42,7 @@ const WORKSPACE_PRESETS = [
 ];
 
 export default function App() {
-  const [apiBase, setApiBase] = useState<string>(DEFAULT_API);
+  const apiBase = DEFAULT_API;
   const [pkg, setPkg] = useState<string>(DEFAULT_PACKAGE);
   const [availablePkgs, setAvailablePkgs] = useState<string[]>([]);
   const [roots, setRoots] = useState<string[]>([]);
@@ -91,7 +91,7 @@ export default function App() {
   const [overviewBranch, setOverviewBranch] = useState<string>(DEFAULT_BRANCH);
   const [packageBranch, setPackageBranch] = useState<string>(DEFAULT_BRANCH);
 
-  const api = useMemo(() => axios.create({ baseURL: apiBase }), [apiBase]);
+  const api = useMemo(() => axios.create({ baseURL: apiBase }), []);
   const normalizedNamespace = useMemo(() => {
     const parts = namespace.split(",").map((p) => p.trim()).filter(Boolean);
     return parts.length > 0 ? parts.join(",") : DEFAULT_NAMESPACE;
@@ -112,24 +112,50 @@ export default function App() {
   };
 
   // build single-branch graph (resets diff view)
-  const loadGraph = async () => {
+  const loadGraph = async (
+    overrides?: { pkg?: string; root?: string; namespace?: string; branch?: string }
+  ) => {
+    const pkgToUse = overrides?.pkg ?? pkg;
+    const rootToUse = overrides?.root ?? root;
+    const namespaceToUse = overrides?.namespace ?? normalizedNamespace;
+    const branchToUse = overrides?.branch ?? "";
     setErr(null);
     setQuantityActionErr(null);
     setLoading(true);
     setDiffData(null);
     setExportHandle(null);
     try {
-      const r = await api.get("/schema", {
-        params: {
-          package: pkg,
-          root,
-          include_quantities: includeQuantities,
-          include_subsections: includeSubsections,
-          allow_cross_module: crossModules,
-          base_namespace: normalizedNamespace || undefined,
-        },
-      });
-      setGraph(r.data);
+      if (branchToUse) {
+        const r = await api.post(
+          "/graph",
+          {
+            branch: branchToUse,
+            package: pkgToUse,
+          },
+          {
+            params: {
+              root: rootToUse,
+              include_quantities: includeQuantities,
+              include_subsections: includeSubsections,
+              allow_cross_module: crossModules,
+              base_namespace: namespaceToUse || undefined,
+            },
+          }
+        );
+        setGraph(r.data?.graph ?? null);
+      } else {
+        const r = await api.get("/schema", {
+          params: {
+            package: pkgToUse,
+            root: rootToUse,
+            include_quantities: includeQuantities,
+            include_subsections: includeSubsections,
+            allow_cross_module: crossModules,
+            base_namespace: namespaceToUse || undefined,
+          },
+        });
+        setGraph(r.data);
+      }
     } catch (e: any) {
       setErr(e?.response?.data?.detail || String(e));
       setGraph(null);
@@ -278,7 +304,7 @@ export default function App() {
   useEffect(() => {
     loadRoots();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pkg, apiBase]);
+  }, [pkg]);
 
   useEffect(() => {
     loadBranches();
@@ -297,6 +323,20 @@ export default function App() {
           : null;
 
   const currentGraph = diffData ? diffData.head?.graph ?? null : graph;
+
+  const handleOverviewClassSelect = (pkgName: string, className: string) => {
+    setMode("graph");
+    setPkg(pkgName);
+    setRoot(className);
+    setPackageBranch((prev) => prev || overviewBranch);
+    setRoots((prev) => (prev.includes(className) ? prev : [className, ...prev]));
+    loadGraph({
+      pkg: pkgName,
+      root: className,
+      namespace: normalizedNamespace,
+      branch: overviewBranch,
+    });
+  };
 
   const ensureEditableReady = () => {
     if (addBlockedReason) {
@@ -502,18 +542,8 @@ export default function App() {
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection title="API, package & filters" hint="Connect to a backend and fine-tune the graph">
+        <CollapsibleSection title="Package & filters" hint="Pick a backend package and fine-tune the graph">
           <div className="action-stack">
-            <div>
-              <label className="label">API base</label>
-              <input
-                className="input"
-                value={apiBase}
-                onChange={(e) => setApiBase(e.target.value)}
-                placeholder="http://localhost:5179"
-              />
-            </div>
-
             <div>
               <label className="label">Package</label>
               <input
@@ -608,7 +638,7 @@ export default function App() {
             </div>
 
             <div className="row" style={{ marginTop: 14, justifyContent: "space-between", gap: 10 }}>
-              <button className="btn" onClick={loadGraph}>
+              <button className="btn" onClick={() => loadGraph()}>
                 Build graph
               </button>
               {currentGraph ? (
@@ -686,9 +716,24 @@ export default function App() {
       {/* Main workspace: Graph + Doc Panel side-by-side */}
       <div className="workspace">
         {/* Left: graph area */}
-        <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+            height: "100vh",
+            overflow: mode === "overview" ? "auto" : "hidden",
+          }}
+        >
           {mode === "overview" ? (
-            <OverviewGrid apiBase={apiBase} branch={overviewBranch} base={normalizedNamespace} />
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <OverviewGrid
+                apiBase={apiBase}
+                branch={overviewBranch}
+                base={normalizedNamespace}
+                onClassSelect={handleOverviewClassSelect}
+              />
+            </div>
           ) : diffData ? (
             <>
               <div className="workspace-toolbar">
