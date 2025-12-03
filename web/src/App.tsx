@@ -716,14 +716,24 @@ export default function App() {
       {/* Main workspace: Graph + Doc Panel side-by-side */}
       <div className="workspace">
         {/* Left: graph area */}
-        <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+            height: "100vh",
+            overflow: "hidden",
+          }}
+        >
           {mode === "overview" ? (
-            <OverviewGrid
-              apiBase={apiBase}
-              branch={overviewBranch}
-              base={normalizedNamespace}
-              onClassSelect={handleOverviewClassSelect}
-            />
+            <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+              <OverviewGrid
+                apiBase={apiBase}
+                branch={overviewBranch}
+                base={normalizedNamespace}
+                onClassSelect={handleOverviewClassSelect}
+              />
+            </div>
           ) : diffData ? (
             <>
               <div className="workspace-toolbar">
