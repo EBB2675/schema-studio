@@ -22,7 +22,7 @@ export default function QuantityEditPanel({
   const { selected } = useSelection();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formName, setFormName] = useState("");
-  const [formDtype, setFormDtype] = useState(SUPPORTED_DTYPES[0]);
+  const [formDtype, setFormDtype] = useState<string>(SUPPORTED_DTYPES[0]);
   const [formDoc, setFormDoc] = useState("");
 
   const disableActions = useMemo(() => !!blockedReason || !editableMode, [blockedReason, editableMode]);

@@ -11,10 +11,12 @@ export default function OverviewGrid({
   apiBase,
   branch,
   base = DEFAULT_OVERVIEW_BASE,
+  onClassSelect,
 }: {
   apiBase: string;
   branch: string;
   base?: string;
+  onClassSelect?: (pkg: string, className: string) => void;
 }) {
   const [data, setData] = useState<OverviewResp | null>(null);
   const [q, setQ] = useState("");
@@ -128,19 +130,23 @@ export default function OverviewGrid({
               }}
             >
               {it.classes.map((c) => (
-                <span
+                <button
                   key={`${it.package}.${c}`}
+                  type="button"
+                  onClick={() => onClassSelect?.(it.package, c)}
                   style={{
                     fontSize: 11,
                     border: "1px solid #e5e7eb",
                     borderRadius: 9999,
-                    padding: "2px 8px",
-                    background: "#f9fafb",
+                    padding: "4px 10px",
+                    background: onClassSelect ? "#eef2ff" : "#f9fafb",
+                    cursor: onClassSelect ? "pointer" : "default",
+                    color: "#1f2937",
                   }}
                   title={c}
                 >
                   {c}
-                </span>
+                </button>
               ))}
             </div>
           </div>

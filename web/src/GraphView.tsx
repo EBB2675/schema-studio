@@ -13,6 +13,8 @@ type RawNode = {
   label: string;
   module?: string;
   dtype?: string | null;
+  data_type?: string | null;
+  type?: string | null;
   shape?: string | null;
   card?: string | null;
   owner?: string | null;
