@@ -1,73 +1,46 @@
-# React + TypeScript + Vite
+# Schema UML — Frontend (React + Vite)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Interactive UML-style viewer for NOMAD schema packages. The UI consumes the FastAPI backend at `http://localhost:5179` and renders section graphs with Cytoscape + ELK.
 
-Currently, two official plugins are available:
+## Quick start
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+cd web
+npm install
+npm run dev -- --host 0.0.0.0 --port 5173
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+The repo root provides `./dev.sh` to start both backend (**5179**) and frontend (**5173**) together after verifying environment variables.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Environment defaults
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+These Vite env vars (see `App.tsx`) control the initial workspace:
+
+- `VITE_DEFAULT_PACKAGE` — fallback module (defaults to `nomad_simulations.schema_packages.model_method`).
+- `VITE_DEFAULT_NAMESPACE` — comma-separated base namespaces for package discovery (`nomad_simulations.schema_packages` by default).
+- `VITE_DEFAULT_ROOT` — default root section (`ModelMethod`).
+- `VITE_DEFAULT_BRANCH` — default branch for overview/package discovery (`develop`).
+
+## Notable UI features
+
+- Diagram builder for the working tree or a selected branch (`/schema` vs `/graph`).
+- Branch comparison banner using `/graph/diff`.
+- Overview mode listing packages/classes by branch.
+- Editable mode to add/rename/remove quantities (uses `/schema/custom-quantity` for adds; client-side updates for edits/deletes).
+- Doc panel + under-the-hood panel for docstrings and normalization helpers.
+- Export buttons for JSON and PDF (PNG-backed via `GraphView` `toPng`).
+- Theme toggle (dark/light) and namespace / cross-module filters.
+
+## Key files
+
+- `src/App.tsx` — sidebar controls, API calls, diff handling, overview toggle, export + editable mode wiring.
+- `src/GraphView.tsx` — Cytoscape renderer with ELK layout, diff overlays, export handle.
+- `src/components/DocPanel.tsx` — class/quantity docs with inline edit/remove when editable.
+- `src/components/OverviewGrid.tsx` — bird’s-eye packages/classes table.
+- `src/components/UnderTheHoodPanel.tsx` — normalize/helper list from `/usage`.
+- `src/components/AddQuantityForm.tsx`, `src/components/QuantityEditPanel.tsx` — quantity add/edit/remove UI.
+- `src/store/selection.ts` — Zustand selection store.
+
+## Testing & linting
+
+This package relies on Vite defaults. Add your preferred test runner or linter as needed; `npm run build` will validate TypeScript + Vite configuration.
