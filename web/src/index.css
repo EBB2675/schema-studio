@@ -314,6 +314,8 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
 .toggle-chip:hover { transform: translateY(-1px); }
 
 .pill { padding: 6px 10px; border-radius: 999px; background: var(--pill-bg); color: var(--pill-color); font-size: 12px; }
+.pill.warning { background: rgba(234, 179, 8, 0.16); color: #fef9c3; }
+.pill.muted { background: rgba(148, 163, 184, 0.18); color: var(--muted); }
 
 .empty-state { padding: 32px; color: var(--muted); text-align: center; }
 
