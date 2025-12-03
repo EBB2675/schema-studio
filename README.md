@@ -42,7 +42,7 @@ cd schema-uml
 ```bash
 conda create -n schema-uml python=3.11 -y
 conda activate schema-uml
-pip install -r requirements.txt
+pip install -r api/requirements.txt
 ```
 
 ### 3) Point to your schema repo
