@@ -5,7 +5,7 @@ import cytoscapeElk from "cytoscape-elk";
 import type { Core, ElementDefinition } from "cytoscape";
 import { useSelection, type QtyMeta, type QtySnapshot } from "./store/selection";
 
-type QtyDiffState = QtyMeta["diff"] extends { state: infer S } ? S : undefined;
+type QtyDiffState = "added" | "removed" | "changed" | undefined;
 
 cytoscapeElk(cytoscape, elk as any);
 
@@ -35,6 +35,8 @@ type RawEdge = {
 
 export type GraphExportHandle = {
   toPng: () => string | null;
+  focusNode: (name: string) => boolean;
+  refit: () => void;
 };
 
 type Props = {
@@ -298,7 +300,7 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
       elements,
       minZoom: 0.2,
       maxZoom: 3.5,
-      wheelSensitivity: 0.2,
+      wheelSensitivity: 0.65,
       style: [
         {
           selector: "node[kind='uml_class']",
@@ -367,9 +369,63 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
       } as any
     });
 
-    // Selection → DocPanel + UnderTheHoodPanel
-    cy.on("tap", "node", (evt) => {
-      const d = evt.target.data();
+    let refitTimeout: number | null = null;
+
+    const refitToContent = () => {
+      cy.resize();
+      cy.fit(undefined, 32);
+    };
+
+    const scheduleRefit = () => {
+      refitToContent();
+      requestAnimationFrame(refitToContent);
+      if (refitTimeout) window.clearTimeout(refitTimeout);
+      refitTimeout = window.setTimeout(refitToContent, 140);
+    };
+
+    let handlePublished = false;
+
+    const publishHandle = () => {
+      if (handlePublished) return;
+      handlePublished = true;
+      onReady?.({
+        toPng: () =>
+          cyRef.current?.png({
+            full: true,
+            scale: 2,
+            bg: "#ffffff"
+          }) ?? null,
+        focusNode,
+        refit: () => scheduleRefit(),
+      });
+    };
+
+    cy.one("layoutstop", () => {
+      scheduleRefit();
+      publishHandle();
+    });
+
+    const resizeObserver = new ResizeObserver(() => scheduleRefit());
+    resizeObserver.observe(containerRef.current);
+
+    const focusNode = (name: string) => {
+      const cy = cyRef.current;
+      if (!cy) return false;
+
+      const normalized = name.toLowerCase();
+      const target = cy
+        .nodes()
+        .filter((n) => {
+          const id = `${n.id()}`.toLowerCase();
+          const raw = `${n.data("rawName") ?? ""}`.toLowerCase();
+          const label = `${n.data("label") ?? ""}`.toLowerCase();
+          return id === normalized || raw === normalized || label === normalized;
+        })
+        .first();
+
+      if (!target || target.empty()) return false;
+
+      const d = target.data();
       const qList = quantitiesByOwner.get(d.id) || [];
 
       // fully-qualified section name for /usage
@@ -380,8 +436,8 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
           : d.id;
 
       useSelection.getState().setSelected({
-        id: d.id,                    
-        fqid,                       
+        id: d.id,
+        fqid,
         kind: "class",
         name: d.rawName || d.id,
         doc: d.doc || "",
@@ -389,6 +445,22 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
         line: typeof d.line === "number" ? d.line : undefined,
         quantities: qList,
       });
+
+      cy.animate(
+        {
+          center: { eles: target },
+          zoom: Math.min(1.2, cy.maxZoom()),
+        },
+        { duration: 240, easing: "ease-in-out" }
+      );
+
+      target.select();
+      return true;
+    };
+
+    // Selection → DocPanel + UnderTheHoodPanel
+    cy.on("tap", "node", (evt) => {
+      focusNode(evt.target.data("rawName") || evt.target.id());
     });
 
     cy.on("tap", (evt) => {
@@ -397,13 +469,11 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
 
     cyRef.current = cy;
 
-    onReady?.({
-      toPng: () =>
-        cyRef.current?.png({
-          full: true,
-          scale: 2,
-          bg: "#ffffff"
-        }) ?? null
+    cy.ready(() => {
+      // In rare cases ELK may not fire layoutstop (e.g., empty graphs);
+      // ensure the view centers and the handle is published once the core is ready.
+      scheduleRefit();
+      publishHandle();
     });
 
     // Diff highlights (unchanged)
@@ -431,6 +501,8 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
     }
 
     return () => {
+      resizeObserver.disconnect();
+      if (refitTimeout) window.clearTimeout(refitTimeout);
       onReady?.(null);
       cyRef.current?.destroy();
     };
