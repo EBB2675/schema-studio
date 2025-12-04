@@ -111,14 +111,23 @@ export default function App() {
   }, [namespace]);
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+  const clampDocWidth = useCallback((value: number) => {
+    const workspaceWidth = workspaceRef.current?.getBoundingClientRect()?.width ?? 0;
+    const minGraphWidth = 380;
+    const maxByViewport = workspaceWidth
+      ? Math.max(260, workspaceWidth - minGraphWidth - 10)
+      : 640;
+
+    return clamp(value, 260, Math.min(640, maxByViewport));
+  }, []);
 
   const setSidebarWidthClamped = useCallback(
     (value: number) => setSidebarWidth(clamp(value, 260, 520)),
     []
   );
   const setDocPanelWidthClamped = useCallback(
-    (value: number) => setDocPanelWidth(clamp(value, 260, 640)),
-    []
+    (value: number) => setDocPanelWidth(clampDocWidth(value)),
+    [clampDocWidth]
   );
 
   useEffect(() => {
@@ -128,8 +137,22 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem("schema-uml-doc-width", String(clamp(docPanelWidth, 260, 640)));
-  }, [docPanelWidth]);
+    window.localStorage.setItem("schema-uml-doc-width", String(clampDocWidth(docPanelWidth)));
+  }, [clampDocWidth, docPanelWidth]);
+
+  useEffect(() => {
+    setDocPanelWidth((w) => clampDocWidth(w));
+  }, [clampDocWidth]);
+
+  useEffect(() => {
+    const observer = new ResizeObserver(() => {
+      setDocPanelWidth((w) => clampDocWidth(w));
+    });
+
+    if (workspaceRef.current) observer.observe(workspaceRef.current);
+
+    return () => observer.disconnect();
+  }, [clampDocWidth]);
 
   const startSidebarResize = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -832,7 +855,7 @@ export default function App() {
       <div
         className="workspace"
         ref={workspaceRef}
-        style={{ gridTemplateColumns: `1fr 10px ${docPanelWidth}px` }}
+        style={{ gridTemplateColumns: `minmax(0, 1fr) 10px ${docPanelWidth}px` }}
       >
         {/* Left: graph area */}
         <div

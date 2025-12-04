@@ -268,7 +268,7 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
 
 .workspace {
   display: grid;
-  grid-template-columns: 1fr 10px 380px;
+  grid-template-columns: minmax(0, 1fr) 10px 380px;
   height: 100vh;
   overflow: hidden;
 }
