@@ -384,17 +384,26 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
       });
     };
 
+    let refitTimeout: number | null = null;
+
     const refitToContent = () => {
       cy.resize();
-      cy.fit(undefined, 24);
+      cy.fit(undefined, 32);
+    };
+
+    const scheduleRefit = () => {
+      refitToContent();
+      requestAnimationFrame(refitToContent);
+      if (refitTimeout) window.clearTimeout(refitTimeout);
+      refitTimeout = window.setTimeout(refitToContent, 140);
     };
 
     cy.one("layoutstop", () => {
-      refitToContent();
+      scheduleRefit();
       publishHandle();
     });
 
-    const resizeObserver = new ResizeObserver(() => refitToContent());
+    const resizeObserver = new ResizeObserver(() => scheduleRefit());
     resizeObserver.observe(containerRef.current);
 
     const focusNode = (name: string) => {
@@ -461,7 +470,7 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
     cy.ready(() => {
       // In rare cases ELK may not fire layoutstop (e.g., empty graphs);
       // ensure the view centers and the handle is published once the core is ready.
-      refitToContent();
+      scheduleRefit();
       publishHandle();
     });
 
@@ -491,6 +500,7 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
 
     return () => {
       resizeObserver.disconnect();
+      if (refitTimeout) window.clearTimeout(refitTimeout);
       onReady?.(null);
       cyRef.current?.destroy();
     };
