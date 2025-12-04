@@ -38,6 +38,10 @@ export GIT_REPO_DIR=/path/to/nomad-simulations
 export SCHEMA_UML_BASE_PACKAGE=my_schema_root
 export SCHEMA_UML_PACKAGE=my_schema_root.module
 ~~~
+Default namespace scope targets `nomad_simulations.schema_packages`. To include
+`nomad_measurements`, set `SCHEMA_UML_BASE_PACKAGE` to both namespaces (comma
+separated) and ensure `NOMAD_MEASURE_REPO` points at a local clone of that
+repository.
 
 **Unified dev command:** `./dev.sh` starts the FastAPI backend (**5179**) and Vite frontend (**5173**), checks for `uvicorn`/`npm`, validates **SCHEMA_UML_REPO / NOMAD_SIM_REPO / GIT_REPO_DIR** points to a local git repo (a subdirectory of a clone is fine), installs frontend deps on first run, and stops both on **Ctrl+C**. Override ports via `API_PORT` / `WEB_PORT`.
 

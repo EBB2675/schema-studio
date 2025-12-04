@@ -36,7 +36,8 @@ REPO_SLUG = _repo_slug(SCHEMA_REPO)
 # Default base package/section can be overridden per request or via env vars
 DEFAULT_BASE_PACKAGE = os.getenv(
     "SCHEMA_UML_BASE_PACKAGE",
-    "nomad_simulations.schema_packages,nomad_measurements",
+    # Default to the simulations schema; opt into nomad-measurements via env var
+    "nomad_simulations.schema_packages",
 )
 
 

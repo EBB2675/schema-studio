@@ -65,6 +65,10 @@ export SCHEMA_UML_REPO=<path-or-URL-to-your-schema-repo>
 # optional: override the default package used in UI helpers
 # export SCHEMA_UML_PACKAGE=my_schema_root.module
 ```
+By default, the viewer scopes to `nomad_simulations.schema_packages`. If you also want
+to browse `nomad_measurements`, set `SCHEMA_UML_BASE_PACKAGE` to include both
+namespaces (e.g. `nomad_simulations.schema_packages,nomad_measurements`) and point
+`NOMAD_MEASURE_REPO` at a local `nomad-measurements` clone.
 Make it persistent by adding the export to `~/.bashrc` or `~/.zshrc`.
 
 ### 4) Run everything with one command
