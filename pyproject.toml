@@ -12,10 +12,9 @@ dependencies = [
     "gitpython",
     "orjson",
     "httpx",
-    "nomad-lab>=1.2",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = ["pytest>=7"]
 
 [build-system]
@@ -27,4 +26,3 @@ include = ["api*", "extractor*"]
 exclude = ["web*", "assets*"]
 
 [tool.uv]
-dev-dependencies = ["pytest>=7"]
