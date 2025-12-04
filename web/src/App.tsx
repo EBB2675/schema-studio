@@ -50,6 +50,7 @@ export default function App() {
 
   const [includeQuantities, setIncludeQuantities] = useState<boolean>(true);
   const [includeSubsections, setIncludeSubsections] = useState<boolean>(true);
+  const [showQuantityMetadata, setShowQuantityMetadata] = useState<boolean>(true);
 
   const [crossModules, setCrossModules] = useState<boolean>(true);
   const [namespace, setNamespace] = useState<string>(DEFAULT_NAMESPACE);
@@ -766,6 +767,14 @@ export default function App() {
               <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <input
                   type="checkbox"
+                  checked={showQuantityMetadata}
+                  onChange={(e) => setShowQuantityMetadata(e.target.checked)}
+                />
+                Show dtypes & shapes
+              </label>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
                   checked={includeSubsections}
                   onChange={(e) => setIncludeSubsections(e.target.checked)}
                 />
@@ -913,6 +922,7 @@ export default function App() {
                 nodes={diffData.head.graph.nodes}
                 edges={diffData.head.graph.edges}
                 diff={diffData.diff}
+                showQuantityMetadata={showQuantityMetadata}
                 onReady={setGraphHandle}
               />
             </>
@@ -927,7 +937,12 @@ export default function App() {
                   Go to root
                 </button>
               </div>
-              <GraphView nodes={graph.nodes} edges={graph.edges} onReady={setGraphHandle} />
+              <GraphView
+                nodes={graph.nodes}
+                edges={graph.edges}
+                showQuantityMetadata={showQuantityMetadata}
+                onReady={setGraphHandle}
+              />
             </>
           ) : (
             <div className="empty-state">
