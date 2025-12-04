@@ -21,7 +21,9 @@ dev = ["pytest>=7"]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+include = ["api*", "extractor*"]
+exclude = ["web*", "assets*"]
+
 [tool.uv]
-dev-dependencies = [
-    "pytest>=7",
-]
+dev-dependencies = ["pytest>=7"]
