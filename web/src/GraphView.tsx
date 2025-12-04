@@ -36,6 +36,7 @@ type RawEdge = {
 export type GraphExportHandle = {
   toPng: () => string | null;
   focusNode: (name: string) => boolean;
+  refit: () => void;
 };
 
 type Props = {
@@ -368,6 +369,20 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
       } as any
     });
 
+    let refitTimeout: number | null = null;
+
+    const refitToContent = () => {
+      cy.resize();
+      cy.fit(undefined, 32);
+    };
+
+    const scheduleRefit = () => {
+      refitToContent();
+      requestAnimationFrame(refitToContent);
+      if (refitTimeout) window.clearTimeout(refitTimeout);
+      refitTimeout = window.setTimeout(refitToContent, 140);
+    };
+
     let handlePublished = false;
 
     const publishHandle = () => {
@@ -381,21 +396,8 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
             bg: "#ffffff"
           }) ?? null,
         focusNode,
+        refit: () => scheduleRefit(),
       });
-    };
-
-    let refitTimeout: number | null = null;
-
-    const refitToContent = () => {
-      cy.resize();
-      cy.fit(undefined, 32);
-    };
-
-    const scheduleRefit = () => {
-      refitToContent();
-      requestAnimationFrame(refitToContent);
-      if (refitTimeout) window.clearTimeout(refitTimeout);
-      refitTimeout = window.setTimeout(refitToContent, 140);
     };
 
     cy.one("layoutstop", () => {

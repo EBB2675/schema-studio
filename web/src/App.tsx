@@ -141,6 +141,11 @@ export default function App() {
   }, [clampDocWidth, docPanelWidth]);
 
   useEffect(() => {
+    if (!graphHandle) return;
+    graphHandle.refit();
+  }, [graphHandle, sidebarWidth, docPanelWidth]);
+
+  useEffect(() => {
     setDocPanelWidth((w) => clampDocWidth(w));
   }, [clampDocWidth]);
 
