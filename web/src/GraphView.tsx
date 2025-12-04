@@ -368,6 +368,16 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
       } as any
     });
 
+    const refitToContent = () => {
+      cy.resize();
+      cy.fit(undefined, 24);
+    };
+
+    cy.one("layoutstop", refitToContent);
+
+    const resizeObserver = new ResizeObserver(() => refitToContent());
+    resizeObserver.observe(containerRef.current);
+
     const focusNode = (name: string) => {
       const cy = cyRef.current;
       if (!cy) return false;
@@ -464,6 +474,7 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
     }
 
     return () => {
+      resizeObserver.disconnect();
       onReady?.(null);
       cyRef.current?.destroy();
     };
