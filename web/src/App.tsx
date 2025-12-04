@@ -735,23 +735,17 @@ export default function App() {
               </select>
             </div>
 
-            <div className="row" style={{ justifyContent: "space-between" }}>
-              <div>
-                <label className="label">Root section</label>
-                <select className="select" value={root} onChange={(e) => setRoot(e.target.value)}>
-                  {roots.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label">&nbsp;</label>
-                <button className="btn" onClick={loadRoots}>
-                  Load roots
-                </button>
-                <div className="small">{roots.length ? `${roots.length} sections` : ""}</div>
+            <div>
+              <label className="label">Root section</label>
+              <select className="select" value={root} onChange={(e) => setRoot(e.target.value)}>
+                {roots.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+              <div className="small" style={{ marginTop: 4 }}>
+                {roots.length ? `${roots.length} sections` : ""}
               </div>
             </div>
 

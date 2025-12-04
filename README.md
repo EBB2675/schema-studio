@@ -101,14 +101,13 @@ curl 'http://127.0.0.1:5179/git/branches'
 ## 🧠 How to Use
 
 1. **Package**: Enter a Python package (e.g. `nomad_simulations.schema_packages.model_method`).
-2. **Load roots**: Fetch available section classes from the package.
-3. **Root section**: Pick one (e.g. `ModelMethod`) or leave empty to load all.
-4. **Build graph**: Render UML cards and composition edges.
-5. **Doc panel**: Click a class → see its docstring + list of quantities; click a quantity to view its docstring.
-6. **Under the hood panel**: Click a class → see which normalizers and module-level helpers are associated with that section.
-7. **Editable mode** (Doc panel): Toggle **Editable mode**, then add/rename/remove quantities on the selected class (supported dtypes are validated server-side).
-8. **Compare branches**: Choose **Base** and **Head** → **Compare** to see a visual diff.
-9. **Export**: Download the current graph as **JSON** or a **PDF** snapshot from the sidebar.
+2. **Root section**: Auto-populated from the package; pick one (e.g. `ModelMethod`) or leave empty to load all.
+3. **Build graph**: Render UML cards and composition edges.
+4. **Doc panel**: Click a class → see its docstring + list of quantities; click a quantity to view its docstring.
+5. **Under the hood panel**: Click a class → see which normalizers and module-level helpers are associated with that section.
+6. **Editable mode** (Doc panel): Toggle **Editable mode**, then add/rename/remove quantities on the selected class (supported dtypes are validated server-side).
+7. **Compare branches**: Choose **Base** and **Head** → **Compare** to see a visual diff.
+8. **Export**: Download the current graph as **JSON** or a **PDF** snapshot from the sidebar.
 
 Legend:
 - 🟩 **Added** (green border / edges)
