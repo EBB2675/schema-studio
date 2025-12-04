@@ -39,6 +39,10 @@ export SCHEMA_UML_BASE_PACKAGE=my_schema_root
 export SCHEMA_UML_PACKAGE=my_schema_root.module
 ~~~
 
+The backend prepends that repository (and `src/` when present) to `PYTHONPATH`, so
+packages like `nomad_simulations` import cleanly without manual path tweaks as long as
+one of the env vars above points to your clone.
+
 **Backend environment (Python 3.11, managed by [uv](https://docs.astral.sh/uv/))**
 
 ~~~bash

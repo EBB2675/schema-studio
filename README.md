@@ -68,6 +68,10 @@ export SCHEMA_UML_REPO=<path-or-URL-to-your-schema-repo>
 ```
 Make it persistent by adding the export to `~/.bashrc` or `~/.zshrc`.
 
+The backend will automatically prepend that repo (and `src/` if present) to `PYTHONPATH`,
+so packages like `nomad_simulations` resolve without extra setup once the environment
+variable points to your clone.
+
 ### 4) Run everything with one command
 ```bash
 ./dev.sh

@@ -1,4 +1,5 @@
 from typing import List, Optional
+import sys
 
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.responses import ORJSONResponse
@@ -58,6 +59,7 @@ def root():
 def roots(package: str = Query(...)):
     """List available section classes for a given package."""
     try:
+        _ensure_repo_on_path(package)
         return {"package": package, "sections": sorted(list_sections(package))}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
@@ -68,9 +70,10 @@ def schema(
     root: str | None = Query(None),
     include_quantities: bool = Query(True),
     include_subsections: bool = Query(True),
-    allow_cross_module: bool = Query(True),                 
-    base_namespace: str | None = Query(None),               
+    allow_cross_module: bool = Query(True),
+    base_namespace: str | None = Query(None),
 ):
+    _ensure_repo_on_path(package, base_namespace)
     data = build_graph(
         package=package,
         root=root,
@@ -99,6 +102,31 @@ def _repo_root(base_package: str | None = None) -> Path:
             "Set SCHEMA_UML_REPO / NOMAD_SIM_REPO / NOMAD_MEASURE_REPO / GIT_REPO_DIR to a local schema clone"
         )
     return repo_path
+
+
+def _base_namespace_from(package: str, base_namespace: str | None = None) -> str:
+    """Best-effort mapping from a package name to its base namespace."""
+
+    if base_namespace:
+        return base_namespace
+
+    parts = [chunk for chunk in package.split(".") if chunk]
+    if len(parts) >= 2:
+        return ".".join(parts[:2])
+    if parts:
+        return parts[0]
+    return "nomad_simulations"
+
+
+def _ensure_repo_on_path(package: str, base_namespace: str | None = None) -> None:
+    """Add the schema repo (and src/) to sys.path for dynamic imports."""
+
+    base_pkg = _base_namespace_from(package, base_namespace)
+    repo = _repo_root(base_pkg)
+    for candidate in (repo, repo / "src"):
+        candidate_str = str(candidate)
+        if candidate_str not in sys.path:
+            sys.path.insert(0, candidate_str)
 
 def _run_git(repo: Path, *args: str) -> str:
     cp = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
@@ -270,6 +298,7 @@ def add_custom_quantity(
     base_namespace: str | None = Query(None),
 ):
     try:
+        _ensure_repo_on_path(req.package, base_namespace)
         graph = build_graph(
             package=req.package,
             root=root,
