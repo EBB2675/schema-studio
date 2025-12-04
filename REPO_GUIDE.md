@@ -39,6 +39,15 @@ export SCHEMA_UML_BASE_PACKAGE=my_schema_root
 export SCHEMA_UML_PACKAGE=my_schema_root.module
 ~~~
 
+**Backend environment (Python 3.11, managed by [uv](https://docs.astral.sh/uv/))**
+
+~~~bash
+pip install --user uv  # or: pipx install uv, brew install uv
+uv venv                # creates .venv in the repo
+source .venv/bin/activate
+uv sync                # installs backend + dev deps from pyproject.toml
+~~~
+
 **Unified dev command:** `./dev.sh` starts the FastAPI backend (**5179**) and Vite frontend (**5173**), checks for `uvicorn`/`npm`, validates **SCHEMA_UML_REPO / NOMAD_SIM_REPO / GIT_REPO_DIR** points to a local git repo (a subdirectory of a clone is fine), installs frontend deps on first run, and stops both on **Ctrl+C**. Override ports via `API_PORT` / `WEB_PORT`.
 
 **UX highlights:**
@@ -56,6 +65,7 @@ export SCHEMA_UML_PACKAGE=my_schema_root.module
 
 ~~~text
 schema-uml/
+├─ pyproject.toml               # Backend deps + dev deps (uv-managed)
 ├─ api/                         # FastAPI backend
 │  ├─ main.py                   # App entry, CORS, /roots, /schema, /overview, /usage, /schema/custom-quantity
 │  ├─ routes_git.py             # /git/branches, /git/packages, /graph, /graph/diff
@@ -63,7 +73,7 @@ schema-uml/
 │  ├─ git_utils.py              # Bare mirror & worktree management
 │  ├─ diff.py                   # Graph comparison logic
 │  ├─ _data/                    # Auto-generated bare mirror & worktrees (gitignored)
-│  └─ requirements.txt
+│  └─ requirements.txt          # Legacy pin list (pyproject.toml is the source of truth)
 │
 ├─ extractor/
 │  ├─ graph_builder.py          # build_graph(package, **opts); embeds docstrings

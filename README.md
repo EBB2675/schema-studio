@@ -43,11 +43,12 @@ git clone https://github.com/EBB2675/schema-uml.git
 cd schema-uml
 ```
 
-### 2) Environment (Python 3.11)
+### 2) Environment (Python 3.11, managed by [uv](https://docs.astral.sh/uv/))
 ```bash
-conda create -n schema-uml python=3.11 -y
-conda activate schema-uml
-pip install -r api/requirements.txt
+pip install --user uv  # or: pipx install uv, brew install uv
+uv venv                # creates .venv in the repo
+source .venv/bin/activate
+uv sync                # installs backend + dev deps from pyproject.toml
 ```
 
 ### 3) Point to your schema repo
@@ -79,7 +80,7 @@ What it does:
 - Ensures `web/node_modules` exists (runs `npm install` on first launch).
 - Starts the Vite frontend on **5173**.
 - Stops both together on **Ctrl+C** (no manual job control needed).
-- Exits early with a helpful message if `uvicorn` or `npm` are missing (activate your virtualenv first).
+- Exits early with a helpful message if `uvicorn` or `npm` are missing (activate your `.venv` first).
 
 Stop both with **Ctrl+C**. Override ports via `API_PORT` / `WEB_PORT` env vars.
 
@@ -160,7 +161,7 @@ Legend:
   - Clear cache: `rm -rf web/node_modules web/node_modules/.vite && npm i`.
 - **Pydantic import error (`model_validator`)**
   - The backend relies on **Pydantic v2** (`pydantic>=2,<3`).
-  - If you see `ImportError: cannot import name 'model_validator'`, an older global install may be shadowing your environment; reinstall requirements inside a clean virtualenv/conda env to pick up v2.
+  - If you see `ImportError: cannot import name 'model_validator'`, an older global install may be shadowing your environment; recreate the env (`rm -rf .venv && uv venv && uv sync`) to pick up v2.
 
 ---
 
