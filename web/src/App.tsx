@@ -50,6 +50,7 @@ export default function App() {
 
   const [includeQuantities, setIncludeQuantities] = useState<boolean>(true);
   const [includeSubsections, setIncludeSubsections] = useState<boolean>(true);
+  const [showQuantityMetadata, setShowQuantityMetadata] = useState<boolean>(true);
 
   const [crossModules, setCrossModules] = useState<boolean>(true);
   const [namespace, setNamespace] = useState<string>(DEFAULT_NAMESPACE);
@@ -621,24 +622,26 @@ export default function App() {
             <span className="tag">{loading || diffLoading ? "Working…" : "Ready"}</span>
             {selectedClassName ? <span className="tag">Selected: {selectedClassName}</span> : null}
           </div>
-        </div>
-
-        <CollapsibleSection title="Appearance" hint="Dark vs light ambience">
-          <div className="toggle-group">
-            <button
-              className={`toggle-chip ${theme === "dark" ? "active" : ""}`}
-              onClick={() => setTheme("dark")}
-            >
-              Dark
-            </button>
-            <button
-              className={`toggle-chip ${theme === "light" ? "active" : ""}`}
-              onClick={() => setTheme("light")}
-            >
-              Light
-            </button>
+          <div style={{ marginTop: 12 }}>
+            <div className="label" style={{ marginBottom: 6 }}>
+              Appearance
+            </div>
+            <div className="toggle-group">
+              <button
+                className={`toggle-chip ${theme === "dark" ? "active" : ""}`}
+                onClick={() => setTheme("dark")}
+              >
+                Dark
+              </button>
+              <button
+                className={`toggle-chip ${theme === "light" ? "active" : ""}`}
+                onClick={() => setTheme("light")}
+              >
+                Light
+              </button>
+            </div>
           </div>
-        </CollapsibleSection>
+        </div>
 
         <CollapsibleSection title="Workspace" hint="Switch modes on the fly">
           <div className="row" style={{ gap: 10 }}>
@@ -734,23 +737,17 @@ export default function App() {
               </select>
             </div>
 
-            <div className="row" style={{ justifyContent: "space-between" }}>
-              <div>
-                <label className="label">Root section</label>
-                <select className="select" value={root} onChange={(e) => setRoot(e.target.value)}>
-                  {roots.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label">&nbsp;</label>
-                <button className="btn" onClick={loadRoots}>
-                  Load roots
-                </button>
-                <div className="small">{roots.length ? `${roots.length} sections` : ""}</div>
+            <div>
+              <label className="label">Root section</label>
+              <select className="select" value={root} onChange={(e) => setRoot(e.target.value)}>
+                {roots.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+              <div className="small" style={{ marginTop: 4 }}>
+                {roots.length ? `${roots.length} sections` : ""}
               </div>
             </div>
 
@@ -762,6 +759,14 @@ export default function App() {
                   onChange={(e) => setIncludeQuantities(e.target.checked)}
                 />
                 Quantities
+              </label>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={showQuantityMetadata}
+                  onChange={(e) => setShowQuantityMetadata(e.target.checked)}
+                />
+                Show dtypes & shapes
               </label>
               <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <input
@@ -913,6 +918,7 @@ export default function App() {
                 nodes={diffData.head.graph.nodes}
                 edges={diffData.head.graph.edges}
                 diff={diffData.diff}
+                showQuantityMetadata={showQuantityMetadata}
                 onReady={setGraphHandle}
               />
             </>
@@ -927,12 +933,20 @@ export default function App() {
                   Go to root
                 </button>
               </div>
-              <GraphView nodes={graph.nodes} edges={graph.edges} onReady={setGraphHandle} />
+              <GraphView
+                nodes={graph.nodes}
+                edges={graph.edges}
+                showQuantityMetadata={showQuantityMetadata}
+                onReady={setGraphHandle}
+              />
             </>
           ) : (
             <div className="empty-state">
               <div style={{ fontSize: 18, marginBottom: 8 }}>Build a diagram to get started</div>
-              <div>Select a package, load roots, pick a root, then “Build graph”; or compare two branches.</div>
+              <div>
+                Select a package (roots load automatically), pick a root, then “Build graph”; or compare two
+                branches.
+              </div>
             </div>
           )}
         </div>

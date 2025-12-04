@@ -50,6 +50,7 @@ type Props = {
     };
   } | null;
   onReady?: (handle: GraphExportHandle | null) => void;
+  showQuantityMetadata?: boolean;
 };
 
 const cleanType = (t?: string | null) => {
@@ -63,7 +64,8 @@ const cleanType = (t?: string | null) => {
 function umlLabel(
   name: string,
   attrs: { name: string; dtype?: string; shape?: string | null; card?: string | null; diff?: QtyDiffState }[],
-  methods: string[]
+  methods: string[],
+  showMetadata: boolean
 ) {
   const MAX_A = 18;
   const MAX_M = 14;
@@ -77,9 +79,9 @@ function umlLabel(
     if (a.diff === "changed") parts.push("🟠 ");
 
     parts.push(a.name);
-    const dt = cleanType(a.dtype);
+    const dt = showMetadata ? cleanType(a.dtype) : "";
     if (dt) parts.push(`: ${dt}`);
-    if (a.shape && a.shape !== "[]") parts.push(` ${a.shape}`);
+    if (showMetadata && a.shape && a.shape !== "[]") parts.push(` ${a.shape}`);
     if (a.card) parts.push(` [${a.card}]`);
     return parts.join("");
   });
@@ -93,7 +95,7 @@ function umlLabel(
   return lines.join("\n");
 }
 
-export default function GraphView({ nodes, edges, diff, onReady }: Props) {
+export default function GraphView({ nodes, edges, diff, onReady, showQuantityMetadata = true }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
 
@@ -271,7 +273,7 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
       elements.push({
         data: {
           id: secId,
-          label: umlLabel(sec.label, attrs, methods),
+          label: umlLabel(sec.label, attrs, methods, showQuantityMetadata),
           rawName: sec.label,
           kind: "uml_class",
           module: sec.module ?? "",
@@ -506,7 +508,7 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
       onReady?.(null);
       cyRef.current?.destroy();
     };
-  }, [sectionsMap, attrsMap, methodsMap, compEdges, quantitiesByOwner, diff, setSelected, onReady]);
+  }, [sectionsMap, attrsMap, methodsMap, compEdges, quantitiesByOwner, diff, setSelected, onReady, showQuantityMetadata]);
 
   return <div className="graph" ref={containerRef} />;
 }

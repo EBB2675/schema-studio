@@ -221,13 +221,55 @@ def _cardinality_from(obj) -> Optional[str]:
     return None
 
 
+def _ref_target_name(dtype_obj) -> Optional[str]:
+    """Best-effort human-friendly target for Reference-like dtypes."""
+
+    def _name_from_target(target: Any) -> Optional[str]:
+        cls = _resolve_section_class(target)
+        if cls is None:
+            cls = target if inspect.isclass(target) else getattr(target, "__class__", None)
+        if cls is None:
+            return None
+
+        # Prefer the section/class name without a long module prefix
+        name = getattr(cls, "__name__", None) or getattr(cls, "name", None)
+        if not name:
+            return None
+
+        mod = getattr(cls, "__module__", "")
+        if mod and not mod.startswith("builtins"):
+            mod_short = mod.rsplit(".", 1)[-1]
+            if mod_short and mod_short != name:
+                return f"{mod_short}.{name}"
+        return name
+
+    # Common attributes exposed by NOMAD Reference dtypes
+    for attr in (
+        "target_section_def",
+        "target_section_cls",
+        "target",
+        "section_def",
+        "section",
+    ):
+        if hasattr(dtype_obj, attr):
+            name = _name_from_target(getattr(dtype_obj, attr))
+            if name:
+                return name
+    return None
+
+
 def _dtype_from(q) -> Optional[str]:
     for attr in ("dtype", "type"):
-        if hasattr(q, attr):
-            try:
-                return str(getattr(q, attr))
-            except Exception:
-                pass
+        if not hasattr(q, attr):
+            continue
+        try:
+            dtype_obj = getattr(q, attr)
+            target = _ref_target_name(dtype_obj)
+            if target:
+                return f"Reference[{target}]"
+            return str(dtype_obj)
+        except Exception:
+            pass
     return None
 
 
