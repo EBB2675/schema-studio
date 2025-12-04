@@ -49,33 +49,33 @@ const UnderTheHoodPanel: React.FC<Props> = ({ apiBase }) => {
 
   return (
     <div className="panel under-the-hood-panel">
-      <h2>Under the hood</h2>
+      <div className="uth-header">
+        <div className="meta-label">Under the hood</div>
+        <div className="hint">Raw schema structure</div>
+      </div>
 
       {!selected || selected.kind !== 'class' ? (
-        <p>Select a section to see normalization and utility functions.</p>
+        <div className="uth-empty">Select a section to see normalization and utility functions.</div>
       ) : (
         <>
-          <h3>{selected.name}</h3>
+          <h3 className="uth-title">{selected.name}</h3>
 
-          {loading && <p>Loading…</p>}
+          {loading && <p className="uth-muted">Loading…</p>}
 
           {!loading && usage && usage.length === 0 && (
-            <p>No normalization or utility functions indexed for this section.</p>
+            <p className="uth-muted">No normalization or utility functions indexed for this section.</p>
           )}
 
           {!loading && usage && usage.length > 0 && (
-            <ul>
+            <ul className="uth-list">
               {usage.map((u) => (
-                <li key={u.qualname} style={{ marginBottom: '0.5rem' }}>
-                  <strong>{kindLabel[u.kind] ?? u.kind}</strong>
-                  <br />
-                  <code>{u.short_name}</code>{' '}
-                  <span style={{ opacity: 0.7 }}>({u.module})</span>
-                  {u.doc && (
-                    <div style={{ fontSize: '0.85rem', marginTop: '0.15rem' }}>
-                      {u.doc}
-                    </div>
-                  )}
+                <li key={u.qualname} className="uth-item">
+                  <div className="uth-kind">{kindLabel[u.kind] ?? u.kind}</div>
+                  <div className="uth-identifier">
+                    <code className="uth-name">{u.short_name}</code>
+                    <span className="uth-module">{u.module}</span>
+                  </div>
+                  {u.doc && <div className="uth-doc">{u.doc}</div>}
                 </li>
               ))}
             </ul>
