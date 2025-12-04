@@ -622,24 +622,26 @@ export default function App() {
             <span className="tag">{loading || diffLoading ? "Working…" : "Ready"}</span>
             {selectedClassName ? <span className="tag">Selected: {selectedClassName}</span> : null}
           </div>
-        </div>
-
-        <CollapsibleSection title="Appearance" hint="Dark vs light ambience">
-          <div className="toggle-group">
-            <button
-              className={`toggle-chip ${theme === "dark" ? "active" : ""}`}
-              onClick={() => setTheme("dark")}
-            >
-              Dark
-            </button>
-            <button
-              className={`toggle-chip ${theme === "light" ? "active" : ""}`}
-              onClick={() => setTheme("light")}
-            >
-              Light
-            </button>
+          <div style={{ marginTop: 12 }}>
+            <div className="label" style={{ marginBottom: 6 }}>
+              Appearance
+            </div>
+            <div className="toggle-group">
+              <button
+                className={`toggle-chip ${theme === "dark" ? "active" : ""}`}
+                onClick={() => setTheme("dark")}
+              >
+                Dark
+              </button>
+              <button
+                className={`toggle-chip ${theme === "light" ? "active" : ""}`}
+                onClick={() => setTheme("light")}
+              >
+                Light
+              </button>
+            </div>
           </div>
-        </CollapsibleSection>
+        </div>
 
         <CollapsibleSection title="Workspace" hint="Switch modes on the fly">
           <div className="row" style={{ gap: 10 }}>
