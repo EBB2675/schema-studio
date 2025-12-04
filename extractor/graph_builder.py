@@ -221,13 +221,61 @@ def _cardinality_from(obj) -> Optional[str]:
     return None
 
 
+def _ref_target_name(dtype_obj) -> Optional[str]:
+    """Best-effort human-friendly target for Reference-like dtypes."""
+
+    def _name_from_target(target: Any) -> Optional[str]:
+        cls = _resolve_section_class(target)
+        if cls is None:
+            cls = target if inspect.isclass(target) else None
+        if cls is None:
+            return None
+        mod = getattr(cls, "__module__", "")
+        name = getattr(cls, "__name__", None) or getattr(cls, "name", None)
+        return f"{mod}.{name}" if (mod and name) else name
+
+    # Common attributes exposed by NOMAD Reference dtypes
+    for attr in (
+        "target_section_def",
+        "target_section_cls",
+        "target",
+        "section_def",
+        "section",
+    ):
+        if hasattr(dtype_obj, attr):
+            name = _name_from_target(getattr(dtype_obj, attr))
+            if name:
+                return name
+    return None
+
+
 def _dtype_from(q) -> Optional[str]:
     for attr in ("dtype", "type"):
-        if hasattr(q, attr):
-            try:
-                return str(getattr(q, attr))
-            except Exception:
-                pass
+        if not hasattr(q, attr):
+            continue
+        try:
+            dtype_obj = getattr(q, attr)
+            target = _ref_target_name(dtype_obj)
+            if target:
+                return f"Reference[{target}]"
+
+            # If the object itself is a class, prefer its qualified name
+            if inspect.isclass(dtype_obj):
+                mod = getattr(dtype_obj, "__module__", "")
+                name = getattr(dtype_obj, "__name__", None) or str(dtype_obj)
+                return f"{mod}.{name}" if (mod and name) else name
+
+            # Otherwise use the class name instead of the default repr
+            cls = getattr(dtype_obj, "__class__", None)
+            if cls is not None and cls is not object:
+                mod = getattr(cls, "__module__", "")
+                name = getattr(cls, "__name__", None)
+                if name:
+                    return f"{mod}.{name}" if mod and not mod.startswith("builtins") else name
+
+            return str(dtype_obj)
+        except Exception:
+            pass
     return None
 
 
