@@ -12,6 +12,7 @@ dependencies = [
     "gitpython",
     "orjson",
     "httpx",
+    "nomad-lab>=1.2",
 ]
 
 [project.optional-dependencies]
