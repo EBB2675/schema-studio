@@ -941,7 +941,10 @@ export default function App() {
           ) : (
             <div className="empty-state">
               <div style={{ fontSize: 18, marginBottom: 8 }}>Build a diagram to get started</div>
-              <div>Select a package, load roots, pick a root, then “Build graph”; or compare two branches.</div>
+              <div>
+                Select a package (roots load automatically), pick a root, then “Build graph”; or compare two
+                branches.
+              </div>
             </div>
           )}
         </div>
