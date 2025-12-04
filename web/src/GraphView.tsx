@@ -368,12 +368,31 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
       } as any
     });
 
+    let handlePublished = false;
+
+    const publishHandle = () => {
+      if (handlePublished) return;
+      handlePublished = true;
+      onReady?.({
+        toPng: () =>
+          cyRef.current?.png({
+            full: true,
+            scale: 2,
+            bg: "#ffffff"
+          }) ?? null,
+        focusNode,
+      });
+    };
+
     const refitToContent = () => {
       cy.resize();
       cy.fit(undefined, 24);
     };
 
-    cy.one("layoutstop", refitToContent);
+    cy.one("layoutstop", () => {
+      refitToContent();
+      publishHandle();
+    });
 
     const resizeObserver = new ResizeObserver(() => refitToContent());
     resizeObserver.observe(containerRef.current);
@@ -439,14 +458,11 @@ export default function GraphView({ nodes, edges, diff, onReady }: Props) {
 
     cyRef.current = cy;
 
-    onReady?.({
-      toPng: () =>
-        cyRef.current?.png({
-          full: true,
-          scale: 2,
-          bg: "#ffffff"
-        }) ?? null,
-      focusNode,
+    cy.ready(() => {
+      // In rare cases ELK may not fire layoutstop (e.g., empty graphs);
+      // ensure the view centers and the handle is published once the core is ready.
+      refitToContent();
+      publishHandle();
     });
 
     // Diff highlights (unchanged)
