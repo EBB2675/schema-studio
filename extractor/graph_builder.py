@@ -259,22 +259,6 @@ def _ref_target_name(dtype_obj) -> Optional[str]:
 
 
 def _dtype_from(q) -> Optional[str]:
-    def _friendly_type_label(obj, prefer_class: bool = False) -> Optional[str]:
-        cls = obj if prefer_class else getattr(obj, "__class__", None)
-        if cls is None:
-            return None
-
-        mod = getattr(cls, "__module__", "")
-        name = getattr(cls, "__name__", None)
-        if not name:
-            return None
-
-        if mod and not mod.startswith("builtins"):
-            mod_short = mod.rsplit(".", 1)[-1]
-            if mod_short and mod_short != name:
-                return f"{mod_short}.{name}"
-        return name
-
     for attr in ("dtype", "type"):
         if not hasattr(q, attr):
             continue
@@ -283,11 +267,6 @@ def _dtype_from(q) -> Optional[str]:
             target = _ref_target_name(dtype_obj)
             if target:
                 return f"Reference[{target}]"
-
-            label = _friendly_type_label(dtype_obj, prefer_class=inspect.isclass(dtype_obj))
-            if label:
-                return label
-
             return str(dtype_obj)
         except Exception:
             pass
