@@ -227,12 +227,21 @@ def _ref_target_name(dtype_obj) -> Optional[str]:
     def _name_from_target(target: Any) -> Optional[str]:
         cls = _resolve_section_class(target)
         if cls is None:
-            cls = target if inspect.isclass(target) else None
+            cls = target if inspect.isclass(target) else getattr(target, "__class__", None)
         if cls is None:
             return None
-        mod = getattr(cls, "__module__", "")
+
+        # Prefer the section/class name without a long module prefix
         name = getattr(cls, "__name__", None) or getattr(cls, "name", None)
-        return f"{mod}.{name}" if (mod and name) else name
+        if not name:
+            return None
+
+        mod = getattr(cls, "__module__", "")
+        if mod and not mod.startswith("builtins"):
+            mod_short = mod.rsplit(".", 1)[-1]
+            if mod_short and mod_short != name:
+                return f"{mod_short}.{name}"
+        return name
 
     # Common attributes exposed by NOMAD Reference dtypes
     for attr in (
@@ -250,6 +259,22 @@ def _ref_target_name(dtype_obj) -> Optional[str]:
 
 
 def _dtype_from(q) -> Optional[str]:
+    def _friendly_type_label(obj, prefer_class: bool = False) -> Optional[str]:
+        cls = obj if prefer_class else getattr(obj, "__class__", None)
+        if cls is None:
+            return None
+
+        mod = getattr(cls, "__module__", "")
+        name = getattr(cls, "__name__", None)
+        if not name:
+            return None
+
+        if mod and not mod.startswith("builtins"):
+            mod_short = mod.rsplit(".", 1)[-1]
+            if mod_short and mod_short != name:
+                return f"{mod_short}.{name}"
+        return name
+
     for attr in ("dtype", "type"):
         if not hasattr(q, attr):
             continue
@@ -259,19 +284,9 @@ def _dtype_from(q) -> Optional[str]:
             if target:
                 return f"Reference[{target}]"
 
-            # If the object itself is a class, prefer its qualified name
-            if inspect.isclass(dtype_obj):
-                mod = getattr(dtype_obj, "__module__", "")
-                name = getattr(dtype_obj, "__name__", None) or str(dtype_obj)
-                return f"{mod}.{name}" if (mod and name) else name
-
-            # Otherwise use the class name instead of the default repr
-            cls = getattr(dtype_obj, "__class__", None)
-            if cls is not None and cls is not object:
-                mod = getattr(cls, "__module__", "")
-                name = getattr(cls, "__name__", None)
-                if name:
-                    return f"{mod}.{name}" if mod and not mod.startswith("builtins") else name
+            label = _friendly_type_label(dtype_obj, prefer_class=inspect.isclass(dtype_obj))
+            if label:
+                return label
 
             return str(dtype_obj)
         except Exception:
