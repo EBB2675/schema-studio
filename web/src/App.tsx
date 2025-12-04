@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import GraphView, { type GraphExportHandle } from "./GraphView";
 import DocPanel from "./components/DocPanel";
@@ -67,6 +67,19 @@ export default function App() {
     return initial;
   });
 
+  const appShellRef = useRef<HTMLElement | null>(null);
+  const workspaceRef = useRef<HTMLDivElement | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return 360;
+    const stored = Number.parseInt(window.localStorage.getItem("schema-uml-left-width") || "", 10);
+    return Number.isFinite(stored) ? stored : 360;
+  });
+  const [docPanelWidth, setDocPanelWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return 380;
+    const stored = Number.parseInt(window.localStorage.getItem("schema-uml-doc-width") || "", 10);
+    return Number.isFinite(stored) ? stored : 380;
+  });
+
   // branch diff state
   const [branches, setBranches] = useState<string[]>([]);
   const [baseBranch, setBaseBranch] = useState<string>("");
@@ -80,7 +93,7 @@ export default function App() {
   const [addErr, setAddErr] = useState<string | null>(null);
   const [quantityActionErr, setQuantityActionErr] = useState<string | null>(null);
 
-  const [exportHandle, setExportHandle] = useState<GraphExportHandle | null>(null);
+  const [graphHandle, setGraphHandle] = useState<GraphExportHandle | null>(null);
 
   const { selected, setSelected } = useSelection();
 
@@ -96,6 +109,65 @@ export default function App() {
     const parts = namespace.split(",").map((p) => p.trim()).filter(Boolean);
     return parts.length > 0 ? parts.join(",") : DEFAULT_NAMESPACE;
   }, [namespace]);
+
+  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+  const setSidebarWidthClamped = useCallback(
+    (value: number) => setSidebarWidth(clamp(value, 260, 520)),
+    []
+  );
+  const setDocPanelWidthClamped = useCallback(
+    (value: number) => setDocPanelWidth(clamp(value, 260, 640)),
+    []
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("schema-uml-left-width", String(clamp(sidebarWidth, 260, 520)));
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("schema-uml-doc-width", String(clamp(docPanelWidth, 260, 640)));
+  }, [docPanelWidth]);
+
+  const startSidebarResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const rect = appShellRef.current?.getBoundingClientRect();
+    const offsetLeft = rect?.left ?? 0;
+
+    const onMove = (evt: MouseEvent) => {
+      const next = evt.clientX - offsetLeft;
+      setSidebarWidthClamped(next);
+    };
+
+    const stop = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", stop);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", stop);
+  };
+
+  const startDocResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+
+    const onMove = (evt: MouseEvent) => {
+      const rect = workspaceRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const next = rect.right - evt.clientX;
+      setDocPanelWidthClamped(next);
+    };
+
+    const stop = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", stop);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", stop);
+  };
 
   // roots for selected package
   const loadRoots = async () => {
@@ -123,7 +195,7 @@ export default function App() {
     setQuantityActionErr(null);
     setLoading(true);
     setDiffData(null);
-    setExportHandle(null);
+    setGraphHandle(null);
     try {
       if (branchToUse) {
         const r = await api.post(
@@ -207,7 +279,7 @@ export default function App() {
     setQuantityActionErr(null);
     setDiffLoading(true);
     setGraph(null); // switch to diff mode
-    setExportHandle(null);
+    setGraphHandle(null);
     try {
       const r = await api.post(
         "/graph/diff",
@@ -323,6 +395,38 @@ export default function App() {
           : null;
 
   const currentGraph = diffData ? diffData.head?.graph ?? null : graph;
+
+  const focusRootSection = useCallback(() => {
+    const targetRoot = currentGraph?.root || root;
+    if (!targetRoot) return;
+
+    const handled = graphHandle?.focusNode(targetRoot);
+    if (handled) return;
+
+    const fallbackNode = currentGraph?.nodes?.find?.((n: any) => {
+      const label = (n as any).label || (n as any).rawName;
+      return n.id === targetRoot || label === targetRoot;
+    }) as any;
+
+    if (fallbackNode) {
+      setSelected({
+        id: fallbackNode.id,
+        kind: "class",
+        name: fallbackNode.label || fallbackNode.id,
+        doc: fallbackNode.doc || "",
+        path: fallbackNode.path || "",
+        line: typeof fallbackNode.line === "number" ? fallbackNode.line : undefined,
+        fqid:
+          fallbackNode.module && (fallbackNode.label || fallbackNode.id)
+            ? `${fallbackNode.module}.${fallbackNode.label || fallbackNode.id}`
+            : fallbackNode.id,
+      });
+    }
+  }, [currentGraph, graphHandle, root, setSelected]);
+
+  useEffect(() => {
+    focusRootSection();
+  }, [focusRootSection]);
 
   const handleOverviewClassSelect = (pkgName: string, className: string) => {
     setMode("graph");
@@ -443,9 +547,9 @@ export default function App() {
   };
 
   const exportPdf = () => {
-    if (!currentGraph || !exportHandle) return;
+    if (!currentGraph || !graphHandle) return;
 
-    const png = exportHandle.toPng();
+    const png = graphHandle.toPng();
     if (!png) return;
 
     const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
@@ -464,7 +568,11 @@ export default function App() {
   };
 
   return (
-    <main className="app-shell">
+    <main
+      className="app-shell"
+      ref={appShellRef}
+      style={{ gridTemplateColumns: `${sidebarWidth}px 10px 1fr` }}
+    >
       <aside className="sidebar">
         <div className="brand-card">
           <p className="eyebrow">Schema explorer</p>
@@ -649,8 +757,8 @@ export default function App() {
                   <button
                     className="btn secondary"
                     onClick={exportPdf}
-                    disabled={!exportHandle}
-                    title={exportHandle ? "Download current diagram as PDF" : "Build a graph first"}
+                    disabled={!graphHandle}
+                    title={graphHandle ? "Download current diagram as PDF" : "Build a graph first"}
                   >
                     Export PDF
                   </button>
@@ -712,9 +820,20 @@ export default function App() {
           </div>
         </CollapsibleSection>
       </aside>
+        <div
+          className="resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          onMouseDown={startSidebarResize}
+        />
 
       {/* Main workspace: Graph + Doc Panel side-by-side */}
-      <div className="workspace">
+      <div
+        className="workspace"
+        ref={workspaceRef}
+        style={{ gridTemplateColumns: `1fr 10px ${docPanelWidth}px` }}
+      >
         {/* Left: graph area */}
         <div
           style={{
@@ -741,7 +860,10 @@ export default function App() {
                   Base: {diffData.base.branch} ({diffData.base.sha.slice(0, 7)}) → Head: {diffData.head.branch}
                   ({diffData.head.sha.slice(0, 7)})
                 </div>
-                <div className="row" style={{ gap: 10 }}>
+                <div className="row" style={{ gap: 10, alignItems: "center" }}>
+                  <button className="btn secondary" type="button" onClick={focusRootSection}>
+                    Go to root
+                  </button>
                   <span className="pill">🟩 Added</span>
                   <span className="pill" style={{ background: "rgba(234, 179, 8, 0.18)", color: "#fef9c3" }}>
                     🟨 Changed
@@ -755,11 +877,22 @@ export default function App() {
                 nodes={diffData.head.graph.nodes}
                 edges={diffData.head.graph.edges}
                 diff={diffData.diff}
-                onReady={setExportHandle}
+                onReady={setGraphHandle}
               />
             </>
           ) : graph ? (
-            <GraphView nodes={graph.nodes} edges={graph.edges} onReady={setExportHandle} />
+            <>
+              <div className="workspace-toolbar" style={{ justifyContent: "space-between" }}>
+                <div>
+                  Root: <strong>{currentGraph?.root || root}</strong>
+                  {" "}from <strong>{currentGraph?.package || pkg}</strong>
+                </div>
+                <button className="btn secondary" type="button" onClick={focusRootSection}>
+                  Go to root
+                </button>
+              </div>
+              <GraphView nodes={graph.nodes} edges={graph.edges} onReady={setGraphHandle} />
+            </>
           ) : (
             <div className="empty-state">
               <div style={{ fontSize: 18, marginBottom: 8 }}>Build a diagram to get started</div>
@@ -767,6 +900,14 @@ export default function App() {
             </div>
           )}
         </div>
+
+        <div
+          className="resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize documentation panel"
+          onMouseDown={startDocResize}
+        />
 
         {/* Right: Documentation + quantity editing */}
         <div

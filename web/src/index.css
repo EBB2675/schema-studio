@@ -84,7 +84,7 @@ html, body, #root {
 
 main {
   display: grid;
-  grid-template-columns: 360px 1fr;
+  grid-template-columns: 360px 10px 1fr;
   height: 100%;
   backdrop-filter: blur(10px);
 }
@@ -268,9 +268,35 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
 
 .workspace {
   display: grid;
-  grid-template-columns: 1fr 380px;
+  grid-template-columns: 1fr 10px 380px;
   height: 100vh;
   overflow: hidden;
+}
+
+.resizer {
+  width: 10px;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.resizer::after {
+  content: "";
+  width: 2px;
+  height: 60%;
+  border-radius: 4px;
+  background: var(--panel-border);
+  transition: background 120ms ease, height 120ms ease;
+}
+
+.resizer:hover::after,
+.resizer:active::after,
+.resizer:focus-visible::after {
+  background: var(--accent);
+  height: 76%;
+  box-shadow: 0 0 0 2px var(--input-focus-shadow);
 }
 
 .workspace-toolbar {
