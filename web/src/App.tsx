@@ -142,7 +142,15 @@ export default function App() {
 
   useEffect(() => {
     if (!graphHandle) return;
+
     graphHandle.refit();
+    const t1 = window.setTimeout(() => graphHandle.refit(), 120);
+    const t2 = window.setTimeout(() => graphHandle.refit(), 360);
+
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
   }, [graphHandle, sidebarWidth, docPanelWidth]);
 
   useEffect(() => {
