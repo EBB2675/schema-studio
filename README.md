@@ -12,6 +12,10 @@ Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 - **Editable mode**: add, rename, or remove quantities directly in the UI (server validates supported dtypes).
 - **Export**: download the current graph as JSON or a PDF snapshot.
 
+## 🔧 Important note:
+
+Support for `nomad-measurements` is experimental and may behave in unexpected ways.
+
 ---
 
 # Overview
