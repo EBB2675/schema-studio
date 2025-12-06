@@ -18,6 +18,17 @@ type ApiGraph = {
   edges: any[];
 };
 
+type AuditEntry = {
+  id: string;
+  timestamp: string;
+  action: "add" | "edit" | "remove";
+  className: string;
+  quantity?: string;
+  details?: string;
+  pkg: string;
+  branch?: string;
+};
+
 const DEFAULT_API = "http://localhost:5179";
 const DEFAULT_PACKAGE = import.meta.env.VITE_DEFAULT_PACKAGE ?? "nomad_simulations.schema_packages.model_method";
 const DEFAULT_NAMESPACE =
@@ -104,6 +115,18 @@ export default function App() {
   const [diffData, setDiffData] = useState<any | null>(null);
   const [diffLoading, setDiffLoading] = useState<boolean>(false);
 
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem("schema-uml-audit");
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+
   // editable mode
   const [editableMode, setEditableMode] = useState<boolean>(false);
   const [addLoading, setAddLoading] = useState<boolean>(false);
@@ -120,6 +143,15 @@ export default function App() {
   const [mode, setMode] = useState<"graph" | "overview">("graph");
   const [overviewBranch, setOverviewBranch] = useState<string>(DEFAULT_BRANCH);
   const [packageBranch, setPackageBranch] = useState<string>(DEFAULT_BRANCH);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("schema-uml-audit", JSON.stringify(auditLog));
+    } catch {
+      // ignore storage errors
+    }
+  }, [auditLog]);
 
   const api = useMemo(() => {
     const instance = axios.create({ baseURL: apiBase });
@@ -178,6 +210,15 @@ export default function App() {
       window.localStorage.removeItem("schema-uml-token");
     }
   }, []);
+
+  const appendAudit = useCallback(
+    (entry: Omit<AuditEntry, "id" | "timestamp">) => {
+      const now = new Date().toISOString();
+      const id = `${now}-${Math.random().toString(16).slice(2)}`;
+      setAuditLog((prev) => [...prev, { ...entry, id, timestamp: now }]);
+    },
+    []
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -553,6 +594,14 @@ export default function App() {
       refreshSelectionQuantities(updated);
       setQuantityActionErr(null);
       syncWorkspaceFromResponse(r.data);
+      appendAudit({
+        action: "add",
+        className: selected.name,
+        quantity: quantityName,
+        details: `dtype=${dtype || "unspecified"}`,
+        pkg,
+        branch: workspace?.branch || packageBranch || baseBranch || headBranch,
+      });
     } catch (e: any) {
       setAddErr(e?.response?.data?.detail || String(e));
     } finally {
@@ -707,6 +756,14 @@ export default function App() {
     setGraph(nextGraph);
     refreshSelectionQuantities(nextGraph);
     setQuantityActionErr(null);
+    appendAudit({
+      action: "edit",
+      className: target.owner,
+      quantity: trimmedName,
+      details: `renamed from ${target.label}${target.dtype ? ` (${target.dtype})` : ""}`,
+      pkg,
+      branch: workspace?.branch || packageBranch || baseBranch || headBranch,
+    });
 
     if (selected?.kind === "quantity" && selected.id === quantityId) {
       setSelected({ ...selected, id: newId, name: trimmedName, doc: updates.docstring, dtype: updates.dtype, owner: selected.owner });
@@ -734,6 +791,14 @@ export default function App() {
     setGraph(nextGraph);
     refreshSelectionQuantities(nextGraph);
     setQuantityActionErr(null);
+    appendAudit({
+      action: "remove",
+      className: target.owner,
+      quantity: target.label,
+      details: "Removed quantity",
+      pkg,
+      branch: workspace?.branch || packageBranch || baseBranch || headBranch,
+    });
 
     if (selected?.kind === "quantity" && selected.id === quantityId) {
       setSelected(null);
@@ -770,6 +835,17 @@ export default function App() {
 
     pdf.addImage(png, "PNG", x, y, w, h);
     pdf.save(`${currentGraph.package}_${currentGraph.root || "all"}.pdf`);
+  };
+
+  const exportAuditLog = () => {
+    if (!auditLog.length) return;
+    const blob = new Blob([JSON.stringify(auditLog, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "schema-uml-audit-log.json";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   if (!token) {
@@ -1245,6 +1321,73 @@ export default function App() {
                   submitting={addLoading}
                   error={addErr}
                 />
+              </div>
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Audit trail"
+              hint="Track edits and export"
+              className="panel"
+            >
+              <div className="action-stack" style={{ gap: 10 }}>
+                <div className="row" style={{ gap: 8 }}>
+                  <button
+                    className="btn secondary"
+                    type="button"
+                    onClick={exportAuditLog}
+                    disabled={!auditLog.length}
+                    title={auditLog.length ? "Download audit log as JSON" : "No edits recorded yet"}
+                  >
+                    Export JSON
+                  </button>
+                  <button
+                    className="btn secondary"
+                    type="button"
+                    onClick={() => setAuditLog([])}
+                    disabled={!auditLog.length}
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div className="small" style={{ color: "var(--muted)" }}>
+                  {auditLog.length ? `${auditLog.length} edits recorded` : "No edits yet"}
+                </div>
+                <div
+                  style={{
+                    maxHeight: 240,
+                    overflowY: "auto",
+                    border: "1px solid var(--panel-border)",
+                    borderRadius: 10,
+                    padding: 8,
+                    background: "var(--panel)",
+                    fontSize: 12
+                  }}
+                >
+                  {[...auditLog].reverse().map((entry) => (
+                    <div
+                      key={entry.id}
+                      style={{
+                        padding: "6px 8px",
+                        borderBottom: "1px solid var(--panel-border)",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                        <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{entry.action}</span>
+                        <span style={{ color: "var(--muted)" }}>
+                          {new Date(entry.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                      <div style={{ color: "var(--subtitle)" }}>
+                        {entry.className}
+                        {entry.quantity ? ` · ${entry.quantity}` : ""}
+                      </div>
+                      <div style={{ color: "var(--muted)" }}>
+                        {entry.pkg}{entry.branch ? ` @ ${entry.branch}` : ""}
+                      </div>
+                      {entry.details ? <div>{entry.details}</div> : null}
+                    </div>
+                  ))}
+                </div>
               </div>
             </CollapsibleSection>
           </div>
