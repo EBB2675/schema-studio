@@ -9,7 +9,10 @@ cytoscape.use(elk);
 
 async function fetchGraph(): Promise<GraphPayload> {
   // Adjust to backend route if different
-  const res = await fetch('/api/graph');
+  const token = typeof window !== 'undefined' ? window.localStorage.getItem('schema-uml-token') : '';
+  const res = await fetch('/api/graph', {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
   if (!res.ok) throw new Error(`Graph fetch failed: ${res.status}`);
   const payload = (await res.json()) as GraphPayload;
 

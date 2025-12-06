@@ -11,6 +11,7 @@ type UsageEntry = {
 
 type Props = {
   apiBase: string;
+  token?: string;
 };
 
 const kindLabel: Record<string, string> = {
@@ -19,7 +20,7 @@ const kindLabel: Record<string, string> = {
   utility_function: 'Utility',
 };
 
-const UnderTheHoodPanel: React.FC<Props> = ({ apiBase }) => {
+const UnderTheHoodPanel: React.FC<Props> = ({ apiBase, token }) => {
   const { selected } = useSelection();
   const [usage, setUsage] = useState<UsageEntry[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -35,10 +36,13 @@ const UnderTheHoodPanel: React.FC<Props> = ({ apiBase }) => {
     const sectionId = selected.id; // fully-qualified id from backend
 
     setLoading(true);
-    fetch(`${apiBase}/usage?section_id=${encodeURIComponent(sectionId)}`)
+    fetch(`${apiBase}/usage?section_id=${encodeURIComponent(sectionId)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    })
       .then((res) => (res.ok ? res.json() : []))
-      .then((data: UsageEntry[]) => {
-        setUsage(data);
+      .then((data: UsageEntry[] | { usage?: UsageEntry[] }) => {
+        const payload = Array.isArray(data) ? data : data?.usage;
+        setUsage(payload ?? []);
         setLoading(false);
       })
       .catch(() => {

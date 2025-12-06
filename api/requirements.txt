@@ -5,3 +5,4 @@ networkx
 gitpython
 orjson
 httpx
+PyJWT

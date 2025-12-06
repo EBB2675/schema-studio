@@ -1,8 +1,11 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import List, Tuple
+import os
 import shutil
+
 from git import Repo, GitCommandError
+
 from .settings import DATA_DIR, SCHEMA_REPO, _repo_slug
 
 def _bare_dir(src: str) -> Path:
@@ -55,7 +58,8 @@ def list_branches(src: str = SCHEMA_REPO) -> List[str]:
     except Exception as e:
         print("DEBUG: could not read remote refs:", e)
 
-    print("DEBUG: branches seen by backend:", sorted(names))
+    if os.getenv("SCHEMA_UML_DEBUG_BRANCHES", "").lower() in {"1", "true", "yes"}:
+        print("DEBUG: branches seen by backend:", sorted(names))
     return sorted(names)
 
 def materialize_worktree(branch: str, src: str = SCHEMA_REPO) -> Tuple[Path, str]:

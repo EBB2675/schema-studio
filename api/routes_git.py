@@ -1,18 +1,19 @@
 # api/routes_git.py
 from __future__ import annotations
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from pathlib import Path
 from typing import Optional, List
-from .settings import DEFAULT_PACKAGE, DEFAULT_BASE_PACKAGE, repo_for_base_namespace
+from .settings import DEFAULT_PACKAGE, DEFAULT_BASE_PACKAGE, DEFAULT_BRANCH, repo_for_base_namespace
 from .git_utils import list_branches, materialize_worktree
 from .graph_runner import build_graph_in_subprocess
 from .diff import diff_graphs
+from .auth import get_user_and_workspace, update_workspace, workspace_payload
 
 router = APIRouter()
 
 class GraphRequest(BaseModel):
-    branch: str
+    branch: Optional[str] = None
     package: Optional[str] = None
     extractor: Optional[str] = None  # "extractor.build:build_graph" by default
 
@@ -101,9 +102,17 @@ def _primary_repo(package: str | None, base_namespace: str | None) -> str:
 
 
 @router.get("/git/branches")
-def api_branches(base_package: str = Query(DEFAULT_BASE_PACKAGE)):
+def api_branches(
+    base_package: str | None = Query(None),
+    user_ws=Depends(get_user_and_workspace),
+):
     try:
-        bases = _parse_base_packages(base_package)
+        user, workspace = user_ws
+        namespace = base_package or workspace.get("base_namespace") or DEFAULT_BASE_PACKAGE
+        if base_package:
+            workspace = update_workspace(user["id"], base_namespace=namespace)
+
+        bases = _parse_base_packages(namespace)
         repos = _bases_by_repo(bases) if bases else {repo_for_base_namespace(DEFAULT_BASE_PACKAGE): []}
 
         names: set[str] = set()
@@ -118,15 +127,16 @@ def api_branches(base_package: str = Query(DEFAULT_BASE_PACKAGE)):
         if not names and errors:
             raise HTTPException(500, "; ".join(errors))
 
-        return {"branches": sorted(names), "errors": errors or None}
+        return {"branches": sorted(names), "errors": errors or None, "workspace": workspace_payload(workspace)}
     except Exception as e:
         raise HTTPException(500, str(e))
 
 
 @router.get("/git/packages")
 def api_packages(
-    branch: str = Query("develop"),
-    base_package: str = Query(DEFAULT_BASE_PACKAGE),
+    branch: str | None = Query(None),
+    base_package: str | None = Query(None),
+    user_ws=Depends(get_user_and_workspace),
 ):
     """
     List Python modules under `base_package` for the given branch.
@@ -134,8 +144,14 @@ def api_packages(
     Intended use: populate the “Package (module)” dropdown in the UI.
     """
     try:
+        user, workspace = user_ws
+        branch_to_use = branch or workspace.get("branch") or DEFAULT_BRANCH
+        base_to_use = base_package or workspace.get("base_namespace") or DEFAULT_BASE_PACKAGE
+        if branch or base_package:
+            workspace = update_workspace(user["id"], branch=branch_to_use, base_namespace=base_to_use)
+
         # materialize_worktree returns (worktree_path, sha)
-        base_packages = _parse_base_packages(base_package)
+        base_packages = _parse_base_packages(base_to_use)
         if not base_packages:
             raise HTTPException(400, "Provide at least one base package")
 
@@ -145,7 +161,7 @@ def api_packages(
 
         for repo_src, bases in _bases_by_repo(base_packages).items():
             try:
-                wt, sha = materialize_worktree(branch, repo_src)
+                wt, sha = materialize_worktree(branch_to_use, repo_src)
             except Exception as e:
                 errors.append(f"{repo_src}: {e}")
                 continue
@@ -160,13 +176,14 @@ def api_packages(
             raise HTTPException(500, "; ".join(errors))
 
         return {
-            "branch": branch,
+            "branch": branch_to_use,
             "sha": repo_shas[0]["sha"] if repo_shas else None,
             "repositories": repo_shas,
-            "base_package": base_package,
+            "base_package": base_to_use,
             "base_packages": base_packages,
             "packages": sorted(packages),
             "errors": errors or None,
+            "workspace": workspace_payload(workspace),
         }
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -180,22 +197,27 @@ def api_graph(
     include_quantities: bool = Query(True),
     include_subsections: bool = Query(True),
     allow_cross_module: bool = Query(True),
+    user_ws=Depends(get_user_and_workspace),
 ):
-    pkg = req.package or DEFAULT_PACKAGE
+    user, workspace = user_ws
+    pkg = req.package or workspace.get("package") or DEFAULT_PACKAGE
+    namespace = base_namespace or workspace.get("base_namespace") or DEFAULT_BASE_PACKAGE
+    branch = req.branch or workspace.get("branch") or DEFAULT_BRANCH
+    workspace = update_workspace(user["id"], branch=branch, package=pkg, base_namespace=namespace)
     try:
-        repo_src = _primary_repo(pkg, base_namespace)
-        wt, sha = materialize_worktree(req.branch, repo_src)
+        repo_src = _primary_repo(pkg, namespace)
+        wt, sha = materialize_worktree(branch, repo_src)
         graph = build_graph_in_subprocess(
             wt,
             pkg,
             req.extractor,
-            base_namespace=base_namespace,
+            base_namespace=namespace,
             root=root,
             include_quantities=include_quantities,
             include_subsections=include_subsections,
             allow_cross_module=allow_cross_module,
         )
-        return {"branch": req.branch, "sha": sha, "graph": graph}
+        return {"branch": branch, "sha": sha, "graph": graph, "workspace": workspace_payload(workspace)}
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -207,11 +229,15 @@ def api_diff(
     include_quantities: bool = Query(True),
     include_subsections: bool = Query(True),
     allow_cross_module: bool = Query(True),
-    base_namespace: str | None = Query(None)
+    base_namespace: str | None = Query(None),
+    user_ws=Depends(get_user_and_workspace),
 ):
-    pkg = req.package or DEFAULT_PACKAGE
+    user, workspace = user_ws
+    pkg = req.package or workspace.get("package") or DEFAULT_PACKAGE
+    namespace = base_namespace or workspace.get("base_namespace") or DEFAULT_BASE_PACKAGE
+    workspace = update_workspace(user["id"], branch=req.head, package=pkg, base_namespace=namespace)
     try:
-        repo_src = _primary_repo(pkg, base_namespace)
+        repo_src = _primary_repo(pkg, namespace)
         wtb, shab = materialize_worktree(req.base, repo_src)
         wth, shah = materialize_worktree(req.head, repo_src)
 
@@ -220,7 +246,7 @@ def api_diff(
             "include_quantities": include_quantities,
             "include_subsections": include_subsections,
             "allow_cross_module": allow_cross_module,
-            "base_namespace": base_namespace,
+            "base_namespace": namespace,
         }
 
         gA = build_graph_in_subprocess(wtb, pkg, req.extractor, **opts)
@@ -229,7 +255,8 @@ def api_diff(
         return {
             "base": {"branch": req.base, "sha": shab, "graph": gA},
             "head": {"branch": req.head, "sha": shah, "graph": gB},
-            "diff": diff
+            "diff": diff,
+            "workspace": workspace_payload(workspace),
         }
     except Exception as e:
         raise HTTPException(500, str(e))

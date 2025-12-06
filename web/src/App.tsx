@@ -1,3 +1,4 @@
+import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import GraphView, { type GraphExportHandle } from "./GraphView";
@@ -15,6 +16,17 @@ type ApiGraph = {
   root: string | null;
   nodes: any[];
   edges: any[];
+};
+
+type AuditEntry = {
+  id: string;
+  timestamp: string;
+  action: "add" | "edit" | "remove";
+  className: string;
+  quantity?: string;
+  details?: string;
+  pkg: string;
+  branch?: string;
 };
 
 const DEFAULT_API = "http://localhost:5179";
@@ -41,8 +53,23 @@ const WORKSPACE_PRESETS = [
   },
 ];
 
+type WorkspaceState = {
+  branch: string;
+  package: string;
+  base_namespace: string;
+};
+
 export default function App() {
   const apiBase = DEFAULT_API;
+  const [token, setToken] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem("schema-uml-token") || "";
+  });
+  const [userName, setUserName] = useState<string | null>(null);
+  const [workspace, setWorkspace] = useState<WorkspaceState | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [loginUsername, setLoginUsername] = useState<string>("admin");
+  const [loginPassword, setLoginPassword] = useState<string>("admin");
   const [pkg, setPkg] = useState<string>(DEFAULT_PACKAGE);
   const [availablePkgs, setAvailablePkgs] = useState<string[]>([]);
   const [roots, setRoots] = useState<string[]>([]);
@@ -88,6 +115,18 @@ export default function App() {
   const [diffData, setDiffData] = useState<any | null>(null);
   const [diffLoading, setDiffLoading] = useState<boolean>(false);
 
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem("schema-uml-audit");
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+
   // editable mode
   const [editableMode, setEditableMode] = useState<boolean>(false);
   const [addLoading, setAddLoading] = useState<boolean>(false);
@@ -105,11 +144,107 @@ export default function App() {
   const [overviewBranch, setOverviewBranch] = useState<string>(DEFAULT_BRANCH);
   const [packageBranch, setPackageBranch] = useState<string>(DEFAULT_BRANCH);
 
-  const api = useMemo(() => axios.create({ baseURL: apiBase }), []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("schema-uml-audit", JSON.stringify(auditLog));
+    } catch {
+      // ignore storage errors
+    }
+  }, [auditLog]);
+
+  const api = useMemo(() => {
+    const instance = axios.create({ baseURL: apiBase });
+    instance.interceptors.request.use((config) => {
+      if (token) {
+        config.headers = config.headers ?? {};
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      return config;
+    });
+    return instance;
+  }, [apiBase, token]);
   const normalizedNamespace = useMemo(() => {
     const parts = namespace.split(",").map((p) => p.trim()).filter(Boolean);
     return parts.length > 0 ? parts.join(",") : DEFAULT_NAMESPACE;
   }, [namespace]);
+
+  const applyWorkspace = useCallback((ws: WorkspaceState | null) => {
+    if (!ws) return;
+    setWorkspace(ws);
+    if (ws.package) setPkg(ws.package);
+    if (ws.base_namespace) setNamespace(ws.base_namespace);
+    if (ws.branch) {
+      setPackageBranch(ws.branch);
+      setOverviewBranch(ws.branch);
+      setBaseBranch((prev) => prev || ws.branch);
+      setHeadBranch((prev) => prev || ws.branch);
+    }
+  }, []);
+
+  const syncWorkspaceFromResponse = useCallback(
+    (payload: any) => {
+      if (payload?.workspace) applyWorkspace(payload.workspace as WorkspaceState);
+    },
+    [applyWorkspace]
+  );
+
+  const updateWorkspaceOnServer = useCallback(
+    async (updates: Partial<WorkspaceState>) => {
+      if (!token) return;
+      try {
+        const res = await api.put("/workspace", updates);
+        applyWorkspace(res.data.workspace as WorkspaceState);
+      } catch (error) {
+        console.error("Failed to update workspace", error);
+      }
+    },
+    [api, applyWorkspace, token]
+  );
+
+  const logout = useCallback(() => {
+    setToken("");
+    setWorkspace(null);
+    setUserName(null);
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("schema-uml-token");
+    }
+  }, []);
+
+  const appendAudit = useCallback(
+    (entry: Omit<AuditEntry, "id" | "timestamp">) => {
+      const now = new Date().toISOString();
+      const id = `${now}-${Math.random().toString(16).slice(2)}`;
+      setAuditLog((prev) => [...prev, { ...entry, id, timestamp: now }]);
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (token) {
+      window.localStorage.setItem("schema-uml-token", token);
+    } else {
+      window.localStorage.removeItem("schema-uml-token");
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) {
+      setWorkspace(null);
+      return;
+    }
+    api
+      .get("/workspace")
+      .then((res) => {
+        applyWorkspace(res.data.workspace as WorkspaceState);
+        setAuthError(null);
+      })
+      .catch((error) => {
+        setAuthError(error?.response?.data?.detail || String(error));
+        logout();
+      });
+  }, [api, applyWorkspace, logout, token]);
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
   const clampDocWidth = useCallback((value: number) => {
@@ -168,6 +303,33 @@ export default function App() {
     return () => observer.disconnect();
   }, [clampDocWidth]);
 
+  const handleLogin = async (e: FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    try {
+      const res = await axios.post(`${apiBase}/auth/login`, {
+        username: loginUsername,
+        password: loginPassword,
+      });
+      const nextToken = res.data.access_token as string;
+      setToken(nextToken);
+      setUserName(res.data.user?.username ?? loginUsername);
+      applyWorkspace(res.data.workspace as WorkspaceState);
+    } catch (error: any) {
+      setAuthError(error?.response?.data?.detail || String(error));
+    }
+  };
+
+  useEffect(() => {
+    if (!workspace || !token) return;
+    const updates: Partial<WorkspaceState> = {};
+    const desiredBranch = packageBranch || workspace.branch;
+    if (workspace.package !== pkg) updates.package = pkg;
+    if (workspace.base_namespace !== normalizedNamespace) updates.base_namespace = normalizedNamespace;
+    if (workspace.branch !== desiredBranch) updates.branch = desiredBranch;
+    if (Object.keys(updates).length > 0) updateWorkspaceOnServer(updates);
+  }, [normalizedNamespace, packageBranch, pkg, token, updateWorkspaceOnServer, workspace]);
+
   const startSidebarResize = (e: React.MouseEvent) => {
     e.preventDefault();
     const rect = appShellRef.current?.getBoundingClientRect();
@@ -207,27 +369,33 @@ export default function App() {
   };
 
   // roots for selected package
-  const loadRoots = async () => {
+  const loadRoots = useCallback(async () => {
+    if (!token) return;
     setErr(null);
     try {
       const r = await api.get("/roots", { params: { package: pkg } });
       const list = r.data.sections || [];
       setRoots(list);
       if (list.length > 0 && !list.includes(root)) setRoot(list[0]);
+      syncWorkspaceFromResponse(r.data);
     } catch (e: any) {
       setErr(e?.response?.data?.detail || String(e));
       setRoots([]);
     }
-  };
+  }, [api, pkg, root, syncWorkspaceFromResponse, token]);
 
   // build single-branch graph (resets diff view)
-  const loadGraph = async (
+  const loadGraph = useCallback(async (
     overrides?: { pkg?: string; root?: string; namespace?: string; branch?: string }
   ) => {
+    if (!token) {
+      setErr("Login required");
+      return;
+    }
     const pkgToUse = overrides?.pkg ?? pkg;
     const rootToUse = overrides?.root ?? root;
     const namespaceToUse = overrides?.namespace ?? normalizedNamespace;
-    const branchToUse = overrides?.branch ?? "";
+    const branchToUse = overrides?.branch ?? workspace?.branch ?? "";
     setErr(null);
     setQuantityActionErr(null);
     setLoading(true);
@@ -252,6 +420,7 @@ export default function App() {
           }
         );
         setGraph(r.data?.graph ?? null);
+        syncWorkspaceFromResponse(r.data);
       } else {
         const r = await api.get("/schema", {
           params: {
@@ -264,6 +433,7 @@ export default function App() {
           },
         });
         setGraph(r.data);
+        syncWorkspaceFromResponse(r.data);
       }
     } catch (e: any) {
       setErr(e?.response?.data?.detail || String(e));
@@ -271,21 +441,24 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [api, crossModules, includeQuantities, includeSubsections, normalizedNamespace, pkg, root, syncWorkspaceFromResponse, token, workspace?.branch]);
 
   // fetch git branches
-  const loadBranches = async () => {
+  const loadBranches = useCallback(async () => {
+    if (!token) return;
     try {
       const r = await api.get("/git/branches", { params: { base_package: normalizedNamespace } });
       setBranches(r.data.branches || []);
+      syncWorkspaceFromResponse(r.data);
     } catch (e) {
       // keep silent in UI; dropdown will just be empty
       console.error("Failed to load branches", e);
     }
-  };
+  }, [api, normalizedNamespace, syncWorkspaceFromResponse, token]);
 
   // fetch available schema packages from develop branch
-  const loadPackages = async () => {
+  const loadPackages = useCallback(async () => {
+    if (!token) return;
     setErr(null);
     try {
       const r = await api.get("/git/packages", {
@@ -296,6 +469,7 @@ export default function App() {
       });
       const list: string[] = r.data.packages || [];
       setAvailablePkgs(list);
+      syncWorkspaceFromResponse(r.data);
 
       // if current pkg is not in the list, default to the first entry
       if (list.length > 0 && !list.includes(pkg)) {
@@ -307,10 +481,21 @@ export default function App() {
       // surface the error so users know why the dropdown is empty
       setErr((e as any)?.response?.data?.detail || String(e));
     }
-  };
+  }, [api, normalizedNamespace, packageBranch, pkg, syncWorkspaceFromResponse, token]);
+
+  useEffect(() => {
+    if (!workspace || !token) return;
+    loadBranches();
+    loadPackages();
+    loadRoots();
+  }, [loadBranches, loadPackages, loadRoots, token, workspace]);
 
   // compare base/head using same filters as sidebar
   const compareBranches = async () => {
+    if (!token) {
+      setErr("Login required");
+      return;
+    }
     if (!baseBranch || !headBranch) return;
     setErr(null);
     setQuantityActionErr(null);
@@ -336,6 +521,7 @@ export default function App() {
         }
       );
       setDiffData(r.data);
+      syncWorkspaceFromResponse(r.data);
     } catch (e: any) {
       setErr(e?.response?.data?.detail || String(e));
       setDiffData(null);
@@ -369,6 +555,10 @@ export default function App() {
   }, [theme]);
 
   const addCustomQuantity = async ({ quantityName, dtype, docstring }: { quantityName: string; dtype: string; docstring: string }) => {
+    if (!token) {
+      setAddErr("Login required");
+      return;
+    }
     if (!graph) {
       setAddErr("Build a graph first to add a quantity.");
       return;
@@ -403,6 +593,15 @@ export default function App() {
       setGraph(updated);
       refreshSelectionQuantities(updated);
       setQuantityActionErr(null);
+      syncWorkspaceFromResponse(r.data);
+      appendAudit({
+        action: "add",
+        className: selected.name,
+        quantity: quantityName,
+        details: `dtype=${dtype || "unspecified"}`,
+        pkg,
+        branch: workspace?.branch || packageBranch || baseBranch || headBranch,
+      });
     } catch (e: any) {
       setAddErr(e?.response?.data?.detail || String(e));
     } finally {
@@ -432,6 +631,24 @@ export default function App() {
           : null;
 
   const currentGraph = diffData ? diffData.head?.graph ?? null : graph;
+
+  const handleBranchSelect = (value: string) => {
+    setPackageBranch(value);
+    setOverviewBranch(value);
+    setBaseBranch((prev) => prev || value);
+    setHeadBranch((prev) => prev || value);
+    updateWorkspaceOnServer({ branch: value });
+  };
+
+  const handlePackageSelect = (value: string) => {
+    setPkg(value);
+    updateWorkspaceOnServer({ package: value });
+  };
+
+  const handleNamespaceChange = (value: string) => {
+    setNamespace(value);
+    updateWorkspaceOnServer({ base_namespace: value });
+  };
 
   const focusRootSection = useCallback(() => {
     const targetRoot = currentGraph?.root || root;
@@ -539,6 +756,14 @@ export default function App() {
     setGraph(nextGraph);
     refreshSelectionQuantities(nextGraph);
     setQuantityActionErr(null);
+    appendAudit({
+      action: "edit",
+      className: target.owner,
+      quantity: trimmedName,
+      details: `renamed from ${target.label}${target.dtype ? ` (${target.dtype})` : ""}`,
+      pkg,
+      branch: workspace?.branch || packageBranch || baseBranch || headBranch,
+    });
 
     if (selected?.kind === "quantity" && selected.id === quantityId) {
       setSelected({ ...selected, id: newId, name: trimmedName, doc: updates.docstring, dtype: updates.dtype, owner: selected.owner });
@@ -566,6 +791,14 @@ export default function App() {
     setGraph(nextGraph);
     refreshSelectionQuantities(nextGraph);
     setQuantityActionErr(null);
+    appendAudit({
+      action: "remove",
+      className: target.owner,
+      quantity: target.label,
+      details: "Removed quantity",
+      pkg,
+      branch: workspace?.branch || packageBranch || baseBranch || headBranch,
+    });
 
     if (selected?.kind === "quantity" && selected.id === quantityId) {
       setSelected(null);
@@ -603,6 +836,53 @@ export default function App() {
     pdf.addImage(png, "PNG", x, y, w, h);
     pdf.save(`${currentGraph.package}_${currentGraph.root || "all"}.pdf`);
   };
+
+  const exportAuditLog = () => {
+    if (!auditLog.length) return;
+    const blob = new Blob([JSON.stringify(auditLog, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "schema-uml-audit-log.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (!token) {
+    return (
+      <main className="app-shell" ref={appShellRef} style={{ gridTemplateColumns: `${sidebarWidth}px 10px 1fr` }}>
+        <div className="sidebar" style={{ gridColumn: "1 / span 3", padding: 24 }}>
+          <h2>Sign in</h2>
+          <p className="subdued">Authenticate to load your personalized workspace.</p>
+          <form className="action-stack" onSubmit={handleLogin} style={{ maxWidth: 360 }}>
+            <label className="label">Username</label>
+            <input className="input" value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} />
+            <label className="label">Password</label>
+            <input
+              className="input"
+              type="password"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+            />
+            <button className="btn" type="submit">
+              Sign in
+            </button>
+            {authError ? <p style={{ color: "#fca5a5" }}>{authError}</p> : null}
+          </form>
+        </div>
+      </main>
+    );
+  }
+
+  if (!workspace) {
+    return (
+      <main className="app-shell" ref={appShellRef} style={{ gridTemplateColumns: `${sidebarWidth}px 10px 1fr` }}>
+        <div className="sidebar" style={{ gridColumn: "1 / span 3", padding: 24 }}>
+          <p>Loading workspace…</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main
@@ -643,6 +923,18 @@ export default function App() {
           </div>
         </div>
 
+        <div className="brand-card">
+          <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <p className="eyebrow">Signed in</p>
+              <h4 style={{ margin: 0 }}>{userName ?? "User"}</h4>
+            </div>
+            <button className="btn secondary" onClick={logout} type="button">
+              Logout
+            </button>
+          </div>
+        </div>
+
         <CollapsibleSection title="Workspace" hint="Switch modes on the fly">
           <div className="row" style={{ gap: 10 }}>
             <button
@@ -658,7 +950,7 @@ export default function App() {
                 <select
                   className="select"
                   value={overviewBranch}
-                  onChange={(e) => setOverviewBranch(e.target.value)}
+                  onChange={(e) => handleBranchSelect(e.target.value)}
                 >
                   {[overviewBranch || DEFAULT_BRANCH, ...branches.filter((b) => b !== overviewBranch)].map((b) => (
                     <option key={b} value={b}>{b}</option>
@@ -673,12 +965,11 @@ export default function App() {
                 key={ws.namespace}
                 className={`toggle-chip ${normalizedNamespace === ws.namespace ? "active" : ""}`}
                 onClick={() => {
-                  setNamespace(ws.namespace);
+                  handleNamespaceChange(ws.namespace);
                   if (ws.branch) {
-                    setOverviewBranch(ws.branch);
-                    setPackageBranch(ws.branch);
+                    handleBranchSelect(ws.branch);
                   }
-                  if (ws.pkg) setPkg(ws.pkg);
+                  if (ws.pkg) handlePackageSelect(ws.pkg);
                   if (ws.root) setRoot(ws.root);
                 }}
                 title={`Set base namespace to ${ws.namespace}`}
@@ -696,7 +987,7 @@ export default function App() {
               <input
                 className="input"
                 value={pkg}
-                onChange={(e) => setPkg(e.target.value)}
+                onChange={(e) => handlePackageSelect(e.target.value)}
                 placeholder={DEFAULT_PACKAGE}
               />
             </div>
@@ -707,7 +998,7 @@ export default function App() {
                 <select
                   className="select"
                   value={packageBranch}
-                  onChange={(e) => setPackageBranch(e.target.value)}
+                  onChange={(e) => handleBranchSelect(e.target.value)}
                 >
                   {[packageBranch || DEFAULT_BRANCH, ...branches.filter((b) => b !== packageBranch)].map((b) => (
                     <option key={b} value={b}>
@@ -726,7 +1017,7 @@ export default function App() {
               <select
                 className="select"
                 value={availablePkgs.includes(pkg) ? pkg : ""}
-                onChange={(e) => setPkg(e.target.value)}
+                onChange={(e) => handlePackageSelect(e.target.value)}
               >
                 <option value="">Custom package...</option>
                 {availablePkgs.map((name) => (
@@ -814,7 +1105,7 @@ export default function App() {
         </CollapsibleSection>
 
         <CollapsibleSection title="Under the hood" hint="Raw schema structure">
-          <UnderTheHoodPanel apiBase={apiBase} />
+          <UnderTheHoodPanel apiBase={apiBase} token={token} />
         </CollapsibleSection>
 
         <CollapsibleSection title="Compare branches" hint="Diff diagrams across git">
@@ -891,6 +1182,7 @@ export default function App() {
                 apiBase={apiBase}
                 branch={overviewBranch}
                 base={normalizedNamespace}
+                token={token}
                 onClassSelect={handleOverviewClassSelect}
               />
             </div>
@@ -1029,6 +1321,73 @@ export default function App() {
                   submitting={addLoading}
                   error={addErr}
                 />
+              </div>
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Audit trail"
+              hint="Track edits and export"
+              className="panel"
+            >
+              <div className="action-stack" style={{ gap: 10 }}>
+                <div className="row" style={{ gap: 8 }}>
+                  <button
+                    className="btn secondary"
+                    type="button"
+                    onClick={exportAuditLog}
+                    disabled={!auditLog.length}
+                    title={auditLog.length ? "Download audit log as JSON" : "No edits recorded yet"}
+                  >
+                    Export JSON
+                  </button>
+                  <button
+                    className="btn secondary"
+                    type="button"
+                    onClick={() => setAuditLog([])}
+                    disabled={!auditLog.length}
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div className="small" style={{ color: "var(--muted)" }}>
+                  {auditLog.length ? `${auditLog.length} edits recorded` : "No edits yet"}
+                </div>
+                <div
+                  style={{
+                    maxHeight: 240,
+                    overflowY: "auto",
+                    border: "1px solid var(--panel-border)",
+                    borderRadius: 10,
+                    padding: 8,
+                    background: "var(--panel)",
+                    fontSize: 12
+                  }}
+                >
+                  {[...auditLog].reverse().map((entry) => (
+                    <div
+                      key={entry.id}
+                      style={{
+                        padding: "6px 8px",
+                        borderBottom: "1px solid var(--panel-border)",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                        <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{entry.action}</span>
+                        <span style={{ color: "var(--muted)" }}>
+                          {new Date(entry.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                      <div style={{ color: "var(--subtitle)" }}>
+                        {entry.className}
+                        {entry.quantity ? ` · ${entry.quantity}` : ""}
+                      </div>
+                      <div style={{ color: "var(--muted)" }}>
+                        {entry.pkg}{entry.branch ? ` @ ${entry.branch}` : ""}
+                      </div>
+                      {entry.details ? <div>{entry.details}</div> : null}
+                    </div>
+                  ))}
+                </div>
               </div>
             </CollapsibleSection>
           </div>

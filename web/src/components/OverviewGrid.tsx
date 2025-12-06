@@ -11,11 +11,13 @@ export default function OverviewGrid({
   apiBase,
   branch,
   base = DEFAULT_OVERVIEW_BASE,
+  token,
   onClassSelect,
 }: {
   apiBase: string;
   branch: string;
   base?: string;
+  token?: string;
   onClassSelect?: (pkg: string, className: string) => void;
 }) {
   const [data, setData] = useState<OverviewResp | null>(null);
@@ -31,7 +33,8 @@ export default function OverviewGrid({
     let cancelled = false;
     setLoading(true);
     setErr(null);
-    fetch(url)
+    const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+    fetch(url, { headers })
       .then(async (r) => {
         if (!r.ok) throw new Error((await r.text()) || `HTTP ${r.status}`);
         return r.json();
@@ -43,7 +46,7 @@ export default function OverviewGrid({
     return () => {
       cancelled = true;
     };
-  }, [apiBase, branch, base]);
+  }, [apiBase, branch, base, token]);
 
   const items = useMemo(() => {
     if (!data) return [];
