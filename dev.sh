@@ -6,6 +6,7 @@ ROOT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 API_PORT="${API_PORT:-5179}"
 WEB_PORT="${WEB_PORT:-5173}"
 DEFAULT_SCHEMA_REPO="${HOME}/src/nomad-simulations"
+UVICORN_LOG_LEVEL="${UVICORN_LOG_LEVEL:-warning}"
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -17,6 +18,20 @@ need_cmd() {
 need_cmd git
 need_cmd uvicorn
 need_cmd npm
+
+# Verify required Python packages are installed before starting uvicorn.
+python - <<'PY'
+try:
+    import jwt  # PyJWT
+except ModuleNotFoundError:
+    import sys
+
+    sys.stderr.write(
+        "Missing dependency: PyJWT is required.\n"
+        "Install backend requirements via `pip install -r api/requirements.txt` and retry.\n"
+    )
+    sys.exit(1)
+PY
 
 resolve_schema_repo() {
   # Mirrors api/settings.py resolution order
@@ -72,7 +87,7 @@ cd "${ROOT_DIR}"
 validate_schema_repo
 
 echo "Starting FastAPI backend on :${API_PORT}..."
-uvicorn --app-dir "${ROOT_DIR}" api.main:app --reload --port "${API_PORT}" &
+uvicorn --app-dir "${ROOT_DIR}" api.main:app --reload --port "${API_PORT}" --log-level "${UVICORN_LOG_LEVEL}" &
 API_PID=$!
 
 echo "Switching to frontend (web/)"
@@ -111,4 +126,3 @@ done
 if [[ -n "${status_api}" || -n "${status_web}" ]]; then
   echo "A service stopped with a non-zero exit code. Shutting down the stack..."
 fi
-

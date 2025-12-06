@@ -55,6 +55,9 @@ DEFAULT_PACKAGE = os.getenv(
     "SCHEMA_UML_PACKAGE", f"{_primary_base_package(DEFAULT_BASE_PACKAGE)}.model_method"
 )
 
+# Default branch for git operations
+DEFAULT_BRANCH = os.getenv("SCHEMA_UML_BRANCH", "develop")
+
 EXTRACTOR_ENTRY = os.getenv("SCHEMA_UML_EXTRACTOR", "extractor.graph_builder:build_graph")
 
 

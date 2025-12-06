@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import Depends, FastAPI, Query, HTTPException
 from fastapi.responses import ORJSONResponse
 from extractor.graph_builder import build_graph, list_sections
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +10,16 @@ from pydantic import BaseModel
 
 from .routes_git import router as git_router
 from extractor.usage_index import UsageEntry, get_usage_for_section
-from .settings import SCHEMA_REPO, DEFAULT_BASE_PACKAGE, repo_for_base_namespace
+from .settings import SCHEMA_REPO, DEFAULT_BASE_PACKAGE, DEFAULT_BRANCH, repo_for_base_namespace
+from .auth import (
+    authenticate_user,
+    create_access_token,
+    get_user_and_workspace,
+    get_workspace,
+    init_db,
+    update_workspace,
+    workspace_payload,
+)
 
 # Keep this list in sync with `web/src/components/quantityShared.ts`.
 SUPPORTED_CUSTOM_DTYPES = {
@@ -33,52 +42,110 @@ SUPPORTED_CUSTOM_DTYPES = {
     "np.float64",
 }
 
+init_db()
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class WorkspaceUpdate(BaseModel):
+    branch: str | None = None
+    package: str | None = None
+    base_namespace: str | None = None
+
 
 
 app = FastAPI(title="Schema UML API", default_response_class=ORJSONResponse)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+def _startup() -> None:
+    init_db()
+
+
 app.include_router(git_router)
 
+
+@app.post("/auth/login")
+def login(req: LoginRequest):
+    user = authenticate_user(req.username, req.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_access_token(user)
+    workspace = workspace_payload(get_workspace(user["id"]))
+    return {"access_token": token, "token_type": "bearer", "workspace": workspace, "user": {"username": user["username"]}}
+
+
+@app.get("/workspace")
+def read_workspace(user_ws=Depends(get_user_and_workspace)):
+    _, workspace = user_ws
+    return {"workspace": workspace_payload(workspace)}
+
+
+@app.put("/workspace")
+def update_workspace_route(req: WorkspaceUpdate, user_ws=Depends(get_user_and_workspace)):
+    user, workspace = user_ws
+    updated = update_workspace(
+        user["id"],
+        branch=req.branch or workspace.get("branch"),
+        package=req.package or workspace.get("package"),
+        base_namespace=req.base_namespace or workspace.get("base_namespace"),
+    )
+    return {"workspace": workspace_payload(updated)}
+
+
 @app.get("/health")
-def health():
-    return {"ok": True}
+def health(user_ws=Depends(get_user_and_workspace)):
+    _, workspace = user_ws
+    return {"ok": True, "workspace": workspace_payload(workspace)}
 
 @app.get("/")
-def root():
-    return {"message": "Schema UML API is running"}
+def root(user_ws=Depends(get_user_and_workspace)):
+    _, workspace = user_ws
+    return {"message": "Schema UML API is running", "workspace": workspace_payload(workspace)}
 
 @app.get("/roots")
-def roots(package: str = Query(...)):
+def roots(package: str | None = Query(None), user_ws=Depends(get_user_and_workspace)):
     """List available section classes for a given package."""
+    _, workspace = user_ws
+    pkg = package or workspace.get("package") or DEFAULT_BASE_PACKAGE
     try:
-        return {"package": package, "sections": sorted(list_sections(package))}
+        return {"package": pkg, "sections": sorted(list_sections(pkg)), "workspace": workspace_payload(workspace)}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
 
 @app.get("/schema")
 def schema(
-    package: str = Query(...),
+    package: str | None = Query(None),
     root: str | None = Query(None),
     include_quantities: bool = Query(True),
     include_subsections: bool = Query(True),
-    allow_cross_module: bool = Query(True),                 
-    base_namespace: str | None = Query(None),               
+    allow_cross_module: bool = Query(True),
+    base_namespace: str | None = Query(None),
+    user_ws=Depends(get_user_and_workspace),
 ):
+    user, workspace = user_ws
+    pkg = package or workspace.get("package") or DEFAULT_BASE_PACKAGE
+    ns = base_namespace or workspace.get("base_namespace")
+    if package or base_namespace:
+        workspace = update_workspace(user["id"], package=pkg, base_namespace=ns)
     data = build_graph(
-        package=package,
+        package=pkg,
         root=root,
         include_quantities=include_quantities,
         include_subsections=include_subsections,
         allow_cross_module=allow_cross_module,
-        base_namespace=base_namespace
+        base_namespace=ns
     )
+    data["workspace"] = workspace_payload(workspace)
     return data
 
 
@@ -187,6 +254,13 @@ class OverviewOut(BaseModel):
     items: list[PackageClasses]
 
 
+class OverviewResponse(BaseModel):
+    workspace: dict
+    branch: str
+    base: str
+    items: list[PackageClasses]
+
+
 class CustomQuantityRequest(BaseModel):
     package: str
     class_name: str
@@ -268,7 +342,17 @@ def add_custom_quantity(
     include_subsections: bool = Query(True),
     allow_cross_module: bool = Query(True),
     base_namespace: str | None = Query(None),
+    user_ws=Depends(get_user_and_workspace),
 ):
+    user, workspace = user_ws
+    ns = base_namespace
+    if ns is None and workspace.get("package") == req.package:
+        ns = workspace.get("base_namespace")
+    workspace = update_workspace(
+        user["id"],
+        package=req.package,
+        base_namespace=ns or workspace.get("base_namespace"),
+    )
     try:
         graph = build_graph(
             package=req.package,
@@ -276,25 +360,34 @@ def add_custom_quantity(
             include_quantities=True,
             include_subsections=include_subsections,
             allow_cross_module=allow_cross_module,
-            base_namespace=base_namespace
+            base_namespace=ns
         )
-        return _attach_custom_quantity(graph, req)
+        result = _attach_custom_quantity(graph, req)
+        result["workspace"] = workspace_payload(workspace)
+        return result
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
 
-@app.get("/overview", response_model=OverviewOut)
+@app.get("/overview", response_model=OverviewResponse)
 def overview(
-    branch: str = Query("develop"),
-    base: str = Query(DEFAULT_BASE_PACKAGE),
+    branch: str | None = Query(None),
+    base: str | None = Query(None),
+    user_ws=Depends(get_user_and_workspace),
 ):
     """
     Bird's-eye overview: packages under `base` and their top-level classes at `branch`.
     Resolves repo layout prefixes (e.g., src/).
     """
     try:
-        base_packages = _parse_base_packages(base)
+        user, workspace = user_ws
+        branch_to_use = branch or workspace.get("branch") or DEFAULT_BRANCH
+        base_to_use = base or workspace.get("base_namespace") or DEFAULT_BASE_PACKAGE
+        if branch or base:
+            workspace = update_workspace(user["id"], branch=branch_to_use, base_namespace=base_to_use)
+
+        base_packages = _parse_base_packages(base_to_use)
         if not base_packages:
             raise HTTPException(status_code=400, detail="Provide at least one base package")
 
@@ -305,14 +398,14 @@ def overview(
             base_path = base_pkg.replace(".", "/")
 
             # resolve actual tree path (handles src/ layout)
-            resolved_tree = _resolve_base_tree(repo, branch, base_path)
+            resolved_tree = _resolve_base_tree(repo, branch_to_use, base_path)
 
             with tempfile.TemporaryDirectory() as td_str:
                 td = Path(td_str)
                 try:
-                    _export_subtree(repo, branch, resolved_tree, td)
+                    _export_subtree(repo, branch_to_use, resolved_tree, td)
                 except subprocess.CalledProcessError as e:
-                    raise HTTPException(status_code=404, detail=f"Cannot export {resolved_tree} at {branch}") from e
+                    raise HTTPException(status_code=404, detail=f"Cannot export {resolved_tree} at {branch_to_use}") from e
 
                 # the extracted folder root is td / <resolved_tree>
                 extract_root = td / resolved_tree
@@ -351,7 +444,12 @@ def overview(
             for module, classes in sorted(modules.items())
         ]
 
-        return OverviewOut(branch=branch, base=",".join(base_packages), items=items)
+        return OverviewResponse(
+            workspace=workspace_payload(workspace),
+            branch=branch_to_use,
+            base=",".join(base_packages),
+            items=items,
+        )
 
     except HTTPException:
         raise
@@ -366,17 +464,25 @@ class UsageEntryModel(BaseModel):
     short_name: str
     doc: Optional[str]
 
-@app.get("/usage", response_model=List[UsageEntryModel])
-def get_usage(section_id: str = Query(..., description="Fully qualified section class name")):
+
+class UsageResponse(BaseModel):
+    workspace: dict
+    usage: List[UsageEntryModel]
+
+@app.get("/usage", response_model=UsageResponse)
+def get_usage(
+    section_id: str = Query(..., description="Fully qualified section class name"),
+    user_ws=Depends(get_user_and_workspace),
+):
     """
     Return "under the hood" usage information for a given section class.
 
     section_id should be the same as the node id for class nodes,
     e.g. "nomad_simulations.schema_packages.model_method.ModelMethod".
     """
+    _, workspace = user_ws
     entries = get_usage_for_section(section_id)
-    # entries is a tuple[UsageEntry, ...]; convert to Pydantic models
-    return [
+    usage = [
         UsageEntryModel(
             kind=e.kind,
             qualname=e.qualname,
@@ -386,3 +492,4 @@ def get_usage(section_id: str = Query(..., description="Fully qualified section 
         )
         for e in entries
     ]
+    return {"usage": usage, "workspace": workspace_payload(workspace)}
