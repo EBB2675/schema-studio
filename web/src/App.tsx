@@ -97,6 +97,7 @@ export default function App() {
 
   const appShellRef = useRef<HTMLElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
+  const workspaceStateRef = useRef<WorkspaceState | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === "undefined") return 360;
     const stored = Number.parseInt(window.localStorage.getItem("schema-uml-left-width") || "", 10);
@@ -171,6 +172,15 @@ export default function App() {
 
   const applyWorkspace = useCallback((ws: WorkspaceState | null) => {
     if (!ws) return;
+    const prev = workspaceStateRef.current;
+    const unchanged =
+      prev &&
+      prev.branch === ws.branch &&
+      prev.package === ws.package &&
+      prev.base_namespace === ws.base_namespace;
+    if (unchanged) return;
+
+    workspaceStateRef.current = ws;
     setWorkspace(ws);
     if (ws.package) setPkg(ws.package);
     if (ws.base_namespace) setNamespace(ws.base_namespace);
@@ -205,6 +215,7 @@ export default function App() {
   const logout = useCallback(() => {
     setToken("");
     setWorkspace(null);
+    workspaceStateRef.current = null;
     setUserName(null);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("schema-uml-token");
@@ -232,6 +243,7 @@ export default function App() {
   useEffect(() => {
     if (!token) {
       setWorkspace(null);
+      workspaceStateRef.current = null;
       return;
     }
     api
@@ -1197,13 +1209,9 @@ export default function App() {
                   <button className="btn secondary" type="button" onClick={focusRootSection}>
                     Go to root
                   </button>
-                  <span className="pill">🟩 Added</span>
-                  <span className="pill" style={{ background: "rgba(234, 179, 8, 0.18)", color: "#fef9c3" }}>
-                    🟨 Changed
-                  </span>
-                  <span className="pill" style={{ background: "rgba(248, 113, 113, 0.16)", color: "#fecdd3" }}>
-                    🟥 Removed
-                  </span>
+                  <span className="pill diff added">🟩 Added</span>
+                  <span className="pill diff changed">🟨 Changed</span>
+                  <span className="pill diff removed">🟥 Removed</span>
                 </div>
               </div>
               <GraphView

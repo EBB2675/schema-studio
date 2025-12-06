@@ -76,12 +76,12 @@ export default function OverviewGrid({
     >
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <input
-          className="border rounded px-2 py-1"
+          className="overview-search"
           placeholder="Filter package or class…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <div className="text-xs opacity-70">
+        <div className="overview-meta">
           {items.length} packages • branch: {data.branch}
         </div>
       </div>
@@ -102,8 +102,7 @@ export default function OverviewGrid({
         {items.map((it) => (
           <div
             key={it.package}
-            className="border rounded"
-            style={{ padding: 12, background: "#fff" }}
+            className="overview-card"
           >
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
               <div
@@ -116,17 +115,7 @@ export default function OverviewGrid({
               >
                 {it.package}
               </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  background: "#f3f4f6",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 9999,
-                  padding: "2px 8px",
-                  whiteSpace: "nowrap",
-                }}
-                title="Class count"
-              >
+              <div className="overview-count" title="Class count">
                 {it.classes.length}
               </div>
             </div>
@@ -147,15 +136,7 @@ export default function OverviewGrid({
                   key={`${it.package}.${c}`}
                   type="button"
                   onClick={() => onClassSelect?.(it.package, c)}
-                  style={{
-                    fontSize: 11,
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 9999,
-                    padding: "4px 10px",
-                    background: onClassSelect ? "#eef2ff" : "#f9fafb",
-                    cursor: onClassSelect ? "pointer" : "default",
-                    color: "#1f2937",
-                  }}
+                  className={`overview-chip${onClassSelect ? " is-clickable" : ""}`}
                   title={c}
                 >
                   {c}
