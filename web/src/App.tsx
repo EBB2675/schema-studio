@@ -1199,6 +1199,16 @@ export default function App() {
             </div>
           ) : diffData ? (
             <>
+              <div className="workspace-toolbar" style={{ justifyContent: "space-between" }}>
+                <div>
+                  Base: {diffData.base.branch} ({diffData.base.sha.slice(0, 7)}) → Head: {diffData.head.branch} ({diffData.head.sha.slice(0, 7)})
+                </div>
+                <div className="row" style={{ gap: 10, alignItems: "center" }}>
+                  <span className="pill diff added">🟩 Added</span>
+                  <span className="pill diff changed">🟨 Changed</span>
+                  <span className="pill diff removed">🟥 Removed</span>
+                </div>
+              </div>
               <GraphView
                 nodes={diffData.head.graph.nodes}
                 edges={diffData.head.graph.edges}
