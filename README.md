@@ -12,10 +12,6 @@ Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 - **Editable mode**: add, rename, or remove quantities directly in the UI (server validates supported dtypes).
 - **Export**: download the current graph as JSON or a PDF snapshot.
 
-## 🔧 Important note:
-
-Support for `nomad-measurements` is experimental and may behave in unexpected ways.
-
 ---
 
 # Overview
@@ -37,6 +33,7 @@ Support for `nomad-measurements` is experimental and may behave in unexpected wa
 - **Namespace filtering**: Limit traversal to a base namespace; optionally include cross-module links.
 - **Bird's-eye overview**: Switch to Overview mode to list packages/classes for any branch.
 - **Editable quantities**: Toggle Editable mode to add, rename, or remove quantities from the selected class card.
+- **Optional overlays**: Inheritance edges and dtype/shape metadata are opt-in toggles (off by default).
 - **Export**: Save the current graph as JSON or a PDF (PNG-backed) snapshot.
 
 ---
@@ -71,10 +68,9 @@ export SCHEMA_UML_REPO=<path-or-URL-to-your-schema-repo>
 # optional: override the default package used in UI helpers
 # export SCHEMA_UML_PACKAGE=my_schema_root.module
 ```
-By default, the viewer scopes to `nomad_simulations.schema_packages`. If you also want
-to browse `nomad_measurements`, set `SCHEMA_UML_BASE_PACKAGE` to include both
-namespaces (e.g. `nomad_simulations.schema_packages,nomad_measurements`) and point
-`NOMAD_MEASURE_REPO` at a local `nomad-measurements` clone.
+By default, the viewer scopes to `nomad_simulations.schema_packages`. You can extend the scope
+by setting `SCHEMA_UML_BASE_PACKAGE` to additional namespaces (comma separated) and providing a
+repo path for each.
 Make it persistent by adding the export to `~/.bashrc` or `~/.zshrc`.
 
 ### 4) Run everything with one command
@@ -106,7 +102,7 @@ curl 'http://127.0.0.1:5179/git/branches'
 
 ## 🧠 How to Use
 
-1. **Package**: Enter a Python package (e.g. `nomad_simulations.schema_packages.model_method`).
+1. **Package**: Choose a package from the dropdown (populated per branch/base namespace).
 2. **Root section**: Auto-populated from the package; pick one (e.g. `ModelMethod`) or leave empty to load all.
 3. **Build graph**: Render UML cards and composition edges.
 4. **Doc panel**: Click a class → see its docstring + list of quantities; click a quantity to view its docstring.

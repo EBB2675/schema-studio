@@ -44,13 +44,6 @@ const WORKSPACE_PRESETS = [
     pkg: "nomad_simulations.schema_packages.model_method",
     root: "ModelMethod",
   },
-  {
-    label: "nomad-measurements",
-    namespace: "nomad_measurements",
-    branch: "main",
-    pkg: "nomad_measurements.general",
-    root: "InSituMeasurement",
-  },
 ];
 
 type WorkspaceState = {
@@ -77,7 +70,8 @@ export default function App() {
 
   const [includeQuantities, setIncludeQuantities] = useState<boolean>(true);
   const [includeSubsections, setIncludeSubsections] = useState<boolean>(true);
-  const [showQuantityMetadata, setShowQuantityMetadata] = useState<boolean>(true);
+  const [includeInheritance, setIncludeInheritance] = useState<boolean>(false);
+  const [showQuantityMetadata, setShowQuantityMetadata] = useState<boolean>(false);
 
   const [crossModules, setCrossModules] = useState<boolean>(true);
   const [namespace, setNamespace] = useState<string>(DEFAULT_NAMESPACE);
@@ -426,6 +420,7 @@ export default function App() {
               root: rootToUse,
               include_quantities: includeQuantities,
               include_subsections: includeSubsections,
+              include_inheritance: includeInheritance,
               allow_cross_module: crossModules,
               base_namespace: namespaceToUse || undefined,
             },
@@ -440,6 +435,7 @@ export default function App() {
             root: rootToUse,
             include_quantities: includeQuantities,
             include_subsections: includeSubsections,
+            include_inheritance: includeInheritance,
             allow_cross_module: crossModules,
             base_namespace: namespaceToUse || undefined,
           },
@@ -453,7 +449,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [api, crossModules, includeQuantities, includeSubsections, normalizedNamespace, pkg, root, syncWorkspaceFromResponse, token, workspace?.branch]);
+  }, [api, crossModules, includeQuantities, includeSubsections, includeInheritance, normalizedNamespace, pkg, root, syncWorkspaceFromResponse, token, workspace?.branch]);
 
   // fetch git branches
   const loadBranches = useCallback(async () => {
@@ -527,6 +523,7 @@ export default function App() {
             root,
             include_quantities: includeQuantities,
             include_subsections: includeSubsections,
+            include_inheritance: includeInheritance,
             allow_cross_module: crossModules,
             base_namespace: normalizedNamespace || undefined,
           },
@@ -596,6 +593,7 @@ export default function App() {
           params: {
             root,
             include_subsections: includeSubsections,
+            include_inheritance: includeInheritance,
             allow_cross_module: crossModules,
             base_namespace: normalizedNamespace || undefined,
           },
@@ -909,7 +907,7 @@ export default function App() {
             <span className="pulse" />
             Schema UML
           </h3>
-          <p className="subdued">Craft diagrams, compare branches, and publish docs.</p>
+          <p className="subdued">Craft diagrams, compare branches, and edit schemas.</p>
           <div className="row" style={{ marginTop: 10 }}>
             <span className="tag">{loading || diffLoading ? "Working…" : "Ready"}</span>
             {selectedClassName ? <span className="tag">Selected: {selectedClassName}</span> : null}
@@ -971,39 +969,32 @@ export default function App() {
               </div>
             )}
           </div>
-          <div className="toggle-group" style={{ marginTop: 10 }}>
-            {WORKSPACE_PRESETS.map((ws) => (
-              <button
-                key={ws.namespace}
-                className={`toggle-chip ${normalizedNamespace === ws.namespace ? "active" : ""}`}
-                onClick={() => {
-                  handleNamespaceChange(ws.namespace);
-                  if (ws.branch) {
-                    handleBranchSelect(ws.branch);
-                  }
-                  if (ws.pkg) handlePackageSelect(ws.pkg);
-                  if (ws.root) setRoot(ws.root);
-                }}
-                title={`Set base namespace to ${ws.namespace}`}
-              >
-                {ws.label}
-              </button>
-            ))}
+          <div className="workspace-presets">
+            {WORKSPACE_PRESETS.map((ws) => {
+              return (
+                <div key={ws.namespace} className="preset-block">
+                  <button
+                    className={`workspace-preset-btn ${normalizedNamespace === ws.namespace ? "active" : ""}`}
+                    onClick={() => {
+                      handleNamespaceChange(ws.namespace);
+                      if (ws.branch) {
+                        handleBranchSelect(ws.branch);
+                      }
+                      if (ws.pkg) handlePackageSelect(ws.pkg);
+                      if (ws.root) setRoot(ws.root);
+                    }}
+                    title={`Set base namespace to ${ws.namespace}`}
+                  >
+                    {ws.label}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </CollapsibleSection>
 
         <CollapsibleSection title="Package & filters" hint="Pick a backend package and fine-tune the graph">
           <div className="action-stack">
-            <div>
-              <label className="label">Package</label>
-              <input
-                className="input"
-                value={pkg}
-                onChange={(e) => handlePackageSelect(e.target.value)}
-                placeholder={DEFAULT_PACKAGE}
-              />
-            </div>
-
             <div className="row" style={{ gap: 10, alignItems: "flex-end" }}>
               <div style={{ flex: 1 }}>
                 <label className="label">Choose from branch</label>
@@ -1078,6 +1069,14 @@ export default function App() {
                   onChange={(e) => setIncludeSubsections(e.target.checked)}
                 />
                 Subsections
+              </label>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={includeInheritance}
+                  onChange={(e) => setIncludeInheritance(e.target.checked)}
+                />
+                Inheritance
               </label>
               <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <input
@@ -1200,43 +1199,24 @@ export default function App() {
             </div>
           ) : diffData ? (
             <>
-              <div className="workspace-toolbar">
-                <div>
-                  Base: {diffData.base.branch} ({diffData.base.sha.slice(0, 7)}) → Head: {diffData.head.branch}
-                  ({diffData.head.sha.slice(0, 7)})
-                </div>
-                <div className="row" style={{ gap: 10, alignItems: "center" }}>
-                  <button className="btn secondary" type="button" onClick={focusRootSection}>
-                    Go to root
-                  </button>
-                  <span className="pill diff added">🟩 Added</span>
-                  <span className="pill diff changed">🟨 Changed</span>
-                  <span className="pill diff removed">🟥 Removed</span>
-                </div>
-              </div>
               <GraphView
                 nodes={diffData.head.graph.nodes}
                 edges={diffData.head.graph.edges}
                 diff={diffData.diff}
                 showQuantityMetadata={showQuantityMetadata}
+                showInheritance={includeInheritance}
+                theme={theme}
                 onReady={setGraphHandle}
               />
             </>
           ) : graph ? (
             <>
-              <div className="workspace-toolbar" style={{ justifyContent: "space-between" }}>
-                <div>
-                  Root: <strong>{currentGraph?.root || root}</strong>
-                  {" "}from <strong>{currentGraph?.package || pkg}</strong>
-                </div>
-                <button className="btn secondary" type="button" onClick={focusRootSection}>
-                  Go to root
-                </button>
-              </div>
               <GraphView
                 nodes={graph.nodes}
                 edges={graph.edges}
                 showQuantityMetadata={showQuantityMetadata}
+                showInheritance={includeInheritance}
+                theme={theme}
                 onReady={setGraphHandle}
               />
             </>

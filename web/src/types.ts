@@ -11,6 +11,7 @@ export type GraphEdgeData = {
   id?: string;
   source: string;
   target: string;
+  type?: 'hasQuantity' | 'hasSubSection' | 'inherits';
 };
 
 export type GraphPayload = {

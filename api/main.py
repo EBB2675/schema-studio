@@ -128,6 +128,7 @@ def schema(
     root: str | None = Query(None),
     include_quantities: bool = Query(True),
     include_subsections: bool = Query(True),
+    include_inheritance: bool = Query(True),
     allow_cross_module: bool = Query(True),
     base_namespace: str | None = Query(None),
     user_ws=Depends(get_user_and_workspace),
@@ -142,6 +143,7 @@ def schema(
         root=root,
         include_quantities=include_quantities,
         include_subsections=include_subsections,
+        include_inheritance=include_inheritance,
         allow_cross_module=allow_cross_module,
         base_namespace=ns
     )
@@ -340,6 +342,7 @@ def add_custom_quantity(
     req: CustomQuantityRequest,
     root: str | None = Query(None),
     include_subsections: bool = Query(True),
+    include_inheritance: bool = Query(True),
     allow_cross_module: bool = Query(True),
     base_namespace: str | None = Query(None),
     user_ws=Depends(get_user_and_workspace),
@@ -359,6 +362,7 @@ def add_custom_quantity(
             root=root,
             include_quantities=True,
             include_subsections=include_subsections,
+            include_inheritance=include_inheritance,
             allow_cross_module=allow_cross_module,
             base_namespace=ns
         )

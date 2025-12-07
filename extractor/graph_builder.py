@@ -22,7 +22,7 @@ class Node:
 class Edge:
     source: str
     target: str
-    type: str                  # "hasQuantity" | "hasSubSection"
+    type: str                  # "hasQuantity" | "hasSubSection" | "inherits"
     card: Optional[str] = None
 
 
@@ -69,6 +69,7 @@ def build_graph(
     root: str | None = None,
     include_quantities: bool = True,
     include_subsections: bool = True,
+    include_inheritance: bool = True,
     allow_cross_module: bool = True,
     base_namespace: Optional[str] = None,
     exclude_prefixes: Tuple[str, ...] = ("nomad.metainfo.",),
@@ -89,7 +90,15 @@ def build_graph(
 
     nodes: Dict[str, Node] = {}
     edges: List[Edge] = []
+    edge_keys: Set[Tuple[str, str, str]] = set()
     seen: Set[str] = set()
+
+    def add_edge(edge: Edge):
+        key = (edge.source, edge.target, edge.type)
+        if key in edge_keys:
+            return
+        edges.append(edge)
+        edge_keys.add(key)
 
     def add_section(sec_obj: Any, depth: int = 0):
         if depth > max_depth:
@@ -138,9 +147,24 @@ def build_graph(
                         owner=sec_id,
                         module=sec_mod
                     )
-                edges.append(Edge(source=sec_id, target=qid, type="hasQuantity", card=_cardinality_from(q)))
+                add_edge(Edge(source=sec_id, target=qid, type="hasQuantity", card=_cardinality_from(q)))
                 if len(nodes) > max_nodes:
                     return
+
+        if include_inheritance:
+            for base in getattr(sec_obj, "__mro__", [])[1:]:
+                if base is object:
+                    continue
+                if not _is_section(base):
+                    continue
+                base_mod = getattr(base, "__module__", "")
+                if not _module_allowed(base_mod, base_namespace, exclude_prefixes, allow_cross_module):
+                    continue
+
+                base_name = getattr(base, "__name__", str(base))
+                base_id = f"{base_mod}.{base_name}"
+                add_section(base, depth + 1)
+                add_edge(Edge(source=sec_id, target=base_id, type="inherits"))
 
         if include_subsections:
             for sname, s in _get_subsections(sec_obj):
@@ -156,7 +180,7 @@ def build_graph(
                 # add child section and quantities recursively
                 add_section(tgt_cls, depth + 1)
                 # add UML composition edge
-                edges.append(Edge(source=sec_id, target=tgt_id, type="hasSubSection", card=_cardinality_from(s)))
+                add_edge(Edge(source=sec_id, target=tgt_id, type="hasSubSection", card=_cardinality_from(s)))
                 if len(nodes) > max_nodes:
                     return
 
