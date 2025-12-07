@@ -196,6 +196,7 @@ def api_graph(
     root: str | None = Query(None),
     include_quantities: bool = Query(True),
     include_subsections: bool = Query(True),
+    include_inheritance: bool = Query(True),
     allow_cross_module: bool = Query(True),
     user_ws=Depends(get_user_and_workspace),
 ):
@@ -215,6 +216,7 @@ def api_graph(
             root=root,
             include_quantities=include_quantities,
             include_subsections=include_subsections,
+            include_inheritance=include_inheritance,
             allow_cross_module=allow_cross_module,
         )
         return {"branch": branch, "sha": sha, "graph": graph, "workspace": workspace_payload(workspace)}
@@ -228,6 +230,7 @@ def api_diff(
     root: str | None = Query(None),
     include_quantities: bool = Query(True),
     include_subsections: bool = Query(True),
+    include_inheritance: bool = Query(True),
     allow_cross_module: bool = Query(True),
     base_namespace: str | None = Query(None),
     user_ws=Depends(get_user_and_workspace),
@@ -245,6 +248,7 @@ def api_diff(
             "root": root,
             "include_quantities": include_quantities,
             "include_subsections": include_subsections,
+            "include_inheritance": include_inheritance,
             "allow_cross_module": allow_cross_module,
             "base_namespace": namespace,
         }

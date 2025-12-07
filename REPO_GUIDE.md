@@ -38,10 +38,8 @@ export GIT_REPO_DIR=/path/to/nomad-simulations
 export SCHEMA_UML_BASE_PACKAGE=my_schema_root
 export SCHEMA_UML_PACKAGE=my_schema_root.module
 ~~~
-Default namespace scope targets `nomad_simulations.schema_packages`. To include
-`nomad_measurements`, set `SCHEMA_UML_BASE_PACKAGE` to both namespaces (comma
-separated) and ensure `NOMAD_MEASURE_REPO` points at a local clone of that
-repository.
+Default namespace scope targets `nomad_simulations.schema_packages`. To include additional
+namespaces, add them to `SCHEMA_UML_BASE_PACKAGE` (comma separated) and point each to a local clone.
 
 **Unified dev command:** `./dev.sh` starts the FastAPI backend (**5179**) and Vite frontend (**5173**), checks for `uvicorn`/`npm`, validates **SCHEMA_UML_REPO / NOMAD_SIM_REPO / GIT_REPO_DIR** points to a local git repo (a subdirectory of a clone is fine), installs frontend deps on first run, and stops both on **Ctrl+C**. Override ports via `API_PORT` / `WEB_PORT`.
 
@@ -51,6 +49,7 @@ repository.
 - Right **Under-the-hood Panel** shows **normalization methods and helper functions** that act on the selected section (based on `/usage`).
 - **Editable mode**: add, rename, or remove quantities on the selected class; dtype is validated against a supported allowlist.
 - **Bird’s-eye overview** renders packages/classes for a branch without building the full graph.
+- **Opt-in overlays**: inheritance edges and dtype/shape labels default off; enable via sidebar toggles.
 - **Exports**: download the current graph JSON or a PDF snapshot.
 - Branch diff highlights: 🟩 Added, 🟨 Changed, 🟥 Removed (edges dashed red; quantity deltas are included).
 

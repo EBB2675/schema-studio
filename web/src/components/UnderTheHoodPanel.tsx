@@ -53,11 +53,6 @@ const UnderTheHoodPanel: React.FC<Props> = ({ apiBase, token }) => {
 
   return (
     <div className="panel under-the-hood-panel">
-      <div className="uth-header">
-        <div className="meta-label">Under the hood</div>
-        <div className="hint">Raw schema structure</div>
-      </div>
-
       {!selected || selected.kind !== 'class' ? (
         <div className="uth-empty">Select a section to see normalization and utility functions.</div>
       ) : (

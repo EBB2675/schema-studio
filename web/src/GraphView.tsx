@@ -29,7 +29,7 @@ type RawNode = {
 type RawEdge = {
   source: string;
   target: string;
-  type: "hasQuantity" | "hasSubSection";
+  type: "hasQuantity" | "hasSubSection" | "inherits";
   card?: string | null;
 };
 
@@ -51,6 +51,8 @@ type Props = {
   } | null;
   onReady?: (handle: GraphExportHandle | null) => void;
   showQuantityMetadata?: boolean;
+  showInheritance?: boolean;
+  theme?: "dark" | "light";
 };
 
 const cleanType = (t?: string | null) => {
@@ -95,11 +97,28 @@ function umlLabel(
   return lines.join("\n");
 }
 
-export default function GraphView({ nodes, edges, diff, onReady, showQuantityMetadata = true }: Props) {
+export default function GraphView({
+  nodes,
+  edges,
+  diff,
+  onReady,
+  showQuantityMetadata = true,
+  showInheritance = true,
+  theme = "dark"
+}: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
 
   const setSelected = useMemo(() => useSelection.getState().setSelected, []);
+
+  const palette = useMemo(() => {
+    const isDark = theme === "dark";
+    return {
+      composition: isDark ? "#cbd5f5" : "#475569",
+      compositionLabelBg: isDark ? "rgba(15, 23, 42, 0.72)" : "#f5f7fa",
+      inheritance: isDark ? "#e2e8f0" : "#0f172a",
+    };
+  }, [theme]);
 
   const quantityDiffs = useMemo(() => {
     const map = new Map<
@@ -150,7 +169,7 @@ export default function GraphView({ nodes, edges, diff, onReady, showQuantityMet
   // - attrsMap: section id -> display lines for UML
   // - methodsMap: section id -> methods
   // - quantitiesByOwner: section id -> QtyMeta[]  (for DocPanel)
-  const { sectionsMap, attrsMap, methodsMap, compEdges, quantitiesByOwner } = useMemo(() => {
+  const { sectionsMap, attrsMap, methodsMap, umlEdges, quantitiesByOwner } = useMemo(() => {
     const sections = new Map<string, RawNode>();
     const attrs = new Map<
       string,
@@ -246,18 +265,24 @@ export default function GraphView({ nodes, edges, diff, onReady, showQuantityMet
     if (diff?.edges?.removed?.length) {
       diff.edges.removed.forEach((e: any) => {
         if (!e?.source || !e?.target) return;
+        const type = (e.type as RawEdge["type"]) ?? "hasSubSection";
         baseEdges.push({
           source: e.source,
           target: e.target,
-          type: (e.type as any) ?? "hasSubSection",
+          type,
           card: e.card ?? undefined
         });
       });
     }
 
-    const subs = baseEdges.filter(e => e.type === "hasSubSection");
-    return { sectionsMap: sections, attrsMap: attrs, methodsMap: methods, compEdges: subs, quantitiesByOwner: qByOwner };
-  }, [graphNodes, edges, quantityDiffs, diff]);
+    const umlEdges = baseEdges.filter((e) => {
+      if (e.type === "hasSubSection") return true;
+      if (e.type === "inherits") return showInheritance;
+      return false;
+    });
+
+    return { sectionsMap: sections, attrsMap: attrs, methodsMap: methods, umlEdges, quantitiesByOwner: qByOwner };
+  }, [graphNodes, edges, quantityDiffs, diff, showInheritance]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -284,14 +309,16 @@ export default function GraphView({ nodes, edges, diff, onReady, showQuantityMet
       });
     }
 
-    compEdges.forEach((e, i) => {
+    umlEdges.forEach((e, i) => {
       if (!sectionsMap.has(e.source) || !sectionsMap.has(e.target)) return;
+      const relationship = e.type === "inherits" ? "inheritance" : "composition";
       elements.push({
         data: {
-          id: `assoc:${i}:${e.source}->${e.target}`,
+          id: `assoc:${relationship}:${i}:${e.source}->${e.target}`,
           source: e.source,
           target: e.target,
-          type: "composition",
+          type: e.type,
+          relationship,
           card: e.card ?? ""
         }
       });
@@ -329,23 +356,38 @@ export default function GraphView({ nodes, edges, diff, onReady, showQuantityMet
           } as any
         },
         {
-          selector: "edge[type='composition']",
+          selector: "edge[relationship='composition']",
           style: {
-            "line-color": "#475569",
+            "line-color": palette.composition,
             width: 2,
             "curve-style": "segments",
             "source-arrow-shape": "diamond",
-            "source-arrow-color": "#475569",
+            "source-arrow-color": palette.composition,
             "target-arrow-shape": "triangle",
-            "target-arrow-color": "#475569",
+            "target-arrow-color": palette.composition,
             "arrow-scale": 1.1,
             label: "data(card)",
             "font-size": 10,
             "text-rotation": "autorotate",
             "text-margin-y": -6,
-            "text-background-color": "#f5f7fa",
+            "text-background-color": palette.compositionLabelBg,
             "text-background-opacity": 1,
-            "text-background-padding": "2px"
+            "text-background-padding": "2px",
+            color: palette.composition
+          }
+        },
+        {
+          selector: "edge[relationship='inheritance']",
+          style: {
+            "line-color": palette.inheritance,
+            width: 2,
+            "curve-style": "bezier",
+            "target-arrow-shape": "triangle",
+            "target-arrow-color": palette.inheritance,
+            "arrow-scale": 1.1,
+            "target-arrow-fill": "hollow",
+            "line-style": "dashed",
+            "line-dash-pattern": [10, 8]
           }
         },
         { selector: ".hidden", style: { display: "none" } },
@@ -508,7 +550,7 @@ export default function GraphView({ nodes, edges, diff, onReady, showQuantityMet
       onReady?.(null);
       cyRef.current?.destroy();
     };
-  }, [sectionsMap, attrsMap, methodsMap, compEdges, quantitiesByOwner, diff, setSelected, onReady, showQuantityMetadata]);
+  }, [sectionsMap, attrsMap, methodsMap, umlEdges, quantitiesByOwner, diff, setSelected, onReady, showQuantityMetadata, palette]);
 
   return <div className="graph" ref={containerRef} />;
 }

@@ -51,7 +51,7 @@ function QtyRow({ q, onClick, onEdit, onRemove, editableMode, disabled }: { q: Q
           <div style={{ fontSize: 11, opacity: 0.7 }}>{meta.join("  ")}</div>
         </div>
         {diffLabel ? <span className={diffClass || "pill"}>{diffLabel}</span> : null}
-        <div className="tag" style={{ borderColor: "rgba(124, 58, 237, 0.4)", color: "#c7d2fe" }}>View</div>
+        <div className="tag view">View</div>
       </button>
 
       {editableMode && (
