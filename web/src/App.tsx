@@ -1334,7 +1334,7 @@ export default function App() {
           <p className="eyebrow">Schema explorer</p>
           <h3 className="brand-title">
             <span className="pulse" />
-            Schema UML
+            SchemaStudio
           </h3>
           <p className="subdued">Craft diagrams, compare branches, and edit schemas.</p>
           <div className="row" style={{ marginTop: 10 }}>
