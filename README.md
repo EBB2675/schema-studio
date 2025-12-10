@@ -1,6 +1,6 @@
-# SchemaStudio Editor
+# Schema Studio
 
-Interactive UML-style editor for NOMAD-compatible schemas (defaults to `nomad-simulations`).
+Interactive editor for NOMAD-compatible schemas (defaults to `nomad-simulations`).
 
 Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 
