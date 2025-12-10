@@ -474,7 +474,7 @@ export default function GraphView({
       elements,
       minZoom: 0.2,
       maxZoom: 3.5,
-      wheelSensitivity: 0.65,
+      wheelSensitivity: 1.6,
       style: [
         {
           selector: "node[kind='uml_class']",
