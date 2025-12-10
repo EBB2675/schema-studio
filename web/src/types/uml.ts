@@ -19,6 +19,7 @@ export type UmlClassNode = {
   line?: number | null;
   quantities: QuantityNode[];
   parentId?: string | null;
+  parentRelation?: "inherits" | "hasSubSection" | null;
 };
 
 export type UmlEdge = {

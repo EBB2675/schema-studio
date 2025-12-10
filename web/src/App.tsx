@@ -571,10 +571,10 @@ export default function App() {
     const edges = g.edges || [];
     const sections = nodes.filter((n: any) => n.kind === "section");
     const quantities = nodes.filter((n: any) => n.kind === "quantity");
-    const parentByChild = new Map<string, string | null>();
+    const parentInfoByChild = new Map<string, { id: string; relation: string }>();
     edges.forEach((e: any) => {
-      if (e.type === "inherits" && e.target && e.source) {
-        parentByChild.set(e.target, e.source);
+      if ((e.type === "inherits" || e.type === "hasSubSection") && e.target && e.source) {
+        parentInfoByChild.set(e.target, { id: e.source, relation: e.type });
       }
     });
 
@@ -591,7 +591,8 @@ export default function App() {
         path: sec.path ?? null,
         line: typeof sec.line === "number" ? sec.line : null,
         quantities: ownedQuantities,
-        parentId: parentByChild.get(sec.id) ?? null,
+        parentId: parentInfoByChild.get(sec.id)?.id ?? null,
+        parentRelation: parentInfoByChild.get(sec.id)?.relation ?? null,
       };
     });
 
@@ -751,6 +752,7 @@ export default function App() {
             targetClass.parentId.split(".").pop() ||
             targetClass.parentId
           : null;
+      const parentRelation = targetClass.parentRelation ?? null;
 
       if (!classLabel) {
         const message = "Target class name missing";
@@ -764,6 +766,7 @@ export default function App() {
           package: targetPackage,
           class_name: classLabel,
           parent_name: parentLabel,
+          parent_relation: parentRelation,
           quantity_name: quantityName,
           dtype,
           docstring: docstring || null,
@@ -779,11 +782,28 @@ export default function App() {
         }
       );
       const updated = r.data as ApiGraph;
+      const newChange: AuditTrailEntry["change"] = {
+        type: "add-quantity",
+        classId: targetClass.id,
+        quantity: {
+          id: `${targetClass.id}.${quantityName}`,
+          name: quantityName,
+          dtype,
+          doc: docstring || null,
+          ownerId: targetClass.id,
+          shape: null,
+          card: null,
+          path: null,
+          line: null,
+        },
+      };
 
-      setGraph(updated);
-      const nextUml = buildUmlState(updated);
+      const mergedGraph = replayGraphWithAudit(updated, newChange);
+
+      setGraph(mergedGraph);
+      const nextUml = buildUmlState(mergedGraph);
       setUmlState(nextUml);
-      syncWorkspaceFromResponse(updated);
+      syncWorkspaceFromResponse(mergedGraph);
       const updatedClass =
         nextUml?.classes?.find(
           (c) =>
@@ -831,7 +851,7 @@ export default function App() {
     }
   };
 
-  const createClassOnCanvas = async ({ name, parentId, docstring }: { name: string; parentId?: string | null; docstring?: string }) => {
+  const createClassOnCanvas = async ({ name, parentId, docstring, relation }: { name: string; parentId?: string | null; docstring?: string; relation?: "inherits" | "hasSubSection" }) => {
     const currentGraph = ensureEditableReady();
     if (!currentGraph) {
       throw new Error(addBlockedReason || "Canvas is not editable");
@@ -850,6 +870,7 @@ export default function App() {
           package: pkg,
           name,
           parent: parentId || null,
+          relation: parentId ? relation || "inherits" : "inherits",
           docstring: docstring || null,
         },
         {
@@ -864,10 +885,25 @@ export default function App() {
         }
       );
       const next = res.data as ApiGraph;
-      setGraph(next);
-      const nextUml = buildUmlState(next);
+      const newChange: AuditTrailEntry["change"] = {
+        type: "add-class",
+        cls: {
+          id: `${pkg}.${name}`,
+          name,
+          doc: docstring || null,
+          module: pkg,
+          parentId: parentId || null,
+          parentRelation: parentId ? relation || "inherits" : null,
+          quantities: [],
+          path: null,
+          line: null,
+        } as UmlClassNode,
+      };
+      const mergedGraph = replayGraphWithAudit(next, newChange);
+      setGraph(mergedGraph);
+      const nextUml = buildUmlState(mergedGraph);
       setUmlState(nextUml);
-      syncWorkspaceFromResponse(res.data);
+      syncWorkspaceFromResponse(mergedGraph);
       const newCls =
         nextUml?.classes.find((c) => c.name === name || c.id === name || c.id.endsWith(`.${name}`)) ??
         ({
@@ -876,6 +912,7 @@ export default function App() {
           doc: docstring || null,
           module: pkg,
           parentId: parentId || null,
+          parentRelation: parentId ? relation || "inherits" : null,
           quantities: [],
           path: null,
           line: null,
@@ -969,12 +1006,20 @@ export default function App() {
       type: "hasQuantity",
       card: q.card ?? null,
     }));
-    const inheritEdge = cls.parentId ? [{ source: cls.parentId, target: cls.id, type: "inherits", card: null }] : [];
+    const relationType = cls.parentRelation || "inherits";
+    const inheritEdge = cls.parentId ? [{ source: cls.parentId, target: cls.id, type: relationType, card: null }] : [];
 
     return {
       ...g,
       nodes: [...nodesWithoutClass, sectionNode, ...qtyNodes],
-      edges: [...(g.edges || []).filter((e: any) => !(e.type === "inherits" && e.target === cls.id)), ...qtyEdges, ...inheritEdge],
+      edges: [
+        ...(g.edges || []).filter(
+          (e: any) =>
+            !((e.type === "inherits" || e.type === "hasSubSection") && e.target === cls.id)
+        ),
+        ...qtyEdges,
+        ...inheritEdge
+      ],
     };
   }, []);
 
@@ -996,6 +1041,15 @@ export default function App() {
         return current;
     }
   }, [addClassToGraphState, addQuantityToGraphState, removeClassFromGraphState, removeQuantityFromGraphState]);
+
+  const replayGraphWithAudit = useCallback(
+    (serverGraph: ApiGraph, extraChange?: AuditTrailEntry["change"]): ApiGraph => {
+      const changes = auditTrail.map((a) => a.change).filter(Boolean) as AuditTrailEntry["change"][];
+      const allChanges = extraChange ? [...changes, extraChange] : changes;
+      return allChanges.reduce((acc, change) => applyForwardChange(acc, change), serverGraph);
+    },
+    [applyForwardChange, auditTrail]
+  );
 
   const undoAuditEntry = (id: string) => {
     const remaining = auditTrail.filter((a) => a.id !== id && a.change);

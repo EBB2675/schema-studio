@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 from fastapi import Depends, FastAPI, Query, HTTPException
 from fastapi.responses import ORJSONResponse
@@ -270,11 +270,13 @@ class CustomQuantityRequest(BaseModel):
     dtype: str
     docstring: str | None = None
     parent_name: str | None = None
+    parent_relation: Literal["inherits", "hasSubSection"] | None = None
 
 class CustomClassRequest(BaseModel):
     package: str
     name: str
     parent: str | None = None
+    relation: Literal["inherits", "hasSubSection"] = "inherits"
     docstring: str | None = None
 
 
@@ -317,7 +319,7 @@ def _attach_custom_quantity(graph: dict, req: CustomQuantityRequest) -> dict:
         }
         nodes = nodes + [target_section]
 
-        # If a parent is provided, add an inheritance edge too.
+        # If a parent is provided, add an edge with the requested relation (default inherits).
         if req.parent_name:
             parent = next(
                 (
@@ -329,7 +331,8 @@ def _attach_custom_quantity(graph: dict, req: CustomQuantityRequest) -> dict:
                 None,
             )
             parent_id = parent.get("id") if parent else req.parent_name
-            edges = edges + [{"source": parent_id, "target": new_id, "type": "inherits", "card": None}]
+            relation = req.parent_relation or "inherits"
+            edges = edges + [{"source": parent_id, "target": new_id, "type": relation, "card": None}]
 
     if target_section is None:
         raise HTTPException(
@@ -398,7 +401,8 @@ def _attach_custom_class(graph: dict, req: CustomClassRequest) -> dict:
     if req.parent:
         parent = next((n for n in nodes if n.get("id") == req.parent or n.get("label") == req.parent), None)
         parent_id = parent.get("id") if parent else req.parent
-        edges = edges + [{"source": parent_id, "target": new_id, "type": "inherits", "card": None}]
+        relation = req.relation if req.relation in ("inherits", "hasSubSection") else "inherits"
+        edges = edges + [{"source": parent_id, "target": new_id, "type": relation, "card": None}]
 
     graph = dict(graph)
     graph["nodes"] = nodes

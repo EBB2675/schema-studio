@@ -32,7 +32,7 @@ Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 - **Branch comparison**: Choose two Git branches and render the diff with visual highlights.
 - **Namespace filtering**: Limit traversal to a base namespace; optionally include cross-module links.
 - **Bird's-eye overview**: Switch to Overview mode to list packages/classes for any branch.
-- **Editable quantities/classes**: Toggle Editable mode to add classes and add, rename, or remove quantities from the selected class card (full editor, not just a viewer).
+- **Editable quantities/classes**: Toggle Editable mode to add classes (as inheritance or subsection relationships) and add, rename, or remove quantities from the selected class card (full editor, not just a viewer).
 - **Optional overlays**: Inheritance edges and dtype/shape metadata are toggles (inheritance now on by default so new class relationships are visible).
 - **Export**: Save the current graph as JSON or a PDF (PNG-backed) snapshot.
 

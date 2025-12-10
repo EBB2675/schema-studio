@@ -59,7 +59,7 @@ type Props = {
   selectedClassId?: string | null;
   onSelectClass?: (cls: UmlClassNode) => void;
   onCreateQuantity?: (classId: string, data: { quantityName: string; dtype: string; docstring: string }) => Promise<void>;
-  onCreateClass?: (data: { name: string; parentId?: string | null; docstring?: string }) => Promise<void>;
+  onCreateClass?: (data: { name: string; parentId?: string | null; docstring?: string; relation?: "inherits" | "hasSubSection" }) => Promise<void>;
   creatingQuantityFor?: string | null;
   creatingClass?: boolean;
   onClearSelection?: () => void;
@@ -140,10 +140,11 @@ export default function GraphView({
     docstring: "",
   });
   const [showClassForm, setShowClassForm] = useState<boolean>(false);
-  const [classDraft, setClassDraft] = useState<{ name: string; parentId: string; docstring: string }>({
+  const [classDraft, setClassDraft] = useState<{ name: string; parentId: string; docstring: string; relation: "inherits" | "hasSubSection" }>({
     name: "",
     parentId: "",
     docstring: "",
+    relation: "inherits",
   });
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [classError, setClassError] = useState<string | null>(null);
@@ -260,10 +261,11 @@ export default function GraphView({
         name: trimmed,
         parentId: classDraft.parentId || null,
         docstring: classDraft.docstring.trim() || undefined,
+        relation: classDraft.relation,
       });
       setClassError(null);
       setShowClassForm(false);
-      setClassDraft({ name: "", parentId: "", docstring: "" });
+      setClassDraft({ name: "", parentId: "", docstring: "", relation: "inherits" });
     } catch (e: any) {
       setClassError(e?.message || "Failed to add class");
     }
@@ -789,6 +791,18 @@ export default function GraphView({
                       {cls.name}
                     </option>
                   ))}
+                </select>
+                <label className="label" htmlFor="new-class-relation">Relationship</label>
+                <select
+                  id="new-class-relation"
+                  className="select"
+                  value={classDraft.relation}
+                  onChange={(e) => setClassDraft((prev) => ({ ...prev, relation: e.target.value as any }))}
+                  disabled={!classDraft.parentId}
+                  title={classDraft.parentId ? "Choose how this class links to its parent" : "Select a parent to set relationship"}
+                >
+                  <option value="inherits">Inheritance (is-a)</option>
+                  <option value="hasSubSection">Subsection (has-a)</option>
                 </select>
                 <label className="label" htmlFor="new-class-doc">Docstring</label>
                 <textarea
