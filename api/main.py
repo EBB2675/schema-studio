@@ -269,6 +269,7 @@ class CustomQuantityRequest(BaseModel):
     quantity_name: str
     dtype: str
     docstring: str | None = None
+    parent_name: str | None = None
 
 class CustomClassRequest(BaseModel):
     package: str
@@ -315,6 +316,20 @@ def _attach_custom_quantity(graph: dict, req: CustomQuantityRequest) -> dict:
             "module": req.package,
         }
         nodes = nodes + [target_section]
+
+        # If a parent is provided, add an inheritance edge too.
+        if req.parent_name:
+            parent = next(
+                (
+                    n
+                    for n in nodes
+                    if n.get("kind") == "section"
+                    and (n.get("id") == req.parent_name or n.get("label") == req.parent_name)
+                ),
+                None,
+            )
+            parent_id = parent.get("id") if parent else req.parent_name
+            edges = edges + [{"source": parent_id, "target": new_id, "type": "inherits", "card": None}]
 
     if target_section is None:
         raise HTTPException(

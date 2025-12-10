@@ -745,6 +745,13 @@ export default function App() {
       const classLabel =
         rawName && rawName.includes(".") ? rawName.split(".").pop() || rawName : rawName;
 
+      const parentLabel =
+        targetClass.parentId
+          ? umlState?.classes.find((c) => c.id === targetClass.parentId)?.name ||
+            targetClass.parentId.split(".").pop() ||
+            targetClass.parentId
+          : null;
+
       if (!classLabel) {
         const message = "Target class name missing";
         setQuantityActionErr(message);
@@ -756,6 +763,7 @@ export default function App() {
         {
           package: targetPackage,
           class_name: classLabel,
+          parent_name: parentLabel,
           quantity_name: quantityName,
           dtype,
           docstring: docstring || null,
