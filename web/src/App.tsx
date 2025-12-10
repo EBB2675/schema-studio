@@ -59,7 +59,7 @@ export default function App() {
 
   const [includeQuantities, setIncludeQuantities] = useState<boolean>(true);
   const [includeSubsections, setIncludeSubsections] = useState<boolean>(true);
-  const [includeInheritance, setIncludeInheritance] = useState<boolean>(false);
+  const [includeInheritance, setIncludeInheritance] = useState<boolean>(true);
   const [showQuantityMetadata, setShowQuantityMetadata] = useState<boolean>(false);
 
   const [crossModules, setCrossModules] = useState<boolean>(true);
