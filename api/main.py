@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 from fastapi import Depends, FastAPI, Query, HTTPException
 from fastapi.responses import ORJSONResponse
@@ -269,6 +269,15 @@ class CustomQuantityRequest(BaseModel):
     quantity_name: str
     dtype: str
     docstring: str | None = None
+    parent_name: str | None = None
+    parent_relation: Literal["inherits", "hasSubSection"] | None = None
+
+class CustomClassRequest(BaseModel):
+    package: str
+    name: str
+    parent: str | None = None
+    relation: Literal["inherits", "hasSubSection"] = "inherits"
+    docstring: str | None = None
 
 
 def _attach_custom_quantity(graph: dict, req: CustomQuantityRequest) -> dict:
@@ -297,6 +306,33 @@ def _attach_custom_quantity(graph: dict, req: CustomQuantityRequest) -> dict:
         if module.startswith(req.package):
             target_section = node
             break
+
+    if target_section is None:
+        # Allow adding a quantity to a freshly created synthetic class by materializing it here.
+        new_id = f"{req.package}.{req.class_name}"
+        target_section = {
+            "id": new_id,
+            "kind": "section",
+            "label": req.class_name,
+            "doc": None,
+            "module": req.package,
+        }
+        nodes = nodes + [target_section]
+
+        # If a parent is provided, add an edge with the requested relation (default inherits).
+        if req.parent_name:
+            parent = next(
+                (
+                    n
+                    for n in nodes
+                    if n.get("kind") == "section"
+                    and (n.get("id") == req.parent_name or n.get("label") == req.parent_name)
+                ),
+                None,
+            )
+            parent_id = parent.get("id") if parent else req.parent_name
+            relation = req.parent_relation or "inherits"
+            edges = edges + [{"source": parent_id, "target": new_id, "type": relation, "card": None}]
 
     if target_section is None:
         raise HTTPException(
@@ -337,6 +373,43 @@ def _attach_custom_quantity(graph: dict, req: CustomQuantityRequest) -> dict:
     return graph
 
 
+def _attach_custom_class(graph: dict, req: CustomClassRequest) -> dict:
+    """
+    Inject a synthetic class node (and optional inheritance edge) into the graph.
+    """
+    nodes = graph.get("nodes", [])
+    edges = graph.get("edges", [])
+
+    for node in nodes:
+        if node.get("kind") != "section":
+            continue
+        if node.get("label") == req.name or node.get("id") == req.name:
+            raise HTTPException(status_code=400, detail=f"Class '{req.name}' already exists")
+
+    # Always use a fully qualified id to keep consistency when adding quantities later.
+    new_id = f"{req.package}.{req.name}"
+
+    new_node = {
+        "id": new_id,
+        "kind": "section",
+        "label": req.name,
+        "doc": req.docstring or None,
+        "module": req.package,
+    }
+    nodes = nodes + [new_node]
+
+    if req.parent:
+        parent = next((n for n in nodes if n.get("id") == req.parent or n.get("label") == req.parent), None)
+        parent_id = parent.get("id") if parent else req.parent
+        relation = req.relation if req.relation in ("inherits", "hasSubSection") else "inherits"
+        edges = edges + [{"source": parent_id, "target": new_id, "type": relation, "card": None}]
+
+    graph = dict(graph)
+    graph["nodes"] = nodes
+    graph["edges"] = edges
+    return graph
+
+
 @app.post("/schema/custom-quantity")
 def add_custom_quantity(
     req: CustomQuantityRequest,
@@ -367,6 +440,45 @@ def add_custom_quantity(
             base_namespace=ns
         )
         result = _attach_custom_quantity(graph, req)
+        result["workspace"] = workspace_payload(workspace)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
+
+
+@app.post("/schema/custom-class")
+def add_custom_class(
+    req: CustomClassRequest,
+    root: str | None = Query(None),
+    include_quantities: bool = Query(True),
+    include_subsections: bool = Query(True),
+    include_inheritance: bool = Query(True),
+    allow_cross_module: bool = Query(True),
+    base_namespace: str | None = Query(None),
+    user_ws=Depends(get_user_and_workspace),
+):
+    user, workspace = user_ws
+    ns = base_namespace
+    if ns is None and workspace.get("package") == req.package:
+        ns = workspace.get("base_namespace")
+    workspace = update_workspace(
+        user["id"],
+        package=req.package,
+        base_namespace=ns or workspace.get("base_namespace"),
+    )
+    try:
+        graph = build_graph(
+            package=req.package,
+            root=root,
+            include_quantities=include_quantities,
+            include_subsections=include_subsections,
+            include_inheritance=include_inheritance,
+            allow_cross_module=allow_cross_module,
+            base_namespace=ns
+        )
+        result = _attach_custom_class(graph, req)
         result["workspace"] = workspace_payload(workspace)
         return result
     except HTTPException:

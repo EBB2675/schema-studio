@@ -1,0 +1,51 @@
+export type QuantityNode = {
+  id: string;
+  name: string;
+  dtype?: string;
+  shape?: string | null;
+  card?: string | null;
+  doc?: string | null;
+  path?: string | null;
+  line?: number | null;
+  ownerId: string;
+};
+
+export type UmlClassNode = {
+  id: string;
+  name: string;
+  doc?: string | null;
+  module?: string | null;
+  path?: string | null;
+  line?: number | null;
+  quantities: QuantityNode[];
+  parentId?: string | null;
+  parentRelation?: "inherits" | "hasSubSection" | null;
+};
+
+export type UmlEdge = {
+  source: string;
+  target: string;
+  type: string;
+  card?: string | null;
+};
+
+export type UmlGraphState = {
+  package: string;
+  root: string | null;
+  classes: UmlClassNode[];
+  edges: UmlEdge[];
+};
+
+export type AuditChange =
+  | { type: "add-class"; cls: UmlClassNode }
+  | { type: "remove-class"; cls: UmlClassNode }
+  | { type: "add-quantity"; classId: string; quantity: QuantityNode }
+  | { type: "remove-quantity"; classId: string; quantity: QuantityNode }
+  | { type: "edit-quantity"; classId: string; before: QuantityNode; after: QuantityNode };
+
+export type AuditTrailEntry = {
+  id: string;
+  timestamp: string;
+  description: string;
+  change: AuditChange;
+};

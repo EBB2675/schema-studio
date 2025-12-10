@@ -1,6 +1,6 @@
-# Schema UML Viewer
+# SchemaStudio Editor
 
-Interactive UML-style viewer for NOMAD-compatible schemas (defaults to `nomad-simulations`).
+Interactive UML-style editor for NOMAD-compatible schemas (defaults to `nomad-simulations`).
 
 Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 
@@ -9,7 +9,7 @@ Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 - Right-hand **Under the hood** panel shows **normalization and helper functions** that act on the selected section.
 - **Branch diff** (base → head) highlights **added/changed/removed** nodes/edges, including quantity changes.
 - **Bird's-eye overview**: inspect packages/classes across branches without building a full graph.
-- **Editable mode**: add, rename, or remove quantities directly in the UI (server validates supported dtypes).
+- **Editable mode**: add classes and quantities directly in the UI (server validates supported dtypes; new classes get fully-qualified ids and accept quantities immediately).
 - **Export**: download the current graph as JSON or a PDF snapshot.
 
 ---
@@ -32,8 +32,8 @@ Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 - **Branch comparison**: Choose two Git branches and render the diff with visual highlights.
 - **Namespace filtering**: Limit traversal to a base namespace; optionally include cross-module links.
 - **Bird's-eye overview**: Switch to Overview mode to list packages/classes for any branch.
-- **Editable quantities**: Toggle Editable mode to add, rename, or remove quantities from the selected class card.
-- **Optional overlays**: Inheritance edges and dtype/shape metadata are opt-in toggles (off by default).
+- **Editable quantities/classes**: Toggle Editable mode to add classes (as inheritance or subsection relationships) and add, rename, or remove quantities from the selected class card (full editor, not just a viewer).
+- **Optional overlays**: Inheritance edges and dtype/shape metadata are toggles (inheritance now on by default so new class relationships are visible).
 - **Export**: Save the current graph as JSON or a PDF (PNG-backed) snapshot.
 
 ---
@@ -107,7 +107,7 @@ curl 'http://127.0.0.1:5179/git/branches'
 3. **Build graph**: Render UML cards and composition edges.
 4. **Doc panel**: Click a class → see its docstring + list of quantities; click a quantity to view its docstring.
 5. **Under the hood panel**: Click a class → see which normalizers and module-level helpers are associated with that section.
-6. **Editable mode** (Doc panel): Toggle **Editable mode**, then add/rename/remove quantities on the selected class (supported dtypes are validated server-side).
+6. **Editable mode** (Doc panel): Toggle **Editable mode**, then add classes or add/rename/remove quantities on the selected class (supported dtypes are validated server-side; new classes can immediately receive quantities).
 7. **Compare branches**: Choose **Base** and **Head** → **Compare** to see a visual diff.
 8. **Export**: Download the current graph as **JSON** or a **PDF** snapshot from the sidebar.
 
@@ -129,7 +129,7 @@ Legend:
 - `POST /graph` → build a graph from a specific branch/worktree
 - `GET /git/branches` → `{\"branches\":[...], \"active\": \"...\", \"head\": \"SHA\"}`
 - `POST /graph/diff` → `{ base:{branch,sha,graph}, head:{...}, diff:{nodes:{added,removed,changed}, edges:{added,removed}} }`
-- `POST /schema/custom-quantity` → inject a validated quantity onto a class (used by Editable mode)
+- `POST /schema/custom-quantity` → inject a validated quantity onto a class (used by Editable mode; will materialize a synthetic section if the class was just created client-side)
 - `GET /usage` → list normalize methods / helper functions for a given section class
 
 > Quantity docstrings are embedded directly in `/schema`.
