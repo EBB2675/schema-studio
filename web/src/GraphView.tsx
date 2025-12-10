@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import cytoscape from "cytoscape";
 import elk from "elkjs/lib/elk.bundled.js";
 import cytoscapeElk from "cytoscape-elk";
 import type { Core, ElementDefinition } from "cytoscape";
 import { useSelection, type QtyMeta, type QtySnapshot } from "./store/selection";
+import { SUPPORTED_DTYPES } from "./components/quantityShared";
+import type { QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
 
 type QtyDiffState = "added" | "removed" | "changed" | undefined;
 
@@ -53,6 +55,15 @@ type Props = {
   showQuantityMetadata?: boolean;
   showInheritance?: boolean;
   theme?: "dark" | "light";
+  umlState?: UmlGraphState | null;
+  selectedClassId?: string | null;
+  onSelectClass?: (cls: UmlClassNode) => void;
+  onCreateQuantity?: (classId: string, data: { quantityName: string; dtype: string; docstring: string }) => Promise<void>;
+  onCreateClass?: (data: { name: string; parentId?: string | null; docstring?: string }) => Promise<void>;
+  creatingQuantityFor?: string | null;
+  creatingClass?: boolean;
+  onClearSelection?: () => void;
+  editableMode?: boolean;
 };
 
 const cleanType = (t?: string | null) => {
@@ -104,10 +115,34 @@ export default function GraphView({
   onReady,
   showQuantityMetadata = true,
   showInheritance = true,
-  theme = "dark"
+  theme = "dark",
+  umlState,
+  selectedClassId,
+  onSelectClass,
+  onCreateQuantity,
+  onCreateClass,
+  creatingQuantityFor,
+  creatingClass,
+  onClearSelection,
+  editableMode = false
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
+  const [cardBoxes, setCardBoxes] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({});
+  const [activeQuantityTarget, setActiveQuantityTarget] = useState<string | null>(null);
+  const [quantityDraft, setQuantityDraft] = useState<{ quantityName: string; dtype: string; docstring: string }>({
+    quantityName: "",
+    dtype: SUPPORTED_DTYPES[0],
+    docstring: "",
+  });
+  const [showClassForm, setShowClassForm] = useState<boolean>(false);
+  const [classDraft, setClassDraft] = useState<{ name: string; parentId: string; docstring: string }>({
+    name: "",
+    parentId: "",
+    docstring: "",
+  });
+  const [inlineError, setInlineError] = useState<string | null>(null);
+  const [classError, setClassError] = useState<string | null>(null);
 
   const setSelected = useMemo(() => useSelection.getState().setSelected, []);
 
@@ -119,6 +154,116 @@ export default function GraphView({
       inheritance: isDark ? "#e2e8f0" : "#0f172a",
     };
   }, [theme]);
+
+  const classCards = useMemo(() => umlState?.classes ?? [], [umlState]);
+  const editingEnabled = useMemo(() => Boolean(onCreateQuantity && onCreateClass && umlState), [onCreateClass, onCreateQuantity, umlState]);
+  const showEditingUi = editingEnabled && editableMode;
+
+  const toQtyMeta = useCallback(
+    (q: QuantityNode): QtyMeta => ({
+      id: q.id,
+      name: q.name,
+      dtype: q.dtype,
+      shape: q.shape ?? undefined,
+      card: q.card ?? undefined,
+      doc: q.doc ?? undefined,
+      path: q.path ?? undefined,
+      line: typeof q.line === "number" ? q.line : undefined,
+      owner: q.ownerId,
+    }),
+    []
+  );
+
+  const publishClassSelection = useCallback(
+    (cls: UmlClassNode) => {
+      const payloadQuantities = cls.quantities.map(toQtyMeta);
+      onSelectClass?.(cls);
+      setSelected({
+        id: cls.id,
+        fqid: cls.module && cls.name ? `${cls.module}.${cls.name}` : cls.id,
+        kind: "class",
+        name: cls.name,
+        doc: cls.doc || "",
+        path: cls.path || undefined,
+        line: typeof cls.line === "number" ? cls.line : undefined,
+        quantities: payloadQuantities,
+      });
+      setActiveQuantityTarget(null);
+    },
+    [onSelectClass, setSelected, toQtyMeta]
+  );
+
+
+  const handleSelectClass = useCallback(
+    (classId: string) => {
+      const cls = classCards.find((c) => c.id === classId);
+      if (!cls) return;
+      publishClassSelection(cls);
+    },
+    [classCards, publishClassSelection]
+  );
+
+
+  const openQuantityFormFor = useCallback(
+    (classId: string) => {
+      setActiveQuantityTarget(classId);
+      setInlineError(null);
+      setQuantityDraft({
+        quantityName: "",
+        dtype: SUPPORTED_DTYPES[0],
+        docstring: "",
+      });
+    if (classId !== selectedClassId) {
+      handleSelectClass(classId);
+    }
+    },
+    [handleSelectClass, selectedClassId]
+  );
+
+  const handleQuantitySubmit = useCallback(
+    async (cls: UmlClassNode) => {
+      if (!onCreateQuantity) return;
+      const trimmed = quantityDraft.quantityName.trim();
+      if (!trimmed) {
+        setInlineError("Quantity name is required");
+        return;
+      }
+      try {
+        await onCreateQuantity(cls.id, {
+          quantityName: trimmed,
+          dtype: quantityDraft.dtype,
+          docstring: quantityDraft.docstring.trim(),
+        });
+        setInlineError(null);
+        setActiveQuantityTarget(null);
+        setQuantityDraft({ quantityName: "", dtype: SUPPORTED_DTYPES[0], docstring: "" });
+      } catch (e: any) {
+        setInlineError(e?.message || "Failed to add quantity");
+      }
+    },
+    [onCreateQuantity, quantityDraft]
+  );
+
+  const handleClassSubmit = useCallback(async () => {
+    if (!onCreateClass) return;
+    const trimmed = classDraft.name.trim();
+    if (!trimmed) {
+      setClassError("Class name is required");
+      return;
+    }
+    try {
+      await onCreateClass({
+        name: trimmed,
+        parentId: classDraft.parentId || null,
+        docstring: classDraft.docstring.trim() || undefined,
+      });
+      setClassError(null);
+      setShowClassForm(false);
+      setClassDraft({ name: "", parentId: "", docstring: "" });
+    } catch (e: any) {
+      setClassError(e?.message || "Failed to add class");
+    }
+  }, [classDraft, onCreateClass]);
 
   const quantityDiffs = useMemo(() => {
     const map = new Map<
@@ -472,22 +617,26 @@ export default function GraphView({
       const d = target.data();
       const qList = quantitiesByOwner.get(d.id) || [];
 
-      // fully-qualified section name for /usage
-      // e.g. module="nomad_simulations.schema_packages.model_method", rawName="DFT"
-      const fqid =
-        d.module && (d.rawName || d.id)
-          ? `${d.module}.${d.rawName || d.id}`
-          : d.id;
+      const quantities: QuantityNode[] = qList.map((q) => ({
+        id: q.id,
+        name: q.name,
+        dtype: q.dtype,
+        shape: q.shape ?? null,
+        card: q.card ?? null,
+        doc: q.doc ?? null,
+        path: q.path ?? null,
+        line: typeof q.line === "number" ? q.line : null,
+        ownerId: q.owner,
+      }));
 
-      useSelection.getState().setSelected({
+      publishClassSelection({
         id: d.id,
-        fqid,
-        kind: "class",
         name: d.rawName || d.id,
         doc: d.doc || "",
+        module: d.module || "",
         path: d.path || "",
-        line: typeof d.line === "number" ? d.line : undefined,
-        quantities: qList,
+        line: typeof d.line === "number" ? d.line : null,
+        quantities,
       });
 
       cy.animate(
@@ -550,7 +699,217 @@ export default function GraphView({
       onReady?.(null);
       cyRef.current?.destroy();
     };
-  }, [sectionsMap, attrsMap, methodsMap, umlEdges, quantitiesByOwner, diff, setSelected, onReady, showQuantityMetadata, palette]);
+  }, [sectionsMap, attrsMap, methodsMap, umlEdges, quantitiesByOwner, diff, setSelected, onReady, showQuantityMetadata, palette, publishClassSelection]);
 
-  return <div className="graph" ref={containerRef} />;
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+
+    const updateBoxes = () => {
+      const boxes: Record<string, { x: number; y: number; w: number; h: number }> = {};
+      cy.nodes().forEach((n) => {
+        const box = n.renderedBoundingBox({ includeLabels: true });
+        boxes[n.id()] = { x: box.x1, y: box.y1, w: box.w, h: box.h };
+      });
+      setCardBoxes(boxes);
+    };
+
+    updateBoxes();
+    cy.on("render", updateBoxes);
+    cy.on("pan zoom", updateBoxes);
+
+    return () => {
+      cy.off("render", updateBoxes);
+      cy.off("pan zoom", updateBoxes);
+    };
+  }, [umlState]);
+
+  const cardViews = useMemo(
+    () =>
+      classCards.map((cls) => ({
+        cls,
+        box: cardBoxes[cls.id],
+      })),
+    [cardBoxes, classCards]
+  );
+
+  return (
+    <div className="graph" style={{ position: "relative" }}>
+      <div className="cy-canvas" ref={containerRef} />
+      {showEditingUi && (
+        <div
+          className="uml-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelected(null);
+              setActiveQuantityTarget(null);
+              onClearSelection?.();
+            }
+          }}
+        >
+          <div className="canvas-toolbar">
+            <button className="btn" type="button" onClick={() => setShowClassForm((v) => !v)}>
+              {showClassForm ? "Close add class" : "Add class"}
+            </button>
+            {showClassForm && (
+              <div className="canvas-form" onClick={(e) => e.stopPropagation()}>
+                <div className="row" style={{ alignItems: "center", justifyContent: "space-between" }}>
+                  <div className="label" style={{ margin: 0 }}>New class</div>
+                  <button className="btn secondary" type="button" onClick={() => setShowClassForm(false)}>
+                    Cancel
+                  </button>
+                </div>
+                <label className="label" htmlFor="new-class-name">Name</label>
+                <input
+                  id="new-class-name"
+                  className="input"
+                  value={classDraft.name}
+                  onChange={(e) => setClassDraft((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g. NewSection"
+                />
+                <label className="label" htmlFor="new-class-parent">Parent class</label>
+                <select
+                  id="new-class-parent"
+                  className="select"
+                  value={classDraft.parentId}
+                  onChange={(e) => setClassDraft((prev) => ({ ...prev, parentId: e.target.value }))}
+                >
+                  <option value="">No parent</option>
+                  {classCards.map((cls) => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </option>
+                  ))}
+                </select>
+                <label className="label" htmlFor="new-class-doc">Docstring</label>
+                <textarea
+                  id="new-class-doc"
+                  className="input"
+                  style={{ minHeight: 60, resize: "vertical" }}
+                  value={classDraft.docstring}
+                  onChange={(e) => setClassDraft((prev) => ({ ...prev, docstring: e.target.value }))}
+                  placeholder="Optional description"
+                />
+                {classError ? <div className="inline-error">{classError}</div> : null}
+                <div className="row" style={{ justifyContent: "flex-end" }}>
+                  <button className="btn" type="button" onClick={handleClassSubmit} disabled={creatingClass}>
+                    {creatingClass ? "Adding…" : "Add class"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+        {cardViews.map(({ cls, box }) => {
+          if (!box) return null;
+          const isSelected = selectedClassId === cls.id;
+          const moduleLabel = cls.module ? (cls.module.split(".").pop() || cls.module) : null;
+          return (
+            <div
+              key={cls.id}
+              className={`uml-card ${isSelected ? "is-selected" : ""}`}
+              style={{
+                transform: `translate(${box.x}px, ${box.y}px)`,
+                width: Math.max(box.w, 180),
+                minWidth: 180,
+              }}
+            >
+              <div className="uml-card-header">
+                <div>
+                  <div className="uml-card-title">{cls.name}</div>
+                  {moduleLabel ? <div className="uml-card-sub" title={cls.module || ""}>{moduleLabel}</div> : null}
+                </div>
+                {editingEnabled && isSelected ? (
+                  <button
+                    className="uml-plus"
+                    type="button"
+                    title="Add quantity"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openQuantityFormFor(cls.id);
+                    }}
+                  >
+                    +
+                  </button>
+                ) : null}
+              </div>
+              <div className="uml-qty-list">
+                {cls.quantities.map((q) => {
+                  const metaParts = [q.dtype, q.shape && q.shape !== "[]" ? q.shape : null, q.card ? `[${q.card}]` : null]
+                    .filter(Boolean)
+                    .join("  ");
+                  return (
+                    <div key={q.id} className="uml-qty">
+                      <div className="uml-qty-name">{q.name}</div>
+                      <div className="uml-qty-meta">{metaParts}</div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {editingEnabled && activeQuantityTarget === cls.id ? (
+                <div className="uml-inline-wrapper">
+                  <form
+                    className="uml-inline-form"
+                    onClick={(e) => e.stopPropagation()}
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleQuantitySubmit(cls);
+                    }}
+                  >
+                    <div className="label" style={{ marginBottom: 6 }}>New quantity</div>
+                    <input
+                      className="input"
+                      placeholder="name"
+                      value={quantityDraft.quantityName}
+                      onChange={(e) => setQuantityDraft((prev) => ({ ...prev, quantityName: e.target.value }))}
+                    />
+                    <select
+                      className="select"
+                      value={quantityDraft.dtype}
+                      onChange={(e) => setQuantityDraft((prev) => ({ ...prev, dtype: e.target.value }))}
+                    >
+                      {SUPPORTED_DTYPES.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                    <textarea
+                      className="input"
+                      placeholder="Docstring (optional)"
+                      style={{ minHeight: 60, resize: "vertical" }}
+                      value={quantityDraft.docstring}
+                      onChange={(e) => setQuantityDraft((prev) => ({ ...prev, docstring: e.target.value }))}
+                    />
+                    {inlineError ? <div className="inline-error">{inlineError}</div> : null}
+                    <div className="row" style={{ justifyContent: "flex-end" }}>
+                      <button
+                        className="btn secondary"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveQuantityTarget(null);
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="btn"
+                        type="submit"
+                        disabled={creatingQuantityFor === cls.id}
+                      >
+                        {creatingQuantityFor === cls.id ? "Adding…" : "Add"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+        </div>
+      )}
+    </div>
+  );
 }

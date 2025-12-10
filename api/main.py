@@ -270,6 +270,12 @@ class CustomQuantityRequest(BaseModel):
     dtype: str
     docstring: str | None = None
 
+class CustomClassRequest(BaseModel):
+    package: str
+    name: str
+    parent: str | None = None
+    docstring: str | None = None
+
 
 def _attach_custom_quantity(graph: dict, req: CustomQuantityRequest) -> dict:
     """
@@ -337,6 +343,43 @@ def _attach_custom_quantity(graph: dict, req: CustomQuantityRequest) -> dict:
     return graph
 
 
+def _attach_custom_class(graph: dict, req: CustomClassRequest) -> dict:
+    """
+    Inject a synthetic class node (and optional inheritance edge) into the graph.
+    """
+    nodes = graph.get("nodes", [])
+    edges = graph.get("edges", [])
+
+    for node in nodes:
+        if node.get("kind") != "section":
+            continue
+        if node.get("label") == req.name or node.get("id") == req.name:
+            raise HTTPException(status_code=400, detail=f"Class '{req.name}' already exists")
+
+    new_id = req.name
+    if any(n.get("id") == req.name for n in nodes):
+        new_id = f"{req.package}.{req.name}"
+
+    new_node = {
+        "id": new_id,
+        "kind": "section",
+        "label": req.name,
+        "doc": req.docstring or None,
+        "module": req.package,
+    }
+    nodes = nodes + [new_node]
+
+    if req.parent:
+        parent = next((n for n in nodes if n.get("id") == req.parent or n.get("label") == req.parent), None)
+        parent_id = parent.get("id") if parent else req.parent
+        edges = edges + [{"source": parent_id, "target": new_id, "type": "inherits", "card": None}]
+
+    graph = dict(graph)
+    graph["nodes"] = nodes
+    graph["edges"] = edges
+    return graph
+
+
 @app.post("/schema/custom-quantity")
 def add_custom_quantity(
     req: CustomQuantityRequest,
@@ -367,6 +410,45 @@ def add_custom_quantity(
             base_namespace=ns
         )
         result = _attach_custom_quantity(graph, req)
+        result["workspace"] = workspace_payload(workspace)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
+
+
+@app.post("/schema/custom-class")
+def add_custom_class(
+    req: CustomClassRequest,
+    root: str | None = Query(None),
+    include_quantities: bool = Query(True),
+    include_subsections: bool = Query(True),
+    include_inheritance: bool = Query(True),
+    allow_cross_module: bool = Query(True),
+    base_namespace: str | None = Query(None),
+    user_ws=Depends(get_user_and_workspace),
+):
+    user, workspace = user_ws
+    ns = base_namespace
+    if ns is None and workspace.get("package") == req.package:
+        ns = workspace.get("base_namespace")
+    workspace = update_workspace(
+        user["id"],
+        package=req.package,
+        base_namespace=ns or workspace.get("base_namespace"),
+    )
+    try:
+        graph = build_graph(
+            package=req.package,
+            root=root,
+            include_quantities=include_quantities,
+            include_subsections=include_subsections,
+            include_inheritance=include_inheritance,
+            allow_cross_module=allow_cross_module,
+            base_namespace=ns
+        )
+        result = _attach_custom_class(graph, req)
         result["workspace"] = workspace_payload(workspace)
         return result
     except HTTPException:

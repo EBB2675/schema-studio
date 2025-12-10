@@ -5,28 +5,17 @@ import GraphView, { type GraphExportHandle } from "./GraphView";
 import DocPanel from "./components/DocPanel";
 import OverviewGrid from "./components/OverviewGrid";
 import UnderTheHoodPanel from "./components/UnderTheHoodPanel";
-import AddQuantityForm from "./components/AddQuantityForm";
 import type { QuantityFormData } from "./components/quantityShared";
 import CollapsibleSection from "./components/CollapsibleSection";
 import { useSelection } from "./store/selection";
 import { jsPDF } from "jspdf";
+import type { AuditTrailEntry, QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
 
 type ApiGraph = {
   package: string;
   root: string | null;
   nodes: any[];
   edges: any[];
-};
-
-type AuditEntry = {
-  id: string;
-  timestamp: string;
-  action: "add" | "edit" | "remove";
-  className: string;
-  quantity?: string;
-  details?: string;
-  pkg: string;
-  branch?: string;
 };
 
 const DEFAULT_API = "http://localhost:5179";
@@ -77,6 +66,10 @@ export default function App() {
   const [namespace, setNamespace] = useState<string>(DEFAULT_NAMESPACE);
 
   const [graph, setGraph] = useState<ApiGraph | null>(null);
+  const [baseGraph, setBaseGraph] = useState<ApiGraph | null>(null);
+  const [umlState, setUmlState] = useState<UmlGraphState | null>(null);
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [selectedQuantityId, setSelectedQuantityId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -110,29 +103,48 @@ export default function App() {
   const [diffData, setDiffData] = useState<any | null>(null);
   const [diffLoading, setDiffLoading] = useState<boolean>(false);
 
-  const [auditLog, setAuditLog] = useState<AuditEntry[]>(() => {
+  const [auditTrail, setAuditTrail] = useState<AuditTrailEntry[]>((() => {
     if (typeof window === "undefined") return [];
     try {
       const raw = window.localStorage.getItem("schema-uml-audit");
       if (!raw) return [];
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
+      if (!Array.isArray(parsed)) return [];
+      // drop legacy entries without the new shape
+      return parsed.filter((e: any) => e && e.change && e.id && e.timestamp && e.description);
     } catch {
       return [];
     }
-  });
+  })());
 
   // editable mode
   const [editableMode, setEditableMode] = useState<boolean>(false);
-  const [addLoading, setAddLoading] = useState<boolean>(false);
-  const [addErr, setAddErr] = useState<string | null>(null);
   const [quantityActionErr, setQuantityActionErr] = useState<string | null>(null);
+  const [creatingQuantityFor, setCreatingQuantityFor] = useState<string | null>(null);
+  const [creatingClass, setCreatingClass] = useState<boolean>(false);
 
   const [graphHandle, setGraphHandle] = useState<GraphExportHandle | null>(null);
 
   const { selected, setSelected } = useSelection();
 
   const clearQuantityActionError = useCallback(() => setQuantityActionErr(null), []);
+
+  useEffect(() => {
+    if (!selected) {
+      setSelectedClassId(null);
+      setSelectedQuantityId(null);
+      return;
+    }
+    if (selected.kind === "class") {
+      setSelectedClassId(selected.id);
+      setSelectedQuantityId(null);
+      return;
+    }
+    if (selected.kind === "quantity" && selected.owner) {
+      setSelectedClassId(selected.owner);
+      setSelectedQuantityId(selected.id);
+    }
+  }, [selected]);
 
   // overview mode
   const [mode, setMode] = useState<"graph" | "overview">("graph");
@@ -142,11 +154,11 @@ export default function App() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      window.localStorage.setItem("schema-uml-audit", JSON.stringify(auditLog));
+      window.localStorage.setItem("schema-uml-audit", JSON.stringify(auditTrail));
     } catch {
       // ignore storage errors
     }
-  }, [auditLog]);
+  }, [auditTrail]);
 
   const api = useMemo(() => {
     const instance = axios.create({ baseURL: apiBase });
@@ -216,14 +228,11 @@ export default function App() {
     }
   }, []);
 
-  const appendAudit = useCallback(
-    (entry: Omit<AuditEntry, "id" | "timestamp">) => {
-      const now = new Date().toISOString();
-      const id = `${now}-${Math.random().toString(16).slice(2)}`;
-      setAuditLog((prev) => [...prev, { ...entry, id, timestamp: now }]);
-    },
-    []
-  );
+  const appendAudit = useCallback((change: AuditTrailEntry["change"], description: string) => {
+    const now = new Date().toISOString();
+    const id = `${now}-${Math.random().toString(16).slice(2)}`;
+    setAuditTrail((prev) => [...prev, { change, description, id, timestamp: now }]);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -427,6 +436,7 @@ export default function App() {
           }
         );
         setGraph(r.data?.graph ?? null);
+        setBaseGraph(r.data?.graph ?? null);
         syncWorkspaceFromResponse(r.data);
       } else {
         const r = await api.get("/schema", {
@@ -441,6 +451,7 @@ export default function App() {
           },
         });
         setGraph(r.data);
+        setBaseGraph(r.data);
         syncWorkspaceFromResponse(r.data);
       }
     } catch (e: any) {
@@ -539,52 +550,201 @@ export default function App() {
     }
   };
 
-  const refreshSelectionQuantities = (nextGraph: ApiGraph) => {
-    if (!selected || selected.kind !== "class") return;
-    const quantities = (nextGraph.nodes || [])
-      .filter((n: any) => n.kind === "quantity" && n.owner === selected.id)
-      .map((n: any) => ({
-        id: n.id,
-        name: n.label,
-        dtype: n.dtype ?? n.data_type ?? n.type ?? undefined,
-        shape: n.shape ?? undefined,
-        card: n.card ?? undefined,
-        doc: n.doc ?? undefined,
-        path: n.path ?? undefined,
-        line: typeof n.line === "number" ? n.line : undefined,
-        owner: n.owner ?? selected.id
-      }));
+  const toQuantityNode = useCallback((n: any): QuantityNode => {
+    const ownerId = n.owner ?? "";
+    return {
+      id: n.id,
+      name: n.label ?? n.id?.split(".").pop() ?? n.id,
+      dtype: n.dtype ?? n.data_type ?? n.type ?? undefined,
+      shape: n.shape ?? null,
+      card: n.card ?? null,
+      doc: n.doc ?? null,
+      path: n.path ?? null,
+      line: typeof n.line === "number" ? n.line : null,
+      ownerId,
+    };
+  }, []);
 
-    setSelected({ ...selected, quantities });
-  };
+  const buildUmlState = useCallback((g: ApiGraph | null): UmlGraphState | null => {
+    if (!g) return null;
+    const nodes = g.nodes || [];
+    const edges = g.edges || [];
+    const sections = nodes.filter((n: any) => n.kind === "section");
+    const quantities = nodes.filter((n: any) => n.kind === "quantity");
+    const parentByChild = new Map<string, string | null>();
+    edges.forEach((e: any) => {
+      if (e.type === "inherits" && e.target && e.source) {
+        parentByChild.set(e.target, e.source);
+      }
+    });
+
+    const classList: UmlClassNode[] = sections.map((sec: any) => {
+      const ownedQuantities = quantities
+        .filter((q: any) => q.owner === sec.id)
+        .map((q: any) => toQuantityNode(q));
+
+      return {
+        id: sec.id,
+        name: sec.label ?? sec.id,
+        doc: sec.doc ?? null,
+        module: sec.module ?? null,
+        path: sec.path ?? null,
+        line: typeof sec.line === "number" ? sec.line : null,
+        quantities: ownedQuantities,
+        parentId: parentByChild.get(sec.id) ?? null,
+      };
+    });
+
+    return {
+      package: g.package,
+      root: g.root ?? null,
+      classes: classList,
+      edges: edges.map((e: any) => ({
+        source: e.source,
+        target: e.target,
+        type: e.type,
+        card: e.card ?? null,
+      })),
+    };
+  }, [toQuantityNode]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     window.localStorage.setItem("schema-uml-theme", theme);
   }, [theme]);
 
-  const addCustomQuantity = async ({ quantityName, dtype, docstring }: { quantityName: string; dtype: string; docstring: string }) => {
+  useEffect(() => {
+    setUmlState(buildUmlState(graph));
+  }, [buildUmlState, graph]);
+
+  useEffect(() => {
+    if (!auditTrail.length && graph) {
+      setBaseGraph(graph);
+    }
+  }, [auditTrail.length, graph]);
+
+  useEffect(() => {
+    if (!umlState) {
+      setSelectedClassId(null);
+      setSelectedQuantityId(null);
+      setSelected(null);
+      return;
+    }
+    if (selectedClassId && !umlState.classes.some((c) => c.id === selectedClassId)) {
+      setSelectedClassId(null);
+      setSelectedQuantityId(null);
+      setSelected(null);
+      return;
+    }
+    if (
+      selectedClassId &&
+      selectedQuantityId &&
+      !umlState.classes.some((c) => c.id === selectedClassId && c.quantities.some((q) => q.id === selectedQuantityId))
+    ) {
+      setSelectedQuantityId(null);
+    }
+  }, [selectedClassId, selectedQuantityId, setSelected, umlState]);
+
+  useEffect(() => {
+    if (!umlState) {
+      setSelected(null);
+      return;
+    }
+    if (!selectedClassId) {
+      setSelected(null);
+      return;
+    }
+    const cls = umlState.classes.find((c) => c.id === selectedClassId);
+    if (!cls) {
+      setSelected(null);
+      return;
+    }
+    if (selectedQuantityId) {
+      const qty = cls.quantities.find((q) => q.id === selectedQuantityId);
+      if (!qty) {
+        setSelected({
+          id: cls.id,
+          fqid: cls.module && cls.name ? `${cls.module}.${cls.name}` : cls.id,
+          kind: "class",
+          name: cls.name,
+          doc: cls.doc || "",
+          path: cls.path || undefined,
+          line: typeof cls.line === "number" ? cls.line : undefined,
+          quantities: cls.quantities.map((q) => ({
+            id: q.id,
+            name: q.name,
+            dtype: q.dtype,
+            shape: q.shape ?? undefined,
+            card: q.card ?? undefined,
+            doc: q.doc ?? undefined,
+            path: q.path ?? undefined,
+            line: typeof q.line === "number" ? q.line : undefined,
+            owner: q.ownerId,
+          })),
+        });
+        return;
+      }
+      setSelected({
+        id: qty.id,
+        kind: "quantity",
+        name: qty.name,
+        doc: qty.doc || "",
+        path: qty.path || undefined,
+        line: typeof qty.line === "number" ? qty.line : undefined,
+        dtype: qty.dtype,
+        shape: qty.shape ?? undefined,
+        card: qty.card ?? undefined,
+        owner: cls.id,
+      });
+      return;
+    }
+    setSelected({
+      id: cls.id,
+      fqid: cls.module && cls.name ? `${cls.module}.${cls.name}` : cls.id,
+      kind: "class",
+      name: cls.name,
+      doc: cls.doc || "",
+      path: cls.path || undefined,
+      line: typeof cls.line === "number" ? cls.line : undefined,
+      quantities: cls.quantities.map((q) => ({
+        id: q.id,
+        name: q.name,
+        dtype: q.dtype,
+        shape: q.shape ?? undefined,
+        card: q.card ?? undefined,
+        doc: q.doc ?? undefined,
+        path: q.path ?? undefined,
+        line: typeof q.line === "number" ? q.line : undefined,
+        owner: q.ownerId,
+      })),
+    });
+  }, [selectedClassId, selectedQuantityId, setSelected, umlState]);
+
+  const createQuantityOnCanvas = async (classId: string, { quantityName, dtype, docstring }: QuantityFormData) => {
+    const currentGraph = ensureEditableReady();
+    if (!currentGraph) {
+      throw new Error(addBlockedReason || "Canvas is not editable");
+    }
     if (!token) {
-      setAddErr("Login required");
-      return;
+      const message = "Login required";
+      setQuantityActionErr(message);
+      throw new Error(message);
     }
-    if (!graph) {
-      setAddErr("Build a graph first to add a quantity.");
-      return;
-    }
-    if (!selected || selected.kind !== "class") {
-      setAddErr("Select a class node to attach the quantity.");
-      return;
+    const targetClass = umlState?.classes.find((c) => c.id === classId);
+    if (!targetClass) {
+      const message = "Select a class to add the quantity.";
+      setQuantityActionErr(message);
+      throw new Error(message);
     }
 
-    setAddLoading(true);
-    setAddErr(null);
+    setCreatingQuantityFor(classId);
+    setQuantityActionErr(null);
     try {
       const r = await api.post(
         "/schema/custom-quantity",
         {
           package: pkg,
-          class_name: selected.name,
+          class_name: targetClass.name,
           quantity_name: quantityName,
           dtype,
           docstring: docstring || null,
@@ -601,22 +761,231 @@ export default function App() {
       );
       const updated = r.data as ApiGraph;
       setGraph(updated);
-      refreshSelectionQuantities(updated);
-      setQuantityActionErr(null);
+      const nextUml = buildUmlState(updated);
+      setUmlState(nextUml);
       syncWorkspaceFromResponse(r.data);
-      appendAudit({
-        action: "add",
-        className: selected.name,
-        quantity: quantityName,
-        details: `dtype=${dtype || "unspecified"}`,
-        pkg,
-        branch: workspace?.branch || packageBranch || baseBranch || headBranch,
-      });
+      const addedQuantity =
+        nextUml?.classes
+          ?.find((c) => c.id === targetClass.id)
+          ?.quantities.find((q) => q.name === quantityName || q.id === `${targetClass.id}.${quantityName}`) ??
+        ({
+          id: `${targetClass.id}.${quantityName}`,
+          name: quantityName,
+          dtype,
+          doc: docstring || null,
+          ownerId: targetClass.id,
+          shape: null,
+          card: null,
+          path: null,
+          line: null,
+        } as QuantityNode);
+
+      appendAudit(
+        { type: "add-quantity", classId: targetClass.id, quantity: addedQuantity },
+        `Added quantity ${addedQuantity.name}${dtype ? `: ${dtype}` : ""} to class ${targetClass.name}`
+      );
+      setSelectedClassId(targetClass.id);
+      setSelectedQuantityId(addedQuantity.id);
     } catch (e: any) {
-      setAddErr(e?.response?.data?.detail || String(e));
+      const message = e?.response?.data?.detail || String(e);
+      setQuantityActionErr(message);
+      throw new Error(message);
     } finally {
-      setAddLoading(false);
+      setCreatingQuantityFor(null);
     }
+  };
+
+  const createClassOnCanvas = async ({ name, parentId, docstring }: { name: string; parentId?: string | null; docstring?: string }) => {
+    const currentGraph = ensureEditableReady();
+    if (!currentGraph) {
+      throw new Error(addBlockedReason || "Canvas is not editable");
+    }
+    if (!token) {
+      const message = "Login required";
+      setQuantityActionErr(message);
+      throw new Error(message);
+    }
+    setCreatingClass(true);
+    setQuantityActionErr(null);
+    try {
+      const res = await api.post(
+        "/schema/custom-class",
+        {
+          package: pkg,
+          name,
+          parent: parentId || null,
+          docstring: docstring || null,
+        },
+        {
+          params: {
+            root,
+            include_quantities: includeQuantities,
+            include_subsections: includeSubsections,
+            include_inheritance: includeInheritance,
+            allow_cross_module: crossModules,
+            base_namespace: normalizedNamespace || undefined,
+          },
+        }
+      );
+      const next = res.data as ApiGraph;
+      setGraph(next);
+      const nextUml = buildUmlState(next);
+      setUmlState(nextUml);
+      syncWorkspaceFromResponse(res.data);
+      const newCls =
+        nextUml?.classes.find((c) => c.name === name || c.id === name || c.id.endsWith(`.${name}`)) ??
+        ({
+          id: name,
+          name,
+          doc: docstring || null,
+          module: pkg,
+          parentId: parentId || null,
+          quantities: [],
+          path: null,
+          line: null,
+        } as UmlClassNode);
+      appendAudit(
+        { type: "add-class", cls: newCls },
+        parentId ? `Added class ${newCls.name} extending ${parentId}` : `Added class ${newCls.name}`
+      );
+      setSelectedClassId(newCls.id);
+      setSelectedQuantityId(null);
+    } catch (e: any) {
+      const message = e?.response?.data?.detail || String(e);
+      setQuantityActionErr(message);
+      throw new Error(message);
+    } finally {
+      setCreatingClass(false);
+    }
+  };
+
+  const removeQuantityFromGraphState = useCallback((g: ApiGraph, quantityId: string): ApiGraph => {
+    const nodes = (g.nodes || []).filter((n: any) => n.id !== quantityId);
+    const edges = (g.edges || []).filter((e: any) => e.source !== quantityId && e.target !== quantityId);
+    return { ...g, nodes, edges };
+  }, []);
+
+  const addQuantityToGraphState = useCallback((g: ApiGraph, quantity: QuantityNode): ApiGraph => {
+    const qNode = {
+      id: quantity.id,
+      kind: "quantity",
+      label: quantity.name,
+      dtype: quantity.dtype,
+      shape: quantity.shape ?? undefined,
+      card: quantity.card ?? undefined,
+      doc: quantity.doc ?? null,
+      owner: quantity.ownerId,
+      path: quantity.path ?? undefined,
+      line: quantity.line ?? undefined,
+    };
+    const hasNode = (g.nodes || []).some((n: any) => n.id === quantity.id);
+    const nodes = hasNode
+      ? g.nodes.map((n: any) => (n.id === quantity.id ? { ...n, ...qNode } : n))
+      : [...(g.nodes || []), qNode];
+    const edgeExists = (g.edges || []).some((e: any) => e.source === quantity.ownerId && e.target === quantity.id);
+    const edges = edgeExists
+      ? g.edges
+      : [...(g.edges || []), { source: quantity.ownerId, target: quantity.id, type: "hasQuantity", card: quantity.card ?? null }];
+    return { ...g, nodes, edges };
+  }, []);
+
+  const removeClassFromGraphState = useCallback((g: ApiGraph, classId: string): ApiGraph => {
+    const removedQuantityIds = (g.nodes || []).filter((n: any) => n.owner === classId).map((n: any) => n.id);
+    const nodes = (g.nodes || []).filter(
+      (n: any) => n.id !== classId && !removedQuantityIds.includes(n.id)
+    );
+    const edges = (g.edges || []).filter(
+      (e: any) =>
+        e.source !== classId &&
+        e.target !== classId &&
+        !removedQuantityIds.includes(e.source) &&
+        !removedQuantityIds.includes(e.target)
+    );
+    return { ...g, nodes, edges };
+  }, []);
+
+  const addClassToGraphState = useCallback((g: ApiGraph, cls: UmlClassNode): ApiGraph => {
+    const nodesWithoutClass = (g.nodes || []).filter((n: any) => !(n.kind === "section" && n.id === cls.id));
+    const sectionNode = {
+      id: cls.id,
+      kind: "section",
+      label: cls.name,
+      module: cls.module ?? g.package,
+      doc: cls.doc ?? null,
+      path: cls.path ?? null,
+      line: cls.line ?? null,
+    };
+    const qtyNodes = cls.quantities.map((q) => ({
+      id: q.id,
+      kind: "quantity",
+      label: q.name,
+      dtype: q.dtype,
+      shape: q.shape ?? undefined,
+      card: q.card ?? undefined,
+      doc: q.doc ?? null,
+      owner: q.ownerId,
+      path: q.path ?? undefined,
+      line: q.line ?? undefined,
+    }));
+    const qtyEdges = cls.quantities.map((q) => ({
+      source: q.ownerId,
+      target: q.id,
+      type: "hasQuantity",
+      card: q.card ?? null,
+    }));
+    const inheritEdge = cls.parentId ? [{ source: cls.parentId, target: cls.id, type: "inherits", card: null }] : [];
+
+    return {
+      ...g,
+      nodes: [...nodesWithoutClass, sectionNode, ...qtyNodes],
+      edges: [...(g.edges || []).filter((e: any) => !(e.type === "inherits" && e.target === cls.id)), ...qtyEdges, ...inheritEdge],
+    };
+  }, []);
+
+  const applyForwardChange = useCallback((current: ApiGraph, change: AuditTrailEntry["change"]): ApiGraph => {
+    switch (change.type) {
+      case "add-class":
+        return addClassToGraphState(current, change.cls);
+      case "remove-class":
+        return removeClassFromGraphState(current, change.cls.id);
+      case "add-quantity":
+        return addQuantityToGraphState(current, change.quantity);
+      case "remove-quantity":
+        return removeQuantityFromGraphState(current, change.quantity.id);
+      case "edit-quantity": {
+        const withoutBefore = removeQuantityFromGraphState(current, change.before.id);
+        return addQuantityToGraphState(withoutBefore, change.after);
+      }
+      default:
+        return current;
+    }
+  }, [addClassToGraphState, addQuantityToGraphState, removeClassFromGraphState, removeQuantityFromGraphState]);
+
+  const undoAuditEntry = (id: string) => {
+    const remaining = auditTrail.filter((a) => a.id !== id && a.change);
+    const entry = auditTrail.find((a) => a.id === id);
+    if (!entry || !entry.change) return;
+
+    const start = baseGraph ?? graph;
+    if (!start) return;
+
+    const rebuilt = remaining.reduce((acc, curr) => applyForwardChange(acc, curr.change!), start);
+
+    setGraph(rebuilt);
+    setUmlState(buildUmlState(rebuilt));
+    setAuditTrail(remaining as AuditTrailEntry[]);
+    setQuantityActionErr(null);
+  };
+
+  const clearAuditTrail = () => {
+    if (auditTrail.length === 0) return;
+    const baseline = baseGraph ?? graph;
+    if (baseline) {
+      setGraph(baseline);
+      setUmlState(buildUmlState(baseline));
+    }
+    setAuditTrail([]);
+    setQuantityActionErr(null);
   };
 
   useEffect(() => {
@@ -660,6 +1029,17 @@ export default function App() {
     updateWorkspaceOnServer({ base_namespace: value });
   };
 
+  const handleCanvasClassSelect = useCallback((cls: UmlClassNode) => {
+    setSelectedClassId(cls.id);
+    setSelectedQuantityId(null);
+  }, []);
+
+  const handleCanvasClear = useCallback(() => {
+    setSelectedClassId(null);
+    setSelectedQuantityId(null);
+    setSelected(null);
+  }, [setSelected]);
+
   const focusRootSection = useCallback(() => {
     const targetRoot = currentGraph?.root || root;
     if (!targetRoot) return;
@@ -685,8 +1065,10 @@ export default function App() {
             ? `${fallbackNode.module}.${fallbackNode.label || fallbackNode.id}`
             : fallbackNode.id,
       });
+      setSelectedClassId(fallbackNode.id);
+      setSelectedQuantityId(null);
     }
-  }, [currentGraph, graphHandle, root, setSelected]);
+  }, [currentGraph, graphHandle, root, setSelected, setSelectedClassId, setSelectedQuantityId]);
 
   useEffect(() => {
     focusRootSection();
@@ -764,19 +1146,32 @@ export default function App() {
 
     const nextGraph = { ...current, nodes: nextNodes, edges: nextEdges };
     setGraph(nextGraph);
-    refreshSelectionQuantities(nextGraph);
     setQuantityActionErr(null);
-    appendAudit({
-      action: "edit",
-      className: target.owner,
-      quantity: trimmedName,
-      details: `renamed from ${target.label}${target.dtype ? ` (${target.dtype})` : ""}`,
-      pkg,
-      branch: workspace?.branch || packageBranch || baseBranch || headBranch,
-    });
+    const before: QuantityNode = {
+      id: target.id,
+      name: target.label,
+      dtype: target.dtype ?? target.data_type ?? target.type ?? undefined,
+      shape: target.shape ?? null,
+      card: target.card ?? null,
+      doc: target.doc ?? null,
+      path: target.path ?? null,
+      line: typeof target.line === "number" ? target.line : null,
+      ownerId: target.owner,
+    };
+    const after: QuantityNode = {
+      ...before,
+      id: newId,
+      name: trimmedName,
+      dtype: updates.dtype,
+      doc: updates.docstring || null,
+    };
+    appendAudit(
+      { type: "edit-quantity", classId: target.owner, before, after },
+      `Edited quantity ${before.name} on ${target.owner}`
+    );
 
     if (selected?.kind === "quantity" && selected.id === quantityId) {
-      setSelected({ ...selected, id: newId, name: trimmedName, doc: updates.docstring, dtype: updates.dtype, owner: selected.owner });
+      setSelectedQuantityId(newId);
     }
   };
 
@@ -799,19 +1194,25 @@ export default function App() {
     const nextGraph = { ...current, nodes: nextNodes, edges: nextEdges };
 
     setGraph(nextGraph);
-    refreshSelectionQuantities(nextGraph);
     setQuantityActionErr(null);
-    appendAudit({
-      action: "remove",
-      className: target.owner,
-      quantity: target.label,
-      details: "Removed quantity",
-      pkg,
-      branch: workspace?.branch || packageBranch || baseBranch || headBranch,
-    });
+    const removed: QuantityNode = {
+      id: target.id,
+      name: target.label,
+      dtype: target.dtype ?? target.data_type ?? target.type ?? undefined,
+      shape: target.shape ?? null,
+      card: target.card ?? null,
+      doc: target.doc ?? null,
+      path: target.path ?? null,
+      line: typeof target.line === "number" ? target.line : null,
+      ownerId: target.owner,
+    };
+    appendAudit(
+      { type: "remove-quantity", classId: target.owner, quantity: removed },
+      `Removed quantity ${removed.name} from ${target.owner}`
+    );
 
     if (selected?.kind === "quantity" && selected.id === quantityId) {
-      setSelected(null);
+      setSelectedQuantityId(null);
     }
   };
 
@@ -848,8 +1249,8 @@ export default function App() {
   };
 
   const exportAuditLog = () => {
-    if (!auditLog.length) return;
-    const blob = new Blob([JSON.stringify(auditLog, null, 2)], { type: "application/json" });
+    if (!auditTrail.length) return;
+    const blob = new Blob([JSON.stringify(auditTrail, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -1221,14 +1622,54 @@ export default function App() {
             </>
           ) : graph ? (
             <>
-              <GraphView
-                nodes={graph.nodes}
+              <div style={{ position: "relative", flex: 1 }}>
+                <div className="graph-toolbar">
+                  <div className="label" style={{ marginBottom: 4 }}>Canvas mode</div>
+                  <div className="toggle-group">
+                    <button
+                      className={`toggle-chip ${!editableMode ? "active" : ""}`}
+                      type="button"
+                      onClick={() => setEditableMode(false)}
+                      aria-pressed={!editableMode}
+                    >
+                      UML
+                    </button>
+                    <button
+                      className={`toggle-chip ${editableMode ? "active" : ""}`}
+                      type="button"
+                      onClick={() => {
+                        setEditableMode(true);
+                        setQuantityActionErr(null);
+                      }}
+                      disabled={!!addBlockedReason}
+                      aria-pressed={editableMode}
+                      title={addBlockedReason || "Toggle editing"}
+                    >
+                      Edit
+                    </button>
+                  </div>
+                  {editableMode && addBlockedReason ? (
+                    <div className="small" style={{ color: "var(--muted)" }}>{addBlockedReason}</div>
+                  ) : null}
+                </div>
+                <GraphView
+                  nodes={graph.nodes}
                 edges={graph.edges}
+                umlState={umlState}
+                selectedClassId={selectedClassId}
                 showQuantityMetadata={showQuantityMetadata}
                 showInheritance={includeInheritance}
                 theme={theme}
                 onReady={setGraphHandle}
-              />
+                onSelectClass={handleCanvasClassSelect}
+                onCreateQuantity={createQuantityOnCanvas}
+                onCreateClass={createClassOnCanvas}
+                creatingQuantityFor={creatingQuantityFor}
+                creatingClass={creatingClass}
+                onClearSelection={handleCanvasClear}
+                  editableMode={editableMode}
+                />
+              </div>
             </>
           ) : (
             <div className="empty-state">
@@ -1290,39 +1731,6 @@ export default function App() {
             }}
           >
             <CollapsibleSection
-              title="Editable mode"
-              hint="Enable editing and add new quantities"
-              className="panel"
-            >
-              <div className="action-stack" style={{ gap: 14 }}>
-                <div className="row" style={{ alignItems: "center", gap: 10 }}>
-                  <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <input
-                      type="checkbox"
-                      checked={editableMode}
-                      onChange={(e) => {
-                        setEditableMode(e.target.checked);
-                        setAddErr(null);
-                        setQuantityActionErr(null);
-                      }}
-                    />
-                    Editable mode
-                  </label>
-                  {addBlockedReason && <span className="small">{addBlockedReason}</span>}
-                </div>
-
-                <AddQuantityForm
-                  enabled={editableMode && !addBlockedReason}
-                  blockedReason={addBlockedReason}
-                  targetClass={selectedClassName}
-                  onSubmit={addCustomQuantity}
-                  submitting={addLoading}
-                  error={addErr}
-                />
-              </div>
-            </CollapsibleSection>
-
-            <CollapsibleSection
               title="Audit trail"
               hint="Track edits and export"
               className="panel"
@@ -1333,22 +1741,22 @@ export default function App() {
                     className="btn secondary"
                     type="button"
                     onClick={exportAuditLog}
-                    disabled={!auditLog.length}
-                    title={auditLog.length ? "Download audit log as JSON" : "No edits recorded yet"}
+                    disabled={!auditTrail.length}
+                    title={auditTrail.length ? "Download audit log as JSON" : "No edits recorded yet"}
                   >
                     Export JSON
                   </button>
                   <button
                     className="btn secondary"
                     type="button"
-                    onClick={() => setAuditLog([])}
-                    disabled={!auditLog.length}
+                    onClick={clearAuditTrail}
+                    disabled={!auditTrail.length}
                   >
                     Clear
                   </button>
                 </div>
                 <div className="small" style={{ color: "var(--muted)" }}>
-                  {auditLog.length ? `${auditLog.length} edits recorded` : "No edits yet"}
+                  {auditTrail.length ? `${auditTrail.length} edits recorded` : "No edits yet"}
                 </div>
                 <div
                   style={{
@@ -1361,7 +1769,7 @@ export default function App() {
                     fontSize: 12
                   }}
                 >
-                  {[...auditLog].reverse().map((entry) => (
+                  {[...auditTrail].reverse().filter((e) => e?.change).map((entry) => (
                     <div
                       key={entry.id}
                       style={{
@@ -1369,20 +1777,24 @@ export default function App() {
                         borderBottom: "1px solid var(--panel-border)",
                       }}
                     >
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                        <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{entry.action}</span>
-                        <span style={{ color: "var(--muted)" }}>
-                          {new Date(entry.timestamp).toLocaleString()}
-                        </span>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                        <div>
+                          <div style={{ fontWeight: 700 }}>{entry.description}</div>
+                          <div style={{ color: "var(--muted)" }}>
+                            {new Date(entry.timestamp).toLocaleString()}
+                          </div>
+                          <div style={{ color: "var(--subtitle)" }}>Change: {entry.change.type}</div>
+                        </div>
+                        <button
+                          className="btn secondary"
+                          type="button"
+                          onClick={() => undoAuditEntry(entry.id)}
+                          title="Undo this change"
+                          style={{ padding: "6px 10px" }}
+                        >
+                          🗑
+                        </button>
                       </div>
-                      <div style={{ color: "var(--subtitle)" }}>
-                        {entry.className}
-                        {entry.quantity ? ` · ${entry.quantity}` : ""}
-                      </div>
-                      <div style={{ color: "var(--muted)" }}>
-                        {entry.pkg}{entry.branch ? ` @ ${entry.branch}` : ""}
-                      </div>
-                      {entry.details ? <div>{entry.details}</div> : null}
                     </div>
                   ))}
                 </div>
