@@ -4,11 +4,11 @@ A structured overview of the repository for developers to navigate, understand, 
 
 ---
 
-## 0) TL;DR
+## 0) TL;DR 
 
-**Purpose:** Visualize NOMAD-compatible schemas (defaults to `nomad-simulations`) as UML diagrams, inspect docstrings and normalization helpers, edit quantities inline, and compare schema changes across Git branches.
+**Purpose:** Edit and visualize NOMAD-compatible schemas (defaults to `nomad-simulations`). Build UML diagrams, inspect docstrings/usage, add custom classes (inheritance or subsection), and add quantities inline. Supports branch diff + overview mode.
 
-**Frontend:** React + TypeScript + Cytoscape + ELK
+**Frontend:** React + TypeScript + Cytoscape + ELK  
 **Backend:** FastAPI + GitPython
 
 **Main directories:**
@@ -22,7 +22,8 @@ A structured overview of the repository for developers to navigate, understand, 
 - `GET /schema` — build a graph from the working tree (single branch)
 - `POST /graph` — build a graph from a specific branch/worktree (single branch)
 - `POST /graph/diff` — compare two branches and return a diff
-- `POST /schema/custom-quantity` — inject a validated quantity onto a class (used by editable mode)
+- `POST /schema/custom-class` — add a synthetic class (id is always package-qualified); relation `inherits|hasSubSection`
+- `POST /schema/custom-quantity` — add a quantity to a class; will create the class if missing (honors parent relation)
 - `GET /overview` — bird’s-eye list of packages and top-level classes at a branch
 - `GET /git/branches` — list local branches of the repo
 - `GET /git/packages` — list Python modules under a base package
@@ -47,11 +48,17 @@ namespaces, add them to `SCHEMA_UML_BASE_PACKAGE` (comma separated) and point ea
 - UML cards show **sections**; **quantities** appear as attributes inside the card (not separate nodes).
 - Right **Doc Panel** shows the **class docstring** and a **clickable list of quantities**; clicking a quantity shows its docstring.
 - Right **Under-the-hood Panel** shows **normalization methods and helper functions** that act on the selected section (based on `/usage`).
-- **Editable mode**: add, rename, or remove quantities on the selected class; dtype is validated against a supported allowlist.
+- **Editable mode**: add classes (inheritance or subsection links) and add/rename/remove quantities; dtype validated against allowlist; custom classes get fully qualified ids so quantities work immediately.
 - **Bird’s-eye overview** renders packages/classes for a branch without building the full graph.
-- **Opt-in overlays**: inheritance edges and dtype/shape labels default off; enable via sidebar toggles.
+- **Overlays**: inheritance defaults on; dtype/shape labels toggleable.
 - **Exports**: download the current graph JSON or a PDF snapshot.
 - Branch diff highlights: 🟩 Added, 🟨 Changed, 🟥 Removed (edges dashed red; quantity deltas are included).
+
+**Custom edit model (important for agents):**
+- Backend persists no custom state; it injects synthetic classes/quantities into the returned graph.
+- Custom classes: `POST /schema/custom-class` with `relation` (`inherits` | `hasSubSection`), always assigns id `{package}.{name}`; adds parent edge if provided.
+- Custom quantities: `POST /schema/custom-quantity` with `class_name` (label), optional `parent_name`/`parent_relation` to reattach parent edge if the class must be materialized server-side.
+- Frontend keeps an audit trail and replays all prior edits onto each fresh server graph so earlier custom edges don’t disappear when adding new ones.
 
 ---
 
