@@ -305,6 +305,18 @@ def _attach_custom_quantity(graph: dict, req: CustomQuantityRequest) -> dict:
             break
 
     if target_section is None:
+        # Allow adding a quantity to a freshly created synthetic class by materializing it here.
+        new_id = f"{req.package}.{req.class_name}"
+        target_section = {
+            "id": new_id,
+            "kind": "section",
+            "label": req.class_name,
+            "doc": None,
+            "module": req.package,
+        }
+        nodes = nodes + [target_section]
+
+    if target_section is None:
         raise HTTPException(
             status_code=404,
             detail=f"Section '{req.class_name}' not found in package '{req.package}'",
@@ -356,9 +368,8 @@ def _attach_custom_class(graph: dict, req: CustomClassRequest) -> dict:
         if node.get("label") == req.name or node.get("id") == req.name:
             raise HTTPException(status_code=400, detail=f"Class '{req.name}' already exists")
 
-    new_id = req.name
-    if any(n.get("id") == req.name for n in nodes):
-        new_id = f"{req.package}.{req.name}"
+    # Always use a fully qualified id to keep consistency when adding quantities later.
+    new_id = f"{req.package}.{req.name}"
 
     new_node = {
         "id": new_id,

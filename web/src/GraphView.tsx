@@ -478,7 +478,7 @@ export default function GraphView({
       elements,
       minZoom: 0.2,
       maxZoom: 3.5,
-      wheelSensitivity: 1.6,
+      wheelSensitivity: 1.05,
       style: [
         {
           selector: "node[kind='uml_class']",
@@ -828,8 +828,8 @@ export default function GraphView({
                   className={`uml-card ${isSelected ? "is-selected" : ""}`}
                   style={{
                     transform: `translate(${box.x}px, ${box.y}px)`,
-                    width: Math.max(box.w, 180),
-                    minWidth: 180,
+                    width: Math.max(box.w + 24, 200),
+                    minWidth: 200,
                   }}
                 >
                   <div className="uml-card-header">

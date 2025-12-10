@@ -740,11 +740,22 @@ export default function App() {
     setCreatingQuantityFor(classId);
     setQuantityActionErr(null);
     try {
+      const targetPackage = targetClass.module || pkg;
+      const rawName = targetClass.name || targetClass.id || classId;
+      const classLabel =
+        rawName && rawName.includes(".") ? rawName.split(".").pop() || rawName : rawName;
+
+      if (!classLabel) {
+        const message = "Target class name missing";
+        setQuantityActionErr(message);
+        throw new Error(message);
+      }
+
       const r = await api.post(
         "/schema/custom-quantity",
         {
-          package: pkg,
-          class_name: targetClass.name,
+          package: targetPackage,
+          class_name: classLabel,
           quantity_name: quantityName,
           dtype,
           docstring: docstring || null,
@@ -760,20 +771,37 @@ export default function App() {
         }
       );
       const updated = r.data as ApiGraph;
+
       setGraph(updated);
       const nextUml = buildUmlState(updated);
       setUmlState(nextUml);
-      syncWorkspaceFromResponse(r.data);
+      syncWorkspaceFromResponse(updated);
+      const updatedClass =
+        nextUml?.classes?.find(
+          (c) =>
+            c.id === targetClass.id ||
+            c.name === targetClass.name ||
+            c.id?.endsWith?.(`.${targetClass.name}`) ||
+            c.name?.endsWith?.(`.${targetClass.name}`)
+        ) ?? targetClass;
+
       const addedQuantity =
         nextUml?.classes
-          ?.find((c) => c.id === targetClass.id)
-          ?.quantities.find((q) => q.name === quantityName || q.id === `${targetClass.id}.${quantityName}`) ??
+          ?.find(
+            (c) =>
+              c.id === updatedClass.id ||
+              c.name === updatedClass.name ||
+              c.name?.endsWith?.(`.${updatedClass.name}`)
+          )
+          ?.quantities.find(
+            (q) => q.name === quantityName || q.id === `${updatedClass.id}.${quantityName}`
+          ) ??
         ({
-          id: `${targetClass.id}.${quantityName}`,
+          id: `${updatedClass.id}.${quantityName}`,
           name: quantityName,
           dtype,
           doc: docstring || null,
-          ownerId: targetClass.id,
+          ownerId: updatedClass.id,
           shape: null,
           card: null,
           path: null,
@@ -781,10 +809,10 @@ export default function App() {
         } as QuantityNode);
 
       appendAudit(
-        { type: "add-quantity", classId: targetClass.id, quantity: addedQuantity },
-        `Added quantity ${addedQuantity.name}${dtype ? `: ${dtype}` : ""} to class ${targetClass.name}`
+        { type: "add-quantity", classId: updatedClass.id, quantity: addedQuantity },
+        `Added quantity ${addedQuantity.name}${dtype ? `: ${dtype}` : ""} to class ${updatedClass.name}`
       );
-      setSelectedClassId(targetClass.id);
+      setSelectedClassId(updatedClass.id);
       setSelectedQuantityId(addedQuantity.id);
     } catch (e: any) {
       const message = e?.response?.data?.detail || String(e);
@@ -835,7 +863,7 @@ export default function App() {
       const newCls =
         nextUml?.classes.find((c) => c.name === name || c.id === name || c.id.endsWith(`.${name}`)) ??
         ({
-          id: name,
+          id: `${pkg}.${name}`,
           name,
           doc: docstring || null,
           module: pkg,
@@ -1777,14 +1805,7 @@ export default function App() {
                         borderBottom: "1px solid var(--panel-border)",
                       }}
                     >
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-                        <div>
-                          <div style={{ fontWeight: 700 }}>{entry.description}</div>
-                          <div style={{ color: "var(--muted)" }}>
-                            {new Date(entry.timestamp).toLocaleString()}
-                          </div>
-                          <div style={{ color: "var(--subtitle)" }}>Change: {entry.change.type}</div>
-                        </div>
+                      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                         <button
                           className="btn secondary"
                           type="button"
@@ -1794,6 +1815,13 @@ export default function App() {
                         >
                           🗑
                         </button>
+                        <div>
+                          <div style={{ fontWeight: 700 }}>{entry.description}</div>
+                          <div style={{ color: "var(--muted)" }}>
+                            {new Date(entry.timestamp).toLocaleString()}
+                          </div>
+                          <div style={{ color: "var(--subtitle)" }}>Change: {entry.change.type}</div>
+                        </div>
                       </div>
                     </div>
                   ))}
