@@ -731,7 +731,7 @@ export default function GraphView({
       cy.off("render", updateBoxes);
       cy.off("pan zoom", updateBoxes);
     };
-  }, [umlState]);
+  }, [umlState, theme]);
 
   const cardViews = useMemo(
     () =>
