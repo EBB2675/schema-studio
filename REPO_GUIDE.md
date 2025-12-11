@@ -29,6 +29,11 @@ A structured overview of the repository for developers to navigate, understand, 
 - `GET /git/packages` — list Python modules under a base package
 - `GET /usage` — list normalize methods / helper functions for a given section class
 
+**Authentication:**
+- Every endpoint (except `/auth/login`) requires a bearer token. The backend seeds a default user on startup:
+  - `SCHEMA_UML_DEFAULT_USER` (default `admin`)
+  - `SCHEMA_UML_DEFAULT_PASSWORD` (default `admin`)
+
 **Environment variables (one of):**
 ~~~bash
 export SCHEMA_UML_REPO=/path/to/your-schema
