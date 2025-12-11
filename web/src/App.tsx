@@ -197,15 +197,6 @@ export default function App() {
     [basePackageForEmpty]
   );
 
-  const toggleEmptyMode = useCallback(() => {
-    const next = !startEmpty;
-    setStartEmpty(next);
-    if (next) {
-      setRoot("");
-      setPkg(scratchPackage);
-    }
-  }, [scratchPackage, startEmpty]);
-
   const applyWorkspace = useCallback((ws: WorkspaceState | null) => {
     if (!ws) return;
     const prev = workspaceStateRef.current;
@@ -436,7 +427,7 @@ export default function App() {
 
   // build single-branch graph (resets diff view)
   const loadGraph = useCallback(async (
-    overrides?: { pkg?: string; root?: string; namespace?: string; branch?: string }
+    overrides?: { pkg?: string; root?: string; namespace?: string; branch?: string; forceEmpty?: boolean }
   ) => {
     if (!token) {
       setErr("Login required");
@@ -446,7 +437,7 @@ export default function App() {
     const rootToUse = overrides?.root ?? root;
     const namespaceToUse = overrides?.namespace ?? normalizedNamespace;
     const branchToUse = overrides?.branch ?? workspace?.branch ?? "";
-    const useEmpty = startEmpty;
+    const useEmpty = overrides?.forceEmpty ?? startEmpty;
     setErr(null);
     setQuantityActionErr(null);
     setLoading(true);
@@ -515,6 +506,20 @@ export default function App() {
       setLoading(false);
     }
   }, [api, crossModules, includeQuantities, includeSubsections, includeInheritance, normalizedNamespace, pkg, root, startEmpty, syncWorkspaceFromResponse, token, workspace?.branch]);
+
+  const toggleEmptyMode = useCallback(async () => {
+    const next = !startEmpty;
+    setStartEmpty(next);
+    if (next) {
+      const targetPkg = scratchPackage;
+      setRoot("");
+      setPkg(targetPkg);
+      setEditableMode(true);
+      await loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, forceEmpty: true });
+    } else {
+      await loadGraph({ forceEmpty: false });
+    }
+  }, [loadGraph, normalizedNamespace, scratchPackage, startEmpty]);
 
   // fetch git branches
   const loadBranches = useCallback(async () => {
@@ -1662,7 +1667,9 @@ export default function App() {
               <button
                 className="btn secondary"
                 type="button"
-                onClick={toggleEmptyMode}
+                onClick={() => {
+                  toggleEmptyMode();
+                }}
                 title={startEmpty ? "Return to schema-backed graph" : "Start a blank canvas"}
               >
                 {startEmpty ? "Back to schema graph" : "+ Start from empty canvas"}
@@ -1856,7 +1863,7 @@ export default function App() {
                 empty canvas” to draw your own schema from scratch. You can also compare two branches.
               </div>
               <div style={{ marginTop: 12 }}>
-                <button className="btn secondary" type="button" onClick={toggleEmptyMode}>
+                <button className="btn secondary" type="button" onClick={() => toggleEmptyMode()}>
                   {startEmpty ? "Back to schema graph" : "+ Start from empty canvas"}
                 </button>
               </div>
