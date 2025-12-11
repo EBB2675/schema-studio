@@ -65,7 +65,7 @@ namespaces, add them to `SCHEMA_UML_BASE_PACKAGE` (comma separated) and point ea
 ## 1) Repository Structure
 
 ~~~text
-schema-uml/
+schema-studio/
 ├─ api/                         # FastAPI backend
 │  ├─ main.py                   # App entry, CORS, /roots, /schema, /overview, /usage, /schema/custom-quantity
 │  ├─ routes_git.py             # /git/branches, /git/packages, /graph, /graph/diff

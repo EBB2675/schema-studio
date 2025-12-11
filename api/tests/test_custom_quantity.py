@@ -10,27 +10,6 @@ if str(PROJECT_ROOT) not in sys.path:
 import pytest
 from fastapi.testclient import TestClient
 
-from api.main import app
-
-
-@pytest.fixture()
-def client():
-    base_client = TestClient(app)
-    resp = base_client.post("/auth/login", json={"username": "admin", "password": "admin"})
-    assert resp.status_code == 200
-    token = resp.json()["access_token"]
-    original_request = base_client.request
-
-    def _authed_request(method: str, url: str, **kwargs):
-        headers = kwargs.pop("headers", {}) or {}
-        headers = {**headers, "Authorization": f"Bearer {token}"}
-        return original_request(method, url, headers=headers, **kwargs)
-
-    base_client.request = _authed_request  # type: ignore[assignment]
-    health = base_client.get("/health")
-    assert health.status_code == 200
-    return base_client
-
 
 def _create_dummy_package(tmp_path: Path) -> str:
     pkg_name = f"custom_pkg_{uuid4().hex}"

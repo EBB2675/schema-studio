@@ -42,14 +42,14 @@ Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 
 ### 1) Clone
 ```bash
-git clone https://github.com/EBB2675/schema-uml.git
-cd schema-uml
+git clone https://github.com/EBB2675/schema-studio.git
+cd schema-studio
 ```
 
 ### 2) Environment (Python 3.11)
 ```bash
-conda create -n schema-uml python=3.11 -y
-conda activate schema-uml
+conda create -n schema-studio python=3.11 -y
+conda activate schema-studio
 pip install -r api/requirements.txt
 ```
 
