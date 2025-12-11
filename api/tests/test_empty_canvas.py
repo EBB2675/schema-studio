@@ -1,4 +1,5 @@
 from uuid import uuid4
+from api import edit_store
 
 
 def _pkg_name(prefix: str = "empty_pkg") -> str:
@@ -45,3 +46,22 @@ def test_empty_canvas_persists_and_replays_edits(client):
     data = replay.json()
     assert any(n for n in data["nodes"] if n.get("kind") == "section" and n.get("label") == "Alpha")
     assert any(n for n in data["nodes"] if n.get("kind") == "quantity" and n.get("label") == "beta")
+
+
+def test_clearing_edits_removes_persisted_entries(client):
+    pkg = _pkg_name("clear_pkg")
+
+    client.post(
+        "/schema/custom-class",
+        params={"empty": True},
+        json={"package": pkg, "name": "Transient"},
+    )
+    stored = edit_store.list_edits(user_id=1, branch="develop", package=pkg)
+    assert stored
+
+    resp = client.delete("/schema/custom-edits", params={"package": pkg, "branch": "develop"})
+    assert resp.status_code == 200
+    assert resp.json()["deleted"] >= 1
+
+    remaining = edit_store.list_edits(user_id=1, branch="develop", package=pkg)
+    assert remaining == []

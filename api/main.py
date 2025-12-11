@@ -25,6 +25,7 @@ from .edit_store import (
     PersistedEdit,
     init_db as init_edit_store,
     list_edits,
+    delete_edits,
     save_edit,
     split_conflicts,
 )
@@ -682,6 +683,23 @@ def add_custom_class(
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
+
+
+@app.delete("/schema/custom-edits")
+def clear_custom_edits(
+    package: str | None = Query(None),
+    branch: str | None = Query(None),
+    user_ws=Depends(get_user_and_workspace),
+):
+    """
+    Remove all persisted custom edits for the current user / branch / package.
+    """
+    user, workspace = user_ws
+    pkg = package or workspace.get("package") or DEFAULT_BASE_PACKAGE
+    br = branch or workspace.get("branch") or DEFAULT_BRANCH
+    workspace = update_workspace(user["id"], branch=br, package=pkg, base_namespace=workspace.get("base_namespace"))
+    deleted = delete_edits(user["id"], br, pkg)
+    return {"deleted": deleted, "workspace": workspace_payload(workspace)}
 
 @app.get("/overview", response_model=OverviewResponse)
 def overview(

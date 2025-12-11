@@ -196,6 +196,16 @@ def list_edits(user_id: int, branch: str, package: str) -> List[PersistedEdit]:
     return [_row_to_edit(r) for r in rows]
 
 
+def delete_edits(user_id: int, branch: str, package: str) -> int:
+    with _connect() as conn:
+        cur = conn.execute(
+            "DELETE FROM custom_edits WHERE user_id = ? AND branch = ? AND package = ?",
+            (user_id, branch, package),
+        )
+        conn.commit()
+        return cur.rowcount or 0
+
+
 def split_conflicts(
     edits: Iterable[PersistedEdit],
     *,

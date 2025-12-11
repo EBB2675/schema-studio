@@ -1094,7 +1094,7 @@ export default function App() {
     setQuantityActionErr(null);
   };
 
-  const clearAuditTrail = () => {
+  const clearAuditTrail = async () => {
     if (auditTrail.length === 0) return;
     const baseline = baseGraph ?? graph;
     if (baseline) {
@@ -1103,6 +1103,16 @@ export default function App() {
     }
     setAuditTrail([]);
     setQuantityActionErr(null);
+    try {
+      await api.delete("/schema/custom-edits", {
+        params: {
+          package: pkg,
+          branch: workspace?.branch || undefined,
+        },
+      });
+    } catch (e) {
+      console.warn("Failed to clear persisted edits", e);
+    }
   };
 
   useEffect(() => {
