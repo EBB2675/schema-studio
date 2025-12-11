@@ -16,7 +16,7 @@ Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 
 # Overview
 
-![Schema UML homepage](assets/homepage-07-12.png)
+![Schema UML homepage](assets/homepage-11-12.png)
 
 ![gitdiff](assets/gitdiff-04-12.png)
 
