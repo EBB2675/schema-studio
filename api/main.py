@@ -2,7 +2,7 @@ from typing import List, Optional, Literal
 
 from fastapi import Depends, FastAPI, Query, HTTPException
 from fastapi.responses import ORJSONResponse
-from extractor.graph_builder import build_graph, list_sections
+from extractor.graph_builder import build_graph, list_sections, _root_namespace
 from fastapi.middleware.cors import CORSMiddleware
 import os, subprocess, tempfile, shutil, ast
 from pathlib import Path
@@ -19,6 +19,14 @@ from .auth import (
     init_db,
     update_workspace,
     workspace_payload,
+)
+from .edit_store import (
+    EditConflict,
+    PersistedEdit,
+    init_db as init_edit_store,
+    list_edits,
+    save_edit,
+    split_conflicts,
 )
 
 # Keep this list in sync with `web/src/components/quantityShared.ts`.
@@ -43,6 +51,7 @@ SUPPORTED_CUSTOM_DTYPES = {
 }
 
 init_db()
+init_edit_store()
 
 
 class LoginRequest(BaseModel):
@@ -69,6 +78,7 @@ app.add_middleware(
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
+    init_edit_store()
 
 
 app.include_router(git_router)
@@ -131,23 +141,37 @@ def schema(
     include_inheritance: bool = Query(True),
     allow_cross_module: bool = Query(True),
     base_namespace: str | None = Query(None),
+    empty: bool = Query(False, description="Return an empty graph shell (replay persisted edits only)"),
     user_ws=Depends(get_user_and_workspace),
 ):
     user, workspace = user_ws
     pkg = package or workspace.get("package") or DEFAULT_BASE_PACKAGE
     ns = base_namespace or workspace.get("base_namespace")
+    if base_namespace is None and package and not empty:
+        ns = _root_namespace(pkg)
     if package or base_namespace:
         workspace = update_workspace(user["id"], package=pkg, base_namespace=ns)
-    data = build_graph(
-        package=pkg,
-        root=root,
-        include_quantities=include_quantities,
-        include_subsections=include_subsections,
-        include_inheritance=include_inheritance,
-        allow_cross_module=allow_cross_module,
-        base_namespace=ns
+    if empty:
+        data = {"package": pkg, "root": root, "nodes": [], "edges": []}
+    else:
+        data = build_graph(
+            package=pkg,
+            root=root,
+            include_quantities=include_quantities,
+            include_subsections=include_subsections,
+            include_inheritance=include_inheritance,
+            allow_cross_module=allow_cross_module,
+            base_namespace=ns
+        )
+    persisted, stale_conflicts, current_sha = _persisted_state(
+        user_id=user["id"], workspace=workspace, package=pkg, base_namespace=ns
     )
+    data, apply_conflicts = _apply_persisted_edits(data, persisted)
     data["workspace"] = workspace_payload(workspace)
+    conflicts = stale_conflicts + apply_conflicts
+    if conflicts:
+        data["edit_conflicts"] = conflicts
+        data["branch_head"] = current_sha
     return data
 
 
@@ -174,6 +198,18 @@ def _run_git(repo: Path, *args: str) -> str:
     if cp.returncode != 0:
         raise subprocess.CalledProcessError(cp.returncode, cp.args, cp.stdout, cp.stderr)
     return cp.stdout
+
+
+def _current_branch_head(branch: str | None, base_namespace: str | None) -> str | None:
+    """Best-effort helper to read the branch head SHA for conflict tracking."""
+    if not branch:
+        return None
+    try:
+        repo = _repo_root(base_namespace)
+        return _run_git(repo, "rev-parse", branch).strip()
+    except Exception:
+        # Fallback to None when git metadata is unavailable (e.g., synthetic packages).
+        return None
 
 def _git_path_exists(repo: Path, branch: str, path: str) -> bool:
     # returns True if path exists at branch (dir tree or file)
@@ -280,6 +316,124 @@ class CustomClassRequest(BaseModel):
     docstring: str | None = None
 
 
+def _serialize_edit(edit: PersistedEdit) -> dict:
+    return {
+        "id": edit.id,
+        "user_id": edit.user_id,
+        "branch": edit.branch,
+        "package": edit.package,
+        "class_name": edit.class_name,
+        "quantity_name": edit.quantity_name,
+        "dtype": edit.dtype,
+        "docstring": edit.docstring,
+        "parent_name": edit.parent_name,
+        "parent_relation": edit.parent_relation,
+        "edit_type": edit.edit_type,
+        "base_sha": edit.base_sha,
+        "created_at": edit.created_at,
+        "updated_at": edit.updated_at,
+    }
+
+
+def _apply_persisted_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dict, list[dict]]:
+    """Replay persisted edits onto a graph; collect application-time conflicts."""
+
+    conflicts: list[dict] = []
+    sorted_edits = sorted(edits, key=lambda e: 0 if e.edit_type == "class" else 1)
+    for edit in sorted_edits:
+        try:
+            if edit.edit_type == "class":
+                graph = _attach_custom_class(
+                    graph,
+                    CustomClassRequest(
+                        package=edit.package,
+                        name=edit.class_name,
+                        parent=edit.parent_name,
+                        relation=edit.parent_relation or "inherits",
+                        docstring=edit.docstring,
+                    ),
+                )
+            else:
+                graph = _attach_custom_quantity(
+                    graph,
+                    CustomQuantityRequest(
+                        package=edit.package,
+                        class_name=edit.class_name,
+                        quantity_name=edit.quantity_name or "",
+                        dtype=edit.dtype or "str",
+                        docstring=edit.docstring,
+                        parent_name=edit.parent_name,
+                        parent_relation=edit.parent_relation,
+                    ),
+                )
+        except HTTPException as exc:
+            conflicts.append({"edit": _serialize_edit(edit), "reason": "validation_error", "detail": exc.detail})
+    return graph, conflicts
+
+
+def _persisted_state(
+    *, user_id: int, workspace: dict, package: str, base_namespace: str | None
+) -> tuple[list[PersistedEdit], list[dict], str | None]:
+    branch = workspace.get("branch") or DEFAULT_BRANCH
+    current_sha = _current_branch_head(branch, base_namespace)
+    edits = list_edits(user_id, branch, package)
+    applicable, stale = split_conflicts(edits, current_sha=current_sha)
+    stale_conflicts = [
+        {"edit": _serialize_edit(edit), "reason": "stale_branch_head", "current_sha": current_sha}
+        for edit in stale
+    ]
+    return applicable, stale_conflicts, current_sha
+
+
+def _persist_edit(
+    *,
+    user_id: int,
+    workspace: dict,
+    edit_type: Literal["class", "quantity"],
+    req: CustomClassRequest | CustomQuantityRequest,
+    current_sha: str | None,
+) -> PersistedEdit:
+    branch = workspace.get("branch") or DEFAULT_BRANCH
+    try:
+        if edit_type == "class":
+            payload = PersistedEdit(
+                user_id=user_id,
+                branch=branch,
+                package=req.package,
+                class_name=req.name,
+                parent_name=req.parent,
+                parent_relation=req.relation,
+                docstring=req.docstring,
+                edit_type="class",
+                base_sha=current_sha,
+            )
+        else:
+            payload = PersistedEdit(
+                user_id=user_id,
+                branch=branch,
+                package=req.package,
+                class_name=req.class_name,
+                quantity_name=req.quantity_name,
+                dtype=req.dtype,
+                docstring=req.docstring,
+                parent_name=req.parent_name,
+                parent_relation=req.parent_relation,
+                edit_type="quantity",
+                base_sha=current_sha,
+            )
+        return save_edit(payload, current_sha=current_sha)
+    except EditConflict as conflict:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Edit is based on an older branch head; refresh the graph before retrying.",
+                "stored_base_sha": conflict.existing.base_sha,
+                "current_base_sha": conflict.current_sha,
+                "existing_edit": _serialize_edit(conflict.existing),
+            },
+        )
+
+
 def _attach_custom_quantity(graph: dict, req: CustomQuantityRequest) -> dict:
     """
     Inject a synthetic quantity node and edge into the graph without rebuilding it.
@@ -308,6 +462,12 @@ def _attach_custom_quantity(graph: dict, req: CustomQuantityRequest) -> dict:
             break
 
     if target_section is None:
+        if not req.parent_name:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Section '{req.class_name}' not found in package '{req.package}'",
+            )
+
         # Allow adding a quantity to a freshly created synthetic class by materializing it here.
         new_id = f"{req.package}.{req.class_name}"
         target_section = {
@@ -320,25 +480,18 @@ def _attach_custom_quantity(graph: dict, req: CustomQuantityRequest) -> dict:
         nodes = nodes + [target_section]
 
         # If a parent is provided, add an edge with the requested relation (default inherits).
-        if req.parent_name:
-            parent = next(
-                (
-                    n
-                    for n in nodes
-                    if n.get("kind") == "section"
-                    and (n.get("id") == req.parent_name or n.get("label") == req.parent_name)
-                ),
-                None,
-            )
-            parent_id = parent.get("id") if parent else req.parent_name
-            relation = req.parent_relation or "inherits"
-            edges = edges + [{"source": parent_id, "target": new_id, "type": relation, "card": None}]
-
-    if target_section is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Section '{req.class_name}' not found in package '{req.package}'",
+        parent = next(
+            (
+                n
+                for n in nodes
+                if n.get("kind") == "section"
+                and (n.get("id") == req.parent_name or n.get("label") == req.parent_name)
+            ),
+            None,
         )
+        parent_id = parent.get("id") if parent else req.parent_name
+        relation = req.parent_relation or "inherits"
+        edges = edges + [{"source": parent_id, "target": new_id, "type": relation, "card": None}]
 
     section_id = target_section["id"]
     for node in nodes:
@@ -418,29 +571,51 @@ def add_custom_quantity(
     include_inheritance: bool = Query(True),
     allow_cross_module: bool = Query(True),
     base_namespace: str | None = Query(None),
+    empty: bool = Query(False, description="Skip base graph; start from an empty canvas"),
     user_ws=Depends(get_user_and_workspace),
 ):
     user, workspace = user_ws
     ns = base_namespace
     if ns is None and workspace.get("package") == req.package:
         ns = workspace.get("base_namespace")
+    if ns is None and not empty:
+        ns = _root_namespace(req.package)
     workspace = update_workspace(
         user["id"],
         package=req.package,
         base_namespace=ns or workspace.get("base_namespace"),
     )
     try:
-        graph = build_graph(
-            package=req.package,
-            root=root,
-            include_quantities=True,
-            include_subsections=include_subsections,
-            include_inheritance=include_inheritance,
-            allow_cross_module=allow_cross_module,
-            base_namespace=ns
+        if empty:
+            graph = {"package": req.package, "root": root, "nodes": [], "edges": []}
+        else:
+            graph = build_graph(
+                package=req.package,
+                root=root,
+                include_quantities=True,
+                include_subsections=include_subsections,
+                include_inheritance=include_inheritance,
+                allow_cross_module=allow_cross_module,
+                base_namespace=ns
+            )
+        persisted, stale_conflicts, current_sha = _persisted_state(
+            user_id=user["id"], workspace=workspace, package=req.package, base_namespace=ns
         )
+        graph, apply_conflicts = _apply_persisted_edits(graph, persisted)
         result = _attach_custom_quantity(graph, req)
+        saved = _persist_edit(
+            user_id=user["id"],
+            workspace=workspace,
+            edit_type="quantity",
+            req=req,
+            current_sha=current_sha,
+        )
         result["workspace"] = workspace_payload(workspace)
+        conflicts = stale_conflicts + apply_conflicts
+        if conflicts:
+            result["edit_conflicts"] = conflicts
+        result["persisted_edit"] = _serialize_edit(saved)
+        result["branch_head"] = current_sha
         return result
     except HTTPException:
         raise
@@ -457,29 +632,51 @@ def add_custom_class(
     include_inheritance: bool = Query(True),
     allow_cross_module: bool = Query(True),
     base_namespace: str | None = Query(None),
+    empty: bool = Query(False, description="Skip base graph; start from an empty canvas"),
     user_ws=Depends(get_user_and_workspace),
 ):
     user, workspace = user_ws
     ns = base_namespace
     if ns is None and workspace.get("package") == req.package:
         ns = workspace.get("base_namespace")
+    if ns is None and not empty:
+        ns = _root_namespace(req.package)
     workspace = update_workspace(
         user["id"],
         package=req.package,
         base_namespace=ns or workspace.get("base_namespace"),
     )
     try:
-        graph = build_graph(
-            package=req.package,
-            root=root,
-            include_quantities=include_quantities,
-            include_subsections=include_subsections,
-            include_inheritance=include_inheritance,
-            allow_cross_module=allow_cross_module,
-            base_namespace=ns
+        if empty:
+            graph = {"package": req.package, "root": root, "nodes": [], "edges": []}
+        else:
+            graph = build_graph(
+                package=req.package,
+                root=root,
+                include_quantities=include_quantities,
+                include_subsections=include_subsections,
+                include_inheritance=include_inheritance,
+                allow_cross_module=allow_cross_module,
+                base_namespace=ns
+            )
+        persisted, stale_conflicts, current_sha = _persisted_state(
+            user_id=user["id"], workspace=workspace, package=req.package, base_namespace=ns
         )
+        graph, apply_conflicts = _apply_persisted_edits(graph, persisted)
         result = _attach_custom_class(graph, req)
+        saved = _persist_edit(
+            user_id=user["id"],
+            workspace=workspace,
+            edit_type="class",
+            req=req,
+            current_sha=current_sha,
+        )
         result["workspace"] = workspace_payload(workspace)
+        conflicts = stale_conflicts + apply_conflicts
+        if conflicts:
+            result["edit_conflicts"] = conflicts
+        result["persisted_edit"] = _serialize_edit(saved)
+        result["branch_head"] = current_sha
         return result
     except HTTPException:
         raise

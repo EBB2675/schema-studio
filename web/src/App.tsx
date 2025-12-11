@@ -56,6 +56,7 @@ export default function App() {
   const [availablePkgs, setAvailablePkgs] = useState<string[]>([]);
   const [roots, setRoots] = useState<string[]>([]);
   const [root, setRoot] = useState<string>(DEFAULT_ROOT);
+  const [startEmpty, setStartEmpty] = useState<boolean>(false);
 
   const [includeQuantities, setIncludeQuantities] = useState<boolean>(true);
   const [includeSubsections, setIncludeSubsections] = useState<boolean>(true);
@@ -386,6 +387,11 @@ export default function App() {
   // roots for selected package
   const loadRoots = useCallback(async () => {
     if (!token) return;
+    if (startEmpty) {
+      setRoots([]);
+      setRoot("");
+      return;
+    }
     setErr(null);
     try {
       const r = await api.get("/roots", { params: { package: pkg } });
@@ -397,7 +403,7 @@ export default function App() {
       setErr(e?.response?.data?.detail || String(e));
       setRoots([]);
     }
-  }, [api, pkg, root, syncWorkspaceFromResponse, token]);
+  }, [api, pkg, root, startEmpty, syncWorkspaceFromResponse, token]);
 
   // build single-branch graph (resets diff view)
   const loadGraph = useCallback(async (
@@ -411,12 +417,31 @@ export default function App() {
     const rootToUse = overrides?.root ?? root;
     const namespaceToUse = overrides?.namespace ?? normalizedNamespace;
     const branchToUse = overrides?.branch ?? workspace?.branch ?? "";
+    const useEmpty = startEmpty;
     setErr(null);
     setQuantityActionErr(null);
     setLoading(true);
     setDiffData(null);
     setGraphHandle(null);
     try {
+      if (useEmpty) {
+        const r = await api.get("/schema", {
+          params: {
+            package: pkgToUse,
+            root: rootToUse,
+            include_quantities: includeQuantities,
+            include_subsections: includeSubsections,
+            include_inheritance: includeInheritance,
+            allow_cross_module: crossModules,
+            base_namespace: namespaceToUse || undefined,
+            empty: true,
+          },
+        });
+        setGraph(r.data);
+        setBaseGraph(r.data);
+        syncWorkspaceFromResponse(r.data);
+        return;
+      }
       if (branchToUse) {
         const r = await api.post(
           "/graph",
@@ -460,7 +485,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [api, crossModules, includeQuantities, includeSubsections, includeInheritance, normalizedNamespace, pkg, root, syncWorkspaceFromResponse, token, workspace?.branch]);
+  }, [api, crossModules, includeQuantities, includeSubsections, includeInheritance, normalizedNamespace, pkg, root, startEmpty, syncWorkspaceFromResponse, token, workspace?.branch]);
 
   // fetch git branches
   const loadBranches = useCallback(async () => {
@@ -778,6 +803,7 @@ export default function App() {
             include_inheritance: includeInheritance,
             allow_cross_module: crossModules,
             base_namespace: normalizedNamespace || undefined,
+            empty: startEmpty ? true : undefined,
           },
         }
       );
@@ -881,6 +907,7 @@ export default function App() {
             include_inheritance: includeInheritance,
             allow_cross_module: crossModules,
             base_namespace: normalizedNamespace || undefined,
+            empty: startEmpty ? true : undefined,
           },
         }
       );
@@ -1081,7 +1108,7 @@ export default function App() {
   useEffect(() => {
     loadRoots();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pkg]);
+  }, [pkg, startEmpty, loadRoots]);
 
   useEffect(() => {
     loadBranches();
@@ -1577,6 +1604,18 @@ export default function App() {
                 />
                 Cross-modules
               </label>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={startEmpty}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    setStartEmpty(next);
+                    if (next) setRoot("");
+                  }}
+                />
+                Start from empty canvas
+              </label>
             </div>
 
             <div className="row" style={{ marginTop: 14, justifyContent: "space-between", gap: 10 }}>
@@ -1765,8 +1804,8 @@ export default function App() {
             <div className="empty-state">
               <div style={{ fontSize: 18, marginBottom: 8 }}>Build a diagram to get started</div>
               <div>
-                Select a package (roots load automatically), pick a root, then “Build graph”; or compare two
-                branches.
+                Select a package (roots load automatically), pick a root, then “Build graph” — or toggle “Start from
+                empty canvas” to draw your own schema from scratch. You can also compare two branches.
               </div>
             </div>
           )}

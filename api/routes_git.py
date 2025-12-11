@@ -198,6 +198,7 @@ def api_graph(
     include_subsections: bool = Query(True),
     include_inheritance: bool = Query(True),
     allow_cross_module: bool = Query(True),
+    empty: bool = Query(False, description="Return an empty graph shell instead of extracting schema"),
     user_ws=Depends(get_user_and_workspace),
 ):
     user, workspace = user_ws
@@ -208,17 +209,20 @@ def api_graph(
     try:
         repo_src = _primary_repo(pkg, namespace)
         wt, sha = materialize_worktree(branch, repo_src)
-        graph = build_graph_in_subprocess(
-            wt,
-            pkg,
-            req.extractor,
-            base_namespace=namespace,
-            root=root,
-            include_quantities=include_quantities,
-            include_subsections=include_subsections,
-            include_inheritance=include_inheritance,
-            allow_cross_module=allow_cross_module,
-        )
+        if empty:
+            graph = {"package": pkg, "root": root, "nodes": [], "edges": []}
+        else:
+            graph = build_graph_in_subprocess(
+                wt,
+                pkg,
+                req.extractor,
+                base_namespace=namespace,
+                root=root,
+                include_quantities=include_quantities,
+                include_subsections=include_subsections,
+                include_inheritance=include_inheritance,
+                allow_cross_module=allow_cross_module,
+            )
         return {"branch": branch, "sha": sha, "graph": graph, "workspace": workspace_payload(workspace)}
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -264,4 +268,3 @@ def api_diff(
         }
     except Exception as e:
         raise HTTPException(500, str(e))
-
