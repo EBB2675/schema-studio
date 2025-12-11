@@ -87,6 +87,27 @@ What it does:
 - Stops both together on **Ctrl+C** (no manual job control needed).
 - Exits early with a helpful message if `uvicorn` or `npm` are missing (activate your virtualenv first).
 
+### 5) Authenticate (required)
+
+The backend now requires a bearer token for every endpoint except `/auth/login`. A default user is created at startup:
+
+- **Username**: `admin` (override via `SCHEMA_UML_DEFAULT_USER`)
+- **Password**: `admin` (override via `SCHEMA_UML_DEFAULT_PASSWORD`)
+
+Use the sign-in form in the UI or fetch a token manually:
+
+```bash
+TOKEN=$(curl -s -X POST http://127.0.0.1:5179/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"admin"}' | jq -r .access_token)
+```
+
+Include the token when calling other endpoints:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5179/roots?package=nomad_simulations.schema_packages.model_method'
+```
+
 Stop both with **Ctrl+C**. Override ports via `API_PORT` / `WEB_PORT` env vars.
 
 Branch-specific render (no diff): set **Package branch** to load `/graph` for a chosen branch instead of the working tree.
