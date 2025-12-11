@@ -56,7 +56,11 @@ export default function App() {
   const [availablePkgs, setAvailablePkgs] = useState<string[]>([]);
   const [roots, setRoots] = useState<string[]>([]);
   const [root, setRoot] = useState<string>(DEFAULT_ROOT);
-  const [startEmpty, setStartEmpty] = useState<boolean>(false);
+  const [startEmpty, setStartEmpty] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    const stored = window.localStorage.getItem("schema-uml-start-empty");
+    return stored === "true";
+  });
 
   const [includeQuantities, setIncludeQuantities] = useState<boolean>(true);
   const [includeSubsections, setIncludeSubsections] = useState<boolean>(true);
@@ -156,10 +160,11 @@ export default function App() {
     if (typeof window === "undefined") return;
     try {
       window.localStorage.setItem("schema-uml-audit", JSON.stringify(auditTrail));
+      window.localStorage.setItem("schema-uml-start-empty", JSON.stringify(startEmpty));
     } catch {
       // ignore storage errors
     }
-  }, [auditTrail]);
+  }, [auditTrail, startEmpty]);
 
   const api = useMemo(() => {
     const instance = axios.create({ baseURL: apiBase });
@@ -173,9 +178,33 @@ export default function App() {
     return instance;
   }, [apiBase, token]);
   const normalizedNamespace = useMemo(() => {
-    const parts = namespace.split(",").map((p) => p.trim()).filter(Boolean);
+    const parts = namespace.split(",").map((p: string) => p.trim()).filter(Boolean);
     return parts.length > 0 ? parts.join(",") : DEFAULT_NAMESPACE;
   }, [namespace]);
+
+  const basePackageForEmpty = useMemo(() => {
+    const parts = normalizedNamespace.split(",").map((p: string) => p.trim()).filter(Boolean);
+    if (parts.length > 0) {
+      return parts[0];
+    }
+    // fall back to stripping the last segment of the default package
+    const segments = pkg.split(".");
+    return segments.slice(0, Math.max(1, segments.length - 1)).join(".");
+  }, [normalizedNamespace, pkg]);
+
+  const scratchPackage = useMemo(
+    () => `${basePackageForEmpty}.custom_schema`,
+    [basePackageForEmpty]
+  );
+
+  const toggleEmptyMode = useCallback(() => {
+    const next = !startEmpty;
+    setStartEmpty(next);
+    if (next) {
+      setRoot("");
+      setPkg(scratchPackage);
+    }
+  }, [scratchPackage, startEmpty]);
 
   const applyWorkspace = useCallback((ws: WorkspaceState | null) => {
     if (!ws) return;
@@ -511,13 +540,23 @@ export default function App() {
           base_package: normalizedNamespace,
         },
       });
-      const list: string[] = r.data.packages || [];
-      setAvailablePkgs(list);
+      const raw: string[] = r.data.packages || [];
+      const filtered = raw.filter((p: string) => !p.endsWith(".__init__"));
+      const list = (filtered.length ? filtered : raw).filter(Boolean);
+      const augmented = startEmpty && scratchPackage ? [scratchPackage, ...list] : list;
+      // dedupe while preserving order
+      const seen = new Set<string>();
+      const unique = augmented.filter((p) => {
+        if (seen.has(p)) return false;
+        seen.add(p);
+        return true;
+      });
+      setAvailablePkgs(unique);
       syncWorkspaceFromResponse(r.data);
 
-      // if current pkg is not in the list, default to the first entry
-      if (list.length > 0 && !list.includes(pkg)) {
-        setPkg(list[0]);
+      // if current pkg is not in the list, default to the first entry (keep scratch when empty)
+      if (unique.length > 0 && !unique.includes(pkg)) {
+        setPkg(startEmpty && scratchPackage ? scratchPackage : unique[0]);
       }
     } catch (e) {
       // silent failure is fine; user can still type manually
@@ -525,7 +564,7 @@ export default function App() {
       // surface the error so users know why the dropdown is empty
       setErr((e as any)?.response?.data?.detail || String(e));
     }
-  }, [api, normalizedNamespace, packageBranch, pkg, syncWorkspaceFromResponse, token]);
+  }, [api, normalizedNamespace, packageBranch, pkg, scratchPackage, startEmpty, syncWorkspaceFromResponse, token]);
 
   useEffect(() => {
     if (!workspace || !token) return;
@@ -608,6 +647,9 @@ export default function App() {
         .filter((q: any) => q.owner === sec.id)
         .map((q: any) => toQuantityNode(q));
 
+      const parentInfo = parentInfoByChild.get(sec.id);
+      const relation = parentInfo?.relation === "hasSubSection" ? "hasSubSection" : parentInfo?.relation === "inherits" ? "inherits" : null;
+
       return {
         id: sec.id,
         name: sec.label ?? sec.id,
@@ -616,8 +658,8 @@ export default function App() {
         path: sec.path ?? null,
         line: typeof sec.line === "number" ? sec.line : null,
         quantities: ownedQuantities,
-        parentId: parentInfoByChild.get(sec.id)?.id ?? null,
-        parentRelation: parentInfoByChild.get(sec.id)?.relation ?? null,
+        parentId: parentInfo?.id ?? null,
+        parentRelation: relation,
       };
     });
 
@@ -1614,21 +1656,17 @@ export default function App() {
                 />
                 Cross-modules
               </label>
-              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <input
-                  type="checkbox"
-                  checked={startEmpty}
-                  onChange={(e) => {
-                    const next = e.target.checked;
-                    setStartEmpty(next);
-                    if (next) setRoot("");
-                  }}
-                />
-                Start from empty canvas
-              </label>
             </div>
 
-            <div className="row" style={{ marginTop: 14, justifyContent: "space-between", gap: 10 }}>
+            <div className="row" style={{ marginTop: 14, justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+              <button
+                className="btn secondary"
+                type="button"
+                onClick={toggleEmptyMode}
+                title={startEmpty ? "Return to schema-backed graph" : "Start a blank canvas"}
+              >
+                {startEmpty ? "Back to schema graph" : "+ Start from empty canvas"}
+              </button>
               <button className="btn" onClick={() => loadGraph()}>
                 Build graph
               </button>
@@ -1816,6 +1854,11 @@ export default function App() {
               <div>
                 Select a package (roots load automatically), pick a root, then “Build graph” — or toggle “Start from
                 empty canvas” to draw your own schema from scratch. You can also compare two branches.
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <button className="btn secondary" type="button" onClick={toggleEmptyMode}>
+                  {startEmpty ? "Back to schema graph" : "+ Start from empty canvas"}
+                </button>
               </div>
             </div>
           )}
