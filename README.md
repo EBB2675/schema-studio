@@ -1,12 +1,14 @@
 # Schema Studio
 
-Interactive editor for NOMAD-compatible schemas (defaults to `nomad-simulations`).
+Interactive editor for data models. 
+
+Currently defaults to NOMAD-compatible schemas (`nomad-simulations`) but can point to any schema repo you configure.
 
 Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 
 - Visualizes **sections** as UML cards (attributes = quantities, edges = subsections).
 - Right-hand **Doc Panel** shows the **class docstring** and a **clickable list of quantities**.
-- Right-hand **Under the hood** panel shows **normalization and helper functions** that act on the selected section.
+- Right-hand **Under the hood** panel shows **normalization and helper functions** that act on the selected section (based on the repo you configure).
 - **Branch diff** (base → head) highlights **added/changed/removed** nodes/edges, including quantity changes.
 - **Bird's-eye overview**: inspect packages/classes across branches without building a full graph.
 - **Editable mode**: add classes and quantities directly in the UI (server validates supported dtypes; new classes get fully-qualified ids and accept quantities immediately).
@@ -28,7 +30,7 @@ Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 - **Doc panel**: Click a class to see its docstring; click a quantity in the panel to see its docstring.
 - **Under-the-hood panel**:
   - Click a class to see which **normalize methods** and **module-level helpers** the viewer can associate with that section.
-  - Information is derived from `nomad-simulations` via a small introspection/indexing step in the backend.
+  - Information is derived from your configured schema repo via a small introspection/indexing step in the backend (defaults to `nomad-simulations` if you don’t override env vars).
 - **Branch comparison**: Choose two Git branches and render the diff with visual highlights.
 - **Namespace filtering**: Limit traversal to a base namespace; optionally include cross-module links.
 - **Bird's-eye overview**: Switch to Overview mode to list packages/classes for any branch.
@@ -56,21 +58,19 @@ pip install -r api/requirements.txt
 ### 3) Point to your schema repo
 The backend reads from a local clone. Set one of (required before starting the stack):
 ```bash
-# preferred (general)
+# preferred (general, any schema repo)
 export SCHEMA_UML_REPO=<path-or-URL-to-your-schema-repo>
-# optional: explicitly point to nomad-measurements when using both namespaces
-# export NOMAD_MEASURE_REPO=/path/to/nomad-measurements
-# backwards-compatible options also accepted by backend
+
+# optional legacy envs for nomad-* clones (still accepted)
 # export NOMAD_SIM_REPO=/path/to/nomad-simulations
+# export NOMAD_MEASURE_REPO=/path/to/nomad-measurements
 # export GIT_REPO_DIR=/path/to/nomad-simulations
-# optional: override the default base package used in UI helpers
-# export SCHEMA_UML_BASE_PACKAGE=my_schema_root
-# optional: override the default package used in UI helpers
+
+# optional: override defaults used in the UI
+# export SCHEMA_UML_BASE_PACKAGE=my_schema_root[,another.namespace]
 # export SCHEMA_UML_PACKAGE=my_schema_root.module
 ```
-By default, the viewer scopes to `nomad_simulations.schema_packages`. You can extend the scope
-by setting `SCHEMA_UML_BASE_PACKAGE` to additional namespaces (comma separated) and providing a
-repo path for each.
+By default, the viewer scopes to `nomad_simulations.schema_packages`. For other projects, set `SCHEMA_UML_BASE_PACKAGE` to your base namespace (comma separated for multiple roots) and ensure each namespace exists in the repo you configured.
 Make it persistent by adding the export to `~/.bashrc` or `~/.zshrc`.
 
 ### 4) Run everything with one command

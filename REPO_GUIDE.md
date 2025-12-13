@@ -6,7 +6,7 @@ A structured overview of the repository for developers to navigate, understand, 
 
 ## 0) TL;DR 
 
-**Purpose:** Edit and visualize NOMAD-compatible schemas (defaults to `nomad-simulations`). Build UML diagrams, inspect docstrings/usage, add custom classes (inheritance or subsection), and add quantities inline. Supports branch diff + overview mode.
+**Purpose:** Interactive editor for data models; currently defaults to `nomad-simulations` but works with any schema repo you configure. Build UML diagrams, inspect docstrings/usage, add custom classes (inheritance or subsection), and add quantities inline. Supports branch diff + overview mode.
 
 **Frontend:** React + TypeScript + Cytoscape + ELK  
 **Backend:** FastAPI + GitPython
@@ -41,11 +41,10 @@ export SCHEMA_UML_REPO=/path/to/your-schema
 export NOMAD_SIM_REPO=/path/to/nomad-simulations
 export GIT_REPO_DIR=/path/to/nomad-simulations
 # optional defaults for base package / module when the UI opens
-export SCHEMA_UML_BASE_PACKAGE=my_schema_root
+export SCHEMA_UML_BASE_PACKAGE=my_schema_root[,another.namespace]
 export SCHEMA_UML_PACKAGE=my_schema_root.module
 ~~~
-Default namespace scope targets `nomad_simulations.schema_packages`. To include additional
-namespaces, add them to `SCHEMA_UML_BASE_PACKAGE` (comma separated) and point each to a local clone.
+Default namespace scope targets `nomad_simulations.schema_packages`. For other projects, set `SCHEMA_UML_BASE_PACKAGE` to your namespace root (comma separated for multiple roots) and ensure each namespace exists in the repo you configured.
 
 **Unified dev command:** `./dev.sh` starts the FastAPI backend (**5179**) and Vite frontend (**5173**), checks for `uvicorn`/`npm`, validates **SCHEMA_UML_REPO / NOMAD_SIM_REPO / GIT_REPO_DIR** points to a local git repo (a subdirectory of a clone is fine), installs frontend deps on first run, and stops both on **Ctrl+C**. Override ports via `API_PORT` / `WEB_PORT`.
 
@@ -60,7 +59,7 @@ namespaces, add them to `SCHEMA_UML_BASE_PACKAGE` (comma separated) and point ea
 - Branch diff highlights: 🟩 Added, 🟨 Changed, 🟥 Removed (edges dashed red; quantity deltas are included).
 
 **Custom edit model (important for agents):**
-- Backend persists no custom state; it injects synthetic classes/quantities into the returned graph.
+- Backend persists no custom state; it injects synthetic classes/quantities into the returned graph (works the same across any configured schema repo).
 - Custom classes: `POST /schema/custom-class` with `relation` (`inherits` | `hasSubSection`), always assigns id `{package}.{name}`; adds parent edge if provided.
 - Custom quantities: `POST /schema/custom-quantity` with `class_name` (label), optional `parent_name`/`parent_relation` to reattach parent edge if the class must be materialized server-side.
 - Frontend keeps an audit trail and replays all prior edits onto each fresh server graph so earlier custom edges don’t disappear when adding new ones.
