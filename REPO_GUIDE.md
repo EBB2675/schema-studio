@@ -6,7 +6,7 @@ A structured overview of the repository for developers to navigate, understand, 
 
 ## 0) TL;DR 
 
-**Purpose:** Interactive editor for data models; currently defaults to `nomad-simulations` but works with any schema repo you configure. Build UML diagrams, inspect docstrings/usage, add custom classes (inheritance or subsection), and add quantities inline. Supports branch diff + overview mode.
+**Purpose:** Interactive editor for data models; currently defaults to `nomad-simulations` but works with any schema repo you configure. Build UML diagrams, inspect docstrings/usage, add custom classes (inheritance or subsection), and add quantities inline. Supports branch diff, overview mode, and empty-canvas editing.
 
 **Frontend:** React + TypeScript + Cytoscape + ELK  
 **Backend:** FastAPI + GitPython
@@ -57,9 +57,24 @@ Default namespace scope targets `nomad_simulations.schema_packages`. For other p
 - **Overlays**: inheritance defaults on; dtype/shape labels toggleable.
 - **Exports**: download the current graph JSON or a PDF snapshot.
 - Branch diff highlights: 🟩 Added, 🟨 Changed, 🟥 Removed (edges dashed red; quantity deltas are included).
+- **Empty canvas**: start from `<base>.custom_schema`, edit freely, and reset persisted custom edits when needed (UI calls `/schema/custom-edits`).
 
 **Custom edit model (important for agents):**
-- Backend persists no custom state; it injects synthetic classes/quantities into the returned graph (works the same across any configured schema repo).
+- Backend persists no custom state; it injects synthetic classes/quantities into the returned graph (works the same across any configured schema repo). The frontend replays its audit trail on each load and can force-reset empty-canvas edits via `/schema/custom-edits`.
+
+**API compatibility headers:**
+- Frontend sends `X-Schema-UML-Version` and `X-Schema-UML-Features` so backends can gate behavior across different schema repos.
+
+**Typing/normalization helpers (frontend):**
+- `src/types/api.ts` enforces runtime parsing of graph/diff payloads.
+- `src/utils/identifier.ts` normalizes ids/labels/fqids used across GraphView, DocPanel, and selection store.
+- `src/utils/errors.ts` standardizes API error formatting.
+
+**Workspace state:**
+- Stored in `src/store/workspace.ts` (branch/pkg/base namespace/startEmpty), synced with backend `/workspace` where available and persisted locally for reloads.
+
+**Contract tests:**
+- `npm run test:contracts` (from `web/`) validates API parsing helpers and identifier normalization.
 - Custom classes: `POST /schema/custom-class` with `relation` (`inherits` | `hasSubSection`), always assigns id `{package}.{name}`; adds parent edge if provided.
 - Custom quantities: `POST /schema/custom-quantity` with `class_name` (label), optional `parent_name`/`parent_relation` to reattach parent edge if the class must be materialized server-side.
 - Frontend keeps an audit trail and replays all prior edits onto each fresh server graph so earlier custom edges don’t disappear when adding new ones.

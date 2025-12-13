@@ -12,6 +12,7 @@ Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 - **Branch diff** (base → head) highlights **added/changed/removed** nodes/edges, including quantity changes.
 - **Bird's-eye overview**: inspect packages/classes across branches without building a full graph.
 - **Editable mode**: add classes and quantities directly in the UI (server validates supported dtypes; new classes get fully-qualified ids and accept quantities immediately).
+- **Empty canvas**: start from a blank namespace (`<base>.custom_schema`), edit freely, and reset persisted edits with one click.
 - **Export**: download the current graph as JSON or a PDF snapshot.
 
 ---
@@ -111,12 +112,19 @@ curl -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5179/roots?package=noma
 Stop both with **Ctrl+C**. Override ports via `API_PORT` / `WEB_PORT` env vars.
 
 Branch-specific render (no diff): set **Package branch** to load `/graph` for a chosen branch instead of the working tree.
+The UI sends API compatibility headers (`X-Schema-UML-Version` and feature flags) so backends can enforce contracts across repos.
 
 Sanity checks (optional, while `./dev.sh` is running):
 ```bash
 curl 'http://127.0.0.1:5179/roots?package=nomad_simulations.schema_packages.model_method'
 curl 'http://127.0.0.1:5179/schema?package=nomad_simulations.schema_packages.model_method&root=ModelMethod&include_quantities=true'
 curl 'http://127.0.0.1:5179/git/branches'
+```
+
+Optional contract tests for API parsing/normalization (after `npm install` in `web/`):
+```bash
+cd web
+npm run test:contracts
 ```
 
 ---
