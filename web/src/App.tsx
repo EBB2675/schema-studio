@@ -424,6 +424,11 @@ export default function App() {
     const namespaceToUse = overrides?.namespace ?? normalizedNamespace;
     const branchToUse = overrides?.branch ?? workspaceBranch ?? "";
     const useEmpty = overrides?.forceEmpty ?? startEmpty;
+    if (!useEmpty) {
+      setStartEmpty(false);
+      setEditableMode(false);
+      setCanvasStatus(null);
+    }
     setErr(null);
     setQuantityActionErr(null);
     setLoading(true);
@@ -1208,6 +1213,15 @@ export default function App() {
     loadRoots();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pkg, startEmpty, loadRoots]);
+
+  // If user switches away from the scratch package, exit empty mode to restore schema-backed behavior.
+  useEffect(() => {
+    if (startEmpty && pkg !== scratchPackage) {
+      setStartEmpty(false);
+      setEditableMode(false);
+      setCanvasStatus(null);
+    }
+  }, [pkg, scratchPackage, startEmpty]);
 
   useEffect(() => {
     loadBranches();
