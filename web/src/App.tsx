@@ -200,6 +200,8 @@ export default function App() {
     [basePackageForEmpty]
   );
 
+  const emptyCanvasActive = startEmpty && graph?.package === scratchPackage && graph?.root === "";
+
   const applyWorkspace = useCallback((ws: WorkspaceState | null) => {
     if (!ws) return;
     const prev = workspaceStateRef.current;
@@ -700,9 +702,9 @@ export default function App() {
   }, [toQuantityNode]);
 
   const toggleEmptyMode = useCallback(async () => {
-    const next = !startEmpty;
-    setStartEmpty(next);
-    if (next) {
+    const nextShouldBeEmpty = !emptyCanvasActive;
+    setStartEmpty(nextShouldBeEmpty);
+    if (nextShouldBeEmpty) {
       const targetPkg = scratchPackage;
       const blankGraph: ApiGraph = { package: targetPkg, root: "", nodes: [], edges: [] };
       setMode("graph");
@@ -723,7 +725,7 @@ export default function App() {
     } else {
       await loadGraph({ forceEmpty: false });
     }
-  }, [buildUmlState, loadGraph, normalizedNamespace, scratchPackage, setSelected, startEmpty]);
+  }, [buildUmlState, emptyCanvasActive, loadGraph, normalizedNamespace, scratchPackage, setSelected]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -1767,9 +1769,9 @@ export default function App() {
                 onClick={() => {
                   toggleEmptyMode();
                 }}
-                title={startEmpty ? "Return to schema-backed graph" : "Start a blank canvas"}
+                title={emptyCanvasActive ? "Return to schema-backed graph" : "Start a blank canvas"}
               >
-                {startEmpty ? "Back to schema graph" : "+ Start from empty canvas"}
+                {emptyCanvasActive ? "Back to schema graph" : "+ Start from empty canvas"}
               </button>
               <button className="btn" onClick={() => loadGraph()}>
                 Build graph
@@ -1996,7 +1998,7 @@ export default function App() {
               </div>
               <div style={{ marginTop: 12 }}>
                 <button className="btn secondary" type="button" onClick={() => toggleEmptyMode()}>
-                  {startEmpty ? "Back to schema graph" : "+ Start from empty canvas"}
+                  {emptyCanvasActive ? "Back to schema graph" : "+ Start from empty canvas"}
                 </button>
               </div>
             </div>
