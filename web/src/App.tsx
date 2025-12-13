@@ -25,6 +25,7 @@ export default function App() {
     return window.localStorage.getItem("schema-uml-token") || "";
   });
   const [userName, setUserName] = useState<string | null>(null);
+  const [sessionChecked, setSessionChecked] = useState<boolean>(false);
   const [workspace, setWorkspace] = useState<WorkspaceState | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [loginUsername, setLoginUsername] = useState<string>("admin");
@@ -251,21 +252,39 @@ export default function App() {
   }, [token]);
 
   useEffect(() => {
-    if (!token) {
-      setWorkspace(null);
-      workspaceStateRef.current = null;
-      return;
-    }
-    api
-      .get("/workspace")
-      .then((res) => {
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      if (!cancelled) setSessionChecked(true);
+    }, 5000);
+
+    const run = async () => {
+      if (!token) {
+        setWorkspace(null);
+        workspaceStateRef.current = null;
+        setUserName(null);
+        setSessionChecked(true);
+        return;
+      }
+      try {
+        const res = await api.get("/workspace");
+        if (cancelled) return;
         applyWorkspace(res.data.workspace as WorkspaceState);
         setAuthError(null);
-      })
-      .catch((error) => {
+        setUserName((prev) => res.data?.user?.username || prev || null);
+      } catch (error) {
+        if (cancelled) return;
         setAuthError(formatApiError(error));
-        logout();
-      });
+        // stay signed in if workspace fetch fails; user can retry or log out manually
+      } finally {
+        if (!cancelled) setSessionChecked(true);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
   }, [api, applyWorkspace, logout, token]);
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -337,6 +356,7 @@ export default function App() {
       setToken(nextToken);
       setUserName(res.data.user?.username ?? loginUsername);
       applyWorkspace(res.data.workspace as WorkspaceState);
+      setSessionChecked(true);
     } catch (error: any) {
       setAuthError(error?.response?.data?.detail || String(error));
     }
@@ -1542,12 +1562,16 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  if (!token) {
+  const restoring = token && !sessionChecked;
+
+  if (!token || !sessionChecked) {
     return (
       <main className="app-shell" ref={appShellRef} style={{ gridTemplateColumns: `${sidebarWidth}px 10px 1fr` }}>
         <div className="sidebar" style={{ gridColumn: "1 / span 3", padding: 24 }}>
-          <h2>Sign in</h2>
-          <p className="subdued">Authenticate to load your personalized workspace.</p>
+          <h2>{restoring ? "Restoring session…" : "Sign in"}</h2>
+          <p className="subdued">
+            {restoring ? "Checking saved credentials. If this hangs, sign in again." : "Authenticate to load your workspace."}
+          </p>
           <form className="action-stack" onSubmit={handleLogin} style={{ maxWidth: 360 }}>
             <label className="label">Username</label>
             <input className="input" value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} />
