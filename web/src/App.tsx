@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import GraphView, { type GraphExportHandle } from "./GraphView";
@@ -90,6 +90,7 @@ export default function App() {
   const appShellRef = useRef<HTMLElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const workspaceStateRef = useRef<WorkspaceState | null>(null);
+  const importFileRef = useRef<HTMLInputElement | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === "undefined") return 360;
     const stored = Number.parseInt(window.localStorage.getItem("schema-uml-left-width") || "", 10);
@@ -100,6 +101,8 @@ export default function App() {
     const stored = Number.parseInt(window.localStorage.getItem("schema-uml-doc-width") || "", 10);
     return Number.isFinite(stored) ? stored : 380;
   });
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [canvasStatus, setCanvasStatus] = useState<string | null>(null);
 
   // branch diff state
   const [branches, setBranches] = useState<string[]>([]);
@@ -507,19 +510,34 @@ export default function App() {
     }
   }, [api, crossModules, includeQuantities, includeSubsections, includeInheritance, normalizedNamespace, pkg, root, startEmpty, syncWorkspaceFromResponse, token, workspace?.branch]);
 
-  const toggleEmptyMode = useCallback(async () => {
-    const next = !startEmpty;
-    setStartEmpty(next);
-    if (next) {
-      const targetPkg = scratchPackage;
-      setRoot("");
-      setPkg(targetPkg);
-      setEditableMode(true);
-      await loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, forceEmpty: true });
-    } else {
-      await loadGraph({ forceEmpty: false });
+  const resetEmptyCanvas = useCallback(async () => {
+    if (!token) {
+      setErr("Login required");
+      return;
     }
-  }, [loadGraph, normalizedNamespace, scratchPackage, startEmpty]);
+    const targetPkg = scratchPackage;
+    try {
+      setCanvasStatus("Resetting canvas…");
+      setErr(null);
+      await api.delete("/schema/custom-edits", {
+        params: {
+          package: targetPkg,
+          branch: workspace?.branch || undefined,
+        },
+      });
+      setAuditTrail([]);
+      setGraph(null);
+      setBaseGraph(null);
+      setUmlState(null);
+      setSelected(null);
+      setSelectedClassId(null);
+      setSelectedQuantityId(null);
+      await loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, branch: workspace?.branch, forceEmpty: true });
+      setCanvasStatus("Canvas reset to empty.");
+    } catch (e: any) {
+      setCanvasStatus(`Reset failed: ${e?.response?.data?.detail || String(e)}`);
+    }
+  }, [api, loadGraph, normalizedNamespace, scratchPackage, setSelected, token, workspace?.branch]);
 
   // fetch git branches
   const loadBranches = useCallback(async () => {
@@ -680,6 +698,32 @@ export default function App() {
       })),
     };
   }, [toQuantityNode]);
+
+  const toggleEmptyMode = useCallback(async () => {
+    const next = !startEmpty;
+    setStartEmpty(next);
+    if (next) {
+      const targetPkg = scratchPackage;
+      const blankGraph: ApiGraph = { package: targetPkg, root: "", nodes: [], edges: [] };
+      setMode("graph");
+      setDiffData(null);
+      setGraphHandle(null);
+      setAuditTrail([]);
+      setGraph(blankGraph);
+      setBaseGraph(blankGraph);
+      setUmlState(buildUmlState(blankGraph));
+      setSelected(null);
+      setSelectedClassId(null);
+      setSelectedQuantityId(null);
+      setRoot("");
+      setPkg(targetPkg);
+      setEditableMode(true);
+      setCanvasStatus(null);
+      await loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, forceEmpty: true });
+    } else {
+      await loadGraph({ forceEmpty: false });
+    }
+  }, [buildUmlState, loadGraph, normalizedNamespace, scratchPackage, setSelected, startEmpty]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -1401,6 +1445,59 @@ export default function App() {
     a.click();
   };
 
+  const handleImportJson = () => {
+    setImportStatus(null);
+    importFileRef.current?.click();
+  };
+
+  const handleImportFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const raw = JSON.parse(String(reader.result ?? "{}"));
+        if (!raw || typeof raw !== "object") {
+          throw new Error("File is empty or invalid JSON.");
+        }
+        if (!Array.isArray((raw as any).nodes) || !Array.isArray((raw as any).edges)) {
+          throw new Error("Expected nodes[] and edges[] in the workspace file.");
+        }
+        const nextGraph: ApiGraph = {
+          package: (raw as any).package ?? pkg,
+          root: (raw as any).root ?? null,
+          nodes: (raw as any).nodes,
+          edges: (raw as any).edges,
+        };
+        setMode("graph");
+        setDiffData(null);
+        setGraphHandle(null);
+        setGraph(nextGraph);
+        setBaseGraph(nextGraph);
+        const nextUml = buildUmlState(nextGraph);
+        setUmlState(nextUml);
+        setAuditTrail([]);
+        setSelectedClassId(null);
+        setSelectedQuantityId(null);
+        setSelected(null);
+        if (nextGraph.package) setPkg(nextGraph.package);
+        if (nextGraph.root) setRoot(nextGraph.root);
+        setImportStatus(`Imported ${file.name}`);
+        setErr(null);
+      } catch (error: any) {
+        setImportStatus(`Import failed: ${error?.message || "Invalid workspace file."}`);
+      } finally {
+        e.target.value = "";
+      }
+    };
+    reader.onerror = () => {
+      setImportStatus("Import failed: could not read the file.");
+      e.target.value = "";
+    };
+    reader.readAsText(file);
+  };
+
   const exportPdf = () => {
     if (!currentGraph || !graphHandle) return;
 
@@ -1677,19 +1774,36 @@ export default function App() {
               <button className="btn" onClick={() => loadGraph()}>
                 Build graph
               </button>
-              {currentGraph ? (
-                <div className="row" style={{ flex: 1, justifyContent: "flex-end" }}>
-                  <button className="btn secondary" onClick={exportJson}>
-                    Export JSON
-                  </button>
-                  <button
-                    className="btn secondary"
-                    onClick={exportPdf}
-                    disabled={!graphHandle}
-                    title={graphHandle ? "Download current diagram as PDF" : "Build a graph first"}
-                  >
-                    Export PDF
-                  </button>
+              <div className="row" style={{ flex: 1, justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+                <input
+                  type="file"
+                  accept="application/json"
+                  ref={importFileRef}
+                  style={{ display: "none" }}
+                  onChange={handleImportFile}
+                />
+                <button className="btn secondary" type="button" onClick={handleImportJson}>
+                  Import JSON
+                </button>
+                {currentGraph ? (
+                  <>
+                    <button className="btn secondary" onClick={exportJson}>
+                      Export JSON
+                    </button>
+                    <button
+                      className="btn secondary"
+                      onClick={exportPdf}
+                      disabled={!graphHandle}
+                      title={graphHandle ? "Download current diagram as PDF" : "Build a graph first"}
+                    >
+                      Export PDF
+                    </button>
+                  </>
+                ) : null}
+              </div>
+              {importStatus ? (
+                <div className="small" style={{ color: importStatus.startsWith("Import failed") ? "#fca5a5" : "var(--muted)", textAlign: "right" }}>
+                  {importStatus}
                 </div>
               ) : null}
             </div>
@@ -1832,6 +1946,24 @@ export default function App() {
                       Edit
                     </button>
                   </div>
+                  {startEmpty ? (
+                    <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                      <button
+                        className="btn secondary"
+                        type="button"
+                        onClick={resetEmptyCanvas}
+                        title="Clear saved custom schema edits for this empty canvas"
+                        style={{ padding: "6px 10px", whiteSpace: "nowrap" }}
+                      >
+                        Reset canvas
+                      </button>
+                      {canvasStatus ? (
+                        <span className="small" style={{ color: canvasStatus.startsWith("Reset failed") ? "#fca5a5" : "var(--muted)" }}>
+                          {canvasStatus}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {editableMode && addBlockedReason ? (
                     <div className="small" style={{ color: "var(--muted)" }}>{addBlockedReason}</div>
                   ) : null}
