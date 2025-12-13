@@ -24,7 +24,10 @@ export default function App() {
     if (typeof window === "undefined") return "";
     return window.localStorage.getItem("schema-uml-token") || "";
   });
-  const [userName, setUserName] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem("schema-uml-username");
+  });
   const [sessionChecked, setSessionChecked] = useState<boolean>(false);
   const [workspace, setWorkspace] = useState<WorkspaceState | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -231,8 +234,10 @@ export default function App() {
     setWorkspace(null);
     workspaceStateRef.current = null;
     setUserName(null);
+    setSessionChecked(true);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("schema-uml-token");
+      window.localStorage.removeItem("schema-uml-username");
     }
   }, []);
 
@@ -252,6 +257,15 @@ export default function App() {
   }, [token]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (userName) {
+      window.localStorage.setItem("schema-uml-username", userName);
+    } else {
+      window.localStorage.removeItem("schema-uml-username");
+    }
+  }, [userName]);
+
+  useEffect(() => {
     let cancelled = false;
     const timeoutId = window.setTimeout(() => {
       if (!cancelled) setSessionChecked(true);
@@ -266,15 +280,15 @@ export default function App() {
         return;
       }
       try {
-        const res = await api.get("/workspace");
-        if (cancelled) return;
-        applyWorkspace(res.data.workspace as WorkspaceState);
-        setAuthError(null);
-        setUserName((prev) => res.data?.user?.username || prev || null);
+      const res = await api.get("/workspace");
+      if (cancelled) return;
+      applyWorkspace(res.data.workspace as WorkspaceState);
+      setAuthError(null);
+      setUserName((prev) => res.data?.user?.username || prev || null);
       } catch (error) {
         if (cancelled) return;
         setAuthError(formatApiError(error));
-        // stay signed in if workspace fetch fails; user can retry or log out manually
+        logout();
       } finally {
         if (!cancelled) setSessionChecked(true);
       }
@@ -1564,7 +1578,7 @@ export default function App() {
 
   const restoring = token && !sessionChecked;
 
-  if (!token || !sessionChecked) {
+  if (!token || !sessionChecked || !userName) {
     return (
       <main className="app-shell" ref={appShellRef} style={{ gridTemplateColumns: `${sidebarWidth}px 10px 1fr` }}>
         <div className="sidebar" style={{ gridColumn: "1 / span 3", padding: 24 }}>
@@ -1641,17 +1655,19 @@ export default function App() {
           </div>
         </div>
 
-        <div className="brand-card">
-          <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <p className="eyebrow">Signed in</p>
-              <h4 style={{ margin: 0 }}>{userName ?? "User"}</h4>
+        {token && userName ? (
+          <div className="brand-card">
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <p className="eyebrow">Signed in</p>
+                <h4 style={{ margin: 0 }}>{userName ?? "User"}</h4>
+              </div>
+              <button className="btn secondary" onClick={logout} type="button">
+                Logout
+              </button>
             </div>
-            <button className="btn secondary" onClick={logout} type="button">
-              Logout
-            </button>
           </div>
-        </div>
+        ) : null}
 
         <CollapsibleSection title="Workspace" hint="Switch modes on the fly">
           <div className="row" style={{ gap: 10 }}>
