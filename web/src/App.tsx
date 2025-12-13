@@ -1797,16 +1797,6 @@ export default function App() {
             </div>
 
             <div className="row" style={{ marginTop: 14, justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-              <button
-                className="btn secondary"
-                type="button"
-                onClick={() => {
-                  toggleEmptyMode();
-                }}
-                title={emptyCanvasActive ? "Return to schema-backed graph" : "Start a blank canvas"}
-              >
-                {emptyCanvasActive ? "Back to schema graph" : "+ Start from empty canvas"}
-              </button>
               <button className="btn" onClick={() => loadGraph()}>
                 Build graph
               </button>
