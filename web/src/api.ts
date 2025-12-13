@@ -1,10 +1,20 @@
+import { API_FEATURE_HEADER, API_VERSION, API_VERSION_HEADER, DEFAULT_FEATURE_FLAGS } from "./constants/api";
+import { ensureDiffResponse, type DiffResponse } from "./types/api";
+
 const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:5179";
 const DEFAULT_PACKAGE = import.meta.env.VITE_DEFAULT_PACKAGE ?? "nomad_simulations.schema_packages.model_method";
 
 const authHeaders = (): Record<string, string> => {
-  if (typeof window === "undefined") return {};
+  const base: Record<string, string> = {
+    [API_VERSION_HEADER]: API_VERSION,
+    [API_FEATURE_HEADER]: DEFAULT_FEATURE_FLAGS.join(","),
+  };
+  if (typeof window === "undefined") return base;
   const token = window.localStorage.getItem("schema-uml-token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  if (token) {
+    base.Authorization = `Bearer ${token}`;
+  }
+  return base;
 };
 
 export async function listBranches(): Promise<string[]> {
@@ -14,27 +24,6 @@ export async function listBranches(): Promise<string[]> {
   return j.branches as string[];
 }
 
-export type GraphPayload = {
-  branch: string; sha: string;
-  graph: { nodes: any[]; edges: any[] };
-};
-
-export type DiffResponse = {
-  base: GraphPayload;
-  head: GraphPayload;
-  diff: {
-    nodes: {
-      added: any[];
-      removed: any[];
-      changed: { id: string; before: any; after: any }[];
-    };
-    edges: {
-      added: { source: string; target: string; type?: string }[];
-      removed: { source: string; target: string; type?: string }[];
-    };
-  };
-};
-
 export async function getDiff(base: string, head: string, pkg = DEFAULT_PACKAGE) {
   const r = await fetch(`${BASE}/graph/diff`, {
     method: "POST",
@@ -42,5 +31,5 @@ export async function getDiff(base: string, head: string, pkg = DEFAULT_PACKAGE)
     body: JSON.stringify({ base, head, package: pkg })
   });
   if (!r.ok) throw new Error(await r.text());
-  return (await r.json()) as DiffResponse;
+  return ensureDiffResponse(await r.json());
 }

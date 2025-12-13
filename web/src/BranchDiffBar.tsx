@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listBranches, getDiff, type DiffResponse } from "./api";
+import { formatApiError } from "./utils/errors";
 
 export default function BranchDiffBar({ onDiff }: { onDiff: (d: DiffResponse) => void }) {
   const [branches, setBranches] = useState<string[]>([]);
@@ -8,7 +9,7 @@ export default function BranchDiffBar({ onDiff }: { onDiff: (d: DiffResponse) =>
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => { listBranches().then(setBranches).catch(e => setErr(String(e))); }, []);
+  useEffect(() => { listBranches().then(setBranches).catch(e => setErr(formatApiError(e))); }, []);
 
   const run = async () => {
     if (!base || !head) return;
@@ -17,7 +18,7 @@ export default function BranchDiffBar({ onDiff }: { onDiff: (d: DiffResponse) =>
       const d = await getDiff(base, head);
       onDiff(d);
     } catch (e:any) {
-      setErr(String(e));
+      setErr(formatApiError(e));
     } finally {
       setLoading(false);
     }

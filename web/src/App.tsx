@@ -10,36 +10,13 @@ import CollapsibleSection from "./components/CollapsibleSection";
 import { useSelection } from "./store/selection";
 import { jsPDF } from "jspdf";
 import type { AuditTrailEntry, QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
-
-type ApiGraph = {
-  package: string;
-  root: string | null;
-  nodes: any[];
-  edges: any[];
-};
-
-const DEFAULT_API = "http://localhost:5179";
-const DEFAULT_PACKAGE = import.meta.env.VITE_DEFAULT_PACKAGE ?? "nomad_simulations.schema_packages.model_method";
-const DEFAULT_NAMESPACE =
-  import.meta.env.VITE_DEFAULT_NAMESPACE ??
-  "nomad_simulations.schema_packages";
-const DEFAULT_ROOT = import.meta.env.VITE_DEFAULT_ROOT ?? "ModelMethod";
-const DEFAULT_BRANCH = import.meta.env.VITE_DEFAULT_BRANCH ?? "develop";
-const WORKSPACE_PRESETS = [
-  {
-    label: "nomad-simulations",
-    namespace: "nomad_simulations.schema_packages",
-    branch: "develop",
-    pkg: "nomad_simulations.schema_packages.model_method",
-    root: "ModelMethod",
-  },
-];
-
-type WorkspaceState = {
-  branch: string;
-  package: string;
-  base_namespace: string;
-};
+import { ensureDiffResponse, ensureGraphResponse, type ApiGraph, type DiffResponse } from "./types/api";
+import type { WorkspaceState } from "./types/workspace";
+import { API_FEATURE_HEADER, API_VERSION, API_VERSION_HEADER, DEFAULT_FEATURE_FLAGS } from "./constants/api";
+import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_PACKAGE, DEFAULT_ROOT, WORKSPACE_PRESETS } from "./constants/defaults";
+import { useWorkspaceStore } from "./store/workspace";
+import { fqidFromParts, normalizeId, normalizeLabel, normalizeModule } from "./utils/identifier";
+import { formatApiError } from "./utils/errors";
 
 export default function App() {
   const apiBase = DEFAULT_API;
@@ -47,20 +24,29 @@ export default function App() {
     if (typeof window === "undefined") return "";
     return window.localStorage.getItem("schema-uml-token") || "";
   });
-  const [userName, setUserName] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem("schema-uml-username");
+  });
+  const [sessionChecked, setSessionChecked] = useState<boolean>(false);
   const [workspace, setWorkspace] = useState<WorkspaceState | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [loginUsername, setLoginUsername] = useState<string>("admin");
   const [loginPassword, setLoginPassword] = useState<string>("admin");
-  const [pkg, setPkg] = useState<string>(DEFAULT_PACKAGE);
+  const {
+    branch: workspaceBranch,
+    pkg,
+    baseNamespace: namespace,
+    startEmpty,
+    setBranch: setWorkspaceBranch,
+    setPkg,
+    setBaseNamespace: setNamespace,
+    setStartEmpty,
+    applyWorkspace: applyWorkspaceInStore,
+  } = useWorkspaceStore();
   const [availablePkgs, setAvailablePkgs] = useState<string[]>([]);
   const [roots, setRoots] = useState<string[]>([]);
   const [root, setRoot] = useState<string>(DEFAULT_ROOT);
-  const [startEmpty, setStartEmpty] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    const stored = window.localStorage.getItem("schema-uml-start-empty");
-    return stored === "true";
-  });
 
   const [includeQuantities, setIncludeQuantities] = useState<boolean>(true);
   const [includeSubsections, setIncludeSubsections] = useState<boolean>(true);
@@ -68,7 +54,6 @@ export default function App() {
   const [showQuantityMetadata, setShowQuantityMetadata] = useState<boolean>(false);
 
   const [crossModules, setCrossModules] = useState<boolean>(true);
-  const [namespace, setNamespace] = useState<string>(DEFAULT_NAMESPACE);
 
   const [graph, setGraph] = useState<ApiGraph | null>(null);
   const [baseGraph, setBaseGraph] = useState<ApiGraph | null>(null);
@@ -106,9 +91,9 @@ export default function App() {
 
   // branch diff state
   const [branches, setBranches] = useState<string[]>([]);
-  const [baseBranch, setBaseBranch] = useState<string>("");
-  const [headBranch, setHeadBranch] = useState<string>("");
-  const [diffData, setDiffData] = useState<any | null>(null);
+  const [baseBranch, setBaseBranch] = useState<string>(workspaceBranch || "");
+  const [headBranch, setHeadBranch] = useState<string>(workspaceBranch || "");
+  const [diffData, setDiffData] = useState<DiffResponse | null>(null);
   const [diffLoading, setDiffLoading] = useState<boolean>(false);
 
   const [auditTrail, setAuditTrail] = useState<AuditTrailEntry[]>((() => {
@@ -156,24 +141,25 @@ export default function App() {
 
   // overview mode
   const [mode, setMode] = useState<"graph" | "overview">("graph");
-  const [overviewBranch, setOverviewBranch] = useState<string>(DEFAULT_BRANCH);
-  const [packageBranch, setPackageBranch] = useState<string>(DEFAULT_BRANCH);
+  const [overviewBranch, setOverviewBranch] = useState<string>(workspaceBranch || DEFAULT_BRANCH);
+  const [packageBranch, setPackageBranch] = useState<string>(workspaceBranch || DEFAULT_BRANCH);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
       window.localStorage.setItem("schema-uml-audit", JSON.stringify(auditTrail));
-      window.localStorage.setItem("schema-uml-start-empty", JSON.stringify(startEmpty));
     } catch {
       // ignore storage errors
     }
-  }, [auditTrail, startEmpty]);
+  }, [auditTrail]);
 
   const api = useMemo(() => {
     const instance = axios.create({ baseURL: apiBase });
     instance.interceptors.request.use((config) => {
+      config.headers = config.headers ?? {};
+      config.headers[API_VERSION_HEADER] = API_VERSION;
+      config.headers[API_FEATURE_HEADER] = DEFAULT_FEATURE_FLAGS.join(",");
       if (token) {
-        config.headers = config.headers ?? {};
         config.headers.Authorization = `Bearer ${token}`;
       }
       return config;
@@ -200,6 +186,8 @@ export default function App() {
     [basePackageForEmpty]
   );
 
+  const emptyCanvasActive = startEmpty && graph?.package === scratchPackage && graph?.root === "";
+
   const applyWorkspace = useCallback((ws: WorkspaceState | null) => {
     if (!ws) return;
     const prev = workspaceStateRef.current;
@@ -212,15 +200,14 @@ export default function App() {
 
     workspaceStateRef.current = ws;
     setWorkspace(ws);
-    if (ws.package) setPkg(ws.package);
-    if (ws.base_namespace) setNamespace(ws.base_namespace);
+    applyWorkspaceInStore(ws);
     if (ws.branch) {
       setPackageBranch(ws.branch);
       setOverviewBranch(ws.branch);
       setBaseBranch((prev) => prev || ws.branch);
       setHeadBranch((prev) => prev || ws.branch);
     }
-  }, []);
+  }, [applyWorkspaceInStore]);
 
   const syncWorkspaceFromResponse = useCallback(
     (payload: any) => {
@@ -247,8 +234,10 @@ export default function App() {
     setWorkspace(null);
     workspaceStateRef.current = null;
     setUserName(null);
+    setSessionChecked(true);
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("schema-uml-token");
+      window.localStorage.removeItem("schema-uml-username");
     }
   }, []);
 
@@ -268,21 +257,48 @@ export default function App() {
   }, [token]);
 
   useEffect(() => {
-    if (!token) {
-      setWorkspace(null);
-      workspaceStateRef.current = null;
-      return;
+    if (typeof window === "undefined") return;
+    if (userName) {
+      window.localStorage.setItem("schema-uml-username", userName);
+    } else {
+      window.localStorage.removeItem("schema-uml-username");
     }
-    api
-      .get("/workspace")
-      .then((res) => {
-        applyWorkspace(res.data.workspace as WorkspaceState);
-        setAuthError(null);
-      })
-      .catch((error) => {
-        setAuthError(error?.response?.data?.detail || String(error));
+  }, [userName]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      if (!cancelled) setSessionChecked(true);
+    }, 5000);
+
+    const run = async () => {
+      if (!token) {
+        setWorkspace(null);
+        workspaceStateRef.current = null;
+        setUserName(null);
+        setSessionChecked(true);
+        return;
+      }
+      try {
+      const res = await api.get("/workspace");
+      if (cancelled) return;
+      applyWorkspace(res.data.workspace as WorkspaceState);
+      setAuthError(null);
+      setUserName((prev) => res.data?.user?.username || prev || null);
+      } catch (error) {
+        if (cancelled) return;
+        setAuthError(formatApiError(error));
         logout();
-      });
+      } finally {
+        if (!cancelled) setSessionChecked(true);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
   }, [api, applyWorkspace, logout, token]);
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -354,6 +370,7 @@ export default function App() {
       setToken(nextToken);
       setUserName(res.data.user?.username ?? loginUsername);
       applyWorkspace(res.data.workspace as WorkspaceState);
+      setSessionChecked(true);
     } catch (error: any) {
       setAuthError(error?.response?.data?.detail || String(error));
     }
@@ -423,7 +440,7 @@ export default function App() {
       if (list.length > 0 && !list.includes(root)) setRoot(list[0]);
       syncWorkspaceFromResponse(r.data);
     } catch (e: any) {
-      setErr(e?.response?.data?.detail || String(e));
+      setErr(formatApiError(e));
       setRoots([]);
     }
   }, [api, pkg, root, startEmpty, syncWorkspaceFromResponse, token]);
@@ -439,14 +456,20 @@ export default function App() {
     const pkgToUse = overrides?.pkg ?? pkg;
     const rootToUse = overrides?.root ?? root;
     const namespaceToUse = overrides?.namespace ?? normalizedNamespace;
-    const branchToUse = overrides?.branch ?? workspace?.branch ?? "";
+    const branchToUse = overrides?.branch ?? workspaceBranch ?? "";
     const useEmpty = overrides?.forceEmpty ?? startEmpty;
+    if (!useEmpty) {
+      setStartEmpty(false);
+      setEditableMode(false);
+      setCanvasStatus(null);
+    }
     setErr(null);
     setQuantityActionErr(null);
     setLoading(true);
     setDiffData(null);
     setGraphHandle(null);
     try {
+      let parsed: ApiGraph | null = null;
       if (useEmpty) {
         const r = await api.get("/schema", {
           params: {
@@ -460,9 +483,10 @@ export default function App() {
             empty: true,
           },
         });
-        setGraph(r.data);
-        setBaseGraph(r.data);
+        parsed = ensureGraphResponse(r.data);
         syncWorkspaceFromResponse(r.data);
+        setGraph(parsed);
+        setBaseGraph(parsed);
         return;
       }
       if (branchToUse) {
@@ -483,8 +507,7 @@ export default function App() {
             },
           }
         );
-        setGraph(r.data?.graph ?? null);
-        setBaseGraph(r.data?.graph ?? null);
+        parsed = ensureGraphResponse(r.data?.graph ?? r.data);
         syncWorkspaceFromResponse(r.data);
       } else {
         const r = await api.get("/schema", {
@@ -498,17 +521,20 @@ export default function App() {
             base_namespace: namespaceToUse || undefined,
           },
         });
-        setGraph(r.data);
-        setBaseGraph(r.data);
+        parsed = ensureGraphResponse(r.data);
         syncWorkspaceFromResponse(r.data);
       }
+      setGraph(parsed);
+      setBaseGraph(parsed);
     } catch (e: any) {
-      setErr(e?.response?.data?.detail || String(e));
+      const message = formatApiError(e);
+      setErr(message || "Failed to load graph");
       setGraph(null);
+      setBaseGraph(null);
     } finally {
       setLoading(false);
     }
-  }, [api, crossModules, includeQuantities, includeSubsections, includeInheritance, normalizedNamespace, pkg, root, startEmpty, syncWorkspaceFromResponse, token, workspace?.branch]);
+  }, [api, crossModules, includeQuantities, includeSubsections, includeInheritance, normalizedNamespace, pkg, root, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
 
   const resetEmptyCanvas = useCallback(async () => {
     if (!token) {
@@ -522,7 +548,7 @@ export default function App() {
       await api.delete("/schema/custom-edits", {
         params: {
           package: targetPkg,
-          branch: workspace?.branch || undefined,
+          branch: workspaceBranch || undefined,
         },
       });
       setAuditTrail([]);
@@ -532,12 +558,12 @@ export default function App() {
       setSelected(null);
       setSelectedClassId(null);
       setSelectedQuantityId(null);
-      await loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, branch: workspace?.branch, forceEmpty: true });
+      await loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, branch: workspaceBranch, forceEmpty: true });
       setCanvasStatus("Canvas reset to empty.");
     } catch (e: any) {
-      setCanvasStatus(`Reset failed: ${e?.response?.data?.detail || String(e)}`);
+      setCanvasStatus(`Reset failed: ${formatApiError(e)}`);
     }
-  }, [api, loadGraph, normalizedNamespace, scratchPackage, setSelected, token, workspace?.branch]);
+  }, [api, loadGraph, normalizedNamespace, scratchPackage, setSelected, token, workspaceBranch]);
 
   // fetch git branches
   const loadBranches = useCallback(async () => {
@@ -585,7 +611,7 @@ export default function App() {
       // silent failure is fine; user can still type manually
       console.error("Failed to load packages", e);
       // surface the error so users know why the dropdown is empty
-      setErr((e as any)?.response?.data?.detail || String(e));
+      setErr(formatApiError(e));
     }
   }, [api, normalizedNamespace, packageBranch, pkg, scratchPackage, startEmpty, syncWorkspaceFromResponse, token]);
 
@@ -627,10 +653,11 @@ export default function App() {
           },
         }
       );
-      setDiffData(r.data);
+      const parsed = ensureDiffResponse(r.data);
+      setDiffData(parsed);
       syncWorkspaceFromResponse(r.data);
     } catch (e: any) {
-      setErr(e?.response?.data?.detail || String(e));
+      setErr(formatApiError(e));
       setDiffData(null);
     } finally {
       setDiffLoading(false);
@@ -638,10 +665,12 @@ export default function App() {
   };
 
   const toQuantityNode = useCallback((n: any): QuantityNode => {
-    const ownerId = n.owner ?? "";
+    const id = normalizeId(n.id);
+    const ownerId = normalizeId(n.owner);
+    const fallbackName = id.split(".").pop() || id;
     return {
-      id: n.id,
-      name: n.label ?? n.id?.split(".").pop() ?? n.id,
+      id,
+      name: normalizeLabel(n.label, fallbackName),
       dtype: n.dtype ?? n.data_type ?? n.type ?? undefined,
       shape: n.shape ?? null,
       card: n.card ?? null,
@@ -656,28 +685,35 @@ export default function App() {
     if (!g) return null;
     const nodes = g.nodes || [];
     const edges = g.edges || [];
+    const normalizedEdges = edges
+      .map((e: any) => ({
+        source: normalizeId(e.source),
+        target: normalizeId(e.target),
+        type: e.type,
+        card: e.card ?? null,
+      }))
+      .filter((e: any) => e.source && e.target && e.type);
     const sections = nodes.filter((n: any) => n.kind === "section");
-    const quantities = nodes.filter((n: any) => n.kind === "quantity");
+    const quantities = nodes.filter((n: any) => n.kind === "quantity").map((q: any) => toQuantityNode(q));
     const parentInfoByChild = new Map<string, { id: string; relation: string }>();
-    edges.forEach((e: any) => {
+    normalizedEdges.forEach((e: any) => {
       if ((e.type === "inherits" || e.type === "hasSubSection") && e.target && e.source) {
         parentInfoByChild.set(e.target, { id: e.source, relation: e.type });
       }
     });
 
     const classList: UmlClassNode[] = sections.map((sec: any) => {
-      const ownedQuantities = quantities
-        .filter((q: any) => q.owner === sec.id)
-        .map((q: any) => toQuantityNode(q));
+      const id = normalizeId(sec.id);
+      const ownedQuantities = quantities.filter((q: any) => q.ownerId === id);
 
-      const parentInfo = parentInfoByChild.get(sec.id);
+      const parentInfo = parentInfoByChild.get(id);
       const relation = parentInfo?.relation === "hasSubSection" ? "hasSubSection" : parentInfo?.relation === "inherits" ? "inherits" : null;
 
       return {
-        id: sec.id,
-        name: sec.label ?? sec.id,
+        id,
+        name: normalizeLabel(sec.label, id),
         doc: sec.doc ?? null,
-        module: sec.module ?? null,
+        module: normalizeModule(sec.module) || sec.module || null,
         path: sec.path ?? null,
         line: typeof sec.line === "number" ? sec.line : null,
         quantities: ownedQuantities,
@@ -687,23 +723,24 @@ export default function App() {
     });
 
     return {
-      package: g.package,
-      root: g.root ?? null,
+      package: normalizeModule(g.package) || g.package,
+      root: g.root ? normalizeLabel(g.root, g.root) : null,
       classes: classList,
-      edges: edges.map((e: any) => ({
-        source: e.source,
-        target: e.target,
-        type: e.type,
-        card: e.card ?? null,
-      })),
+      edges: normalizedEdges,
     };
   }, [toQuantityNode]);
 
   const toggleEmptyMode = useCallback(async () => {
-    const next = !startEmpty;
-    setStartEmpty(next);
-    if (next) {
+    const nextShouldBeEmpty = !emptyCanvasActive;
+    setStartEmpty(nextShouldBeEmpty);
+    if (nextShouldBeEmpty) {
       const targetPkg = scratchPackage;
+      const persistedCustom = auditTrail.length === 0 && (graph?.package === targetPkg || baseGraph?.package === targetPkg);
+      if (persistedCustom) {
+        // If we have stale custom edits but no audit trail (e.g., after refresh), wipe them so the canvas truly starts empty.
+        await resetEmptyCanvas();
+        return;
+      }
       const blankGraph: ApiGraph = { package: targetPkg, root: "", nodes: [], edges: [] };
       setMode("graph");
       setDiffData(null);
@@ -723,7 +760,7 @@ export default function App() {
     } else {
       await loadGraph({ forceEmpty: false });
     }
-  }, [buildUmlState, loadGraph, normalizedNamespace, scratchPackage, setSelected, startEmpty]);
+  }, [auditTrail.length, baseGraph?.package, buildUmlState, emptyCanvasActive, graph?.package, loadGraph, normalizedNamespace, resetEmptyCanvas, scratchPackage, setSelected]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -898,7 +935,7 @@ export default function App() {
           },
         }
       );
-      const updated = r.data as ApiGraph;
+      const updated = ensureGraphResponse(r.data);
       const newChange: AuditTrailEntry["change"] = {
         type: "add-quantity",
         classId: targetClass.id,
@@ -960,7 +997,7 @@ export default function App() {
       setSelectedClassId(updatedClass.id);
       setSelectedQuantityId(addedQuantity.id);
     } catch (e: any) {
-      const message = e?.response?.data?.detail || String(e);
+      const message = formatApiError(e);
       setQuantityActionErr(message);
       throw new Error(message);
     } finally {
@@ -1002,7 +1039,7 @@ export default function App() {
           },
         }
       );
-      const next = res.data as ApiGraph;
+      const next = ensureGraphResponse(res.data);
       const newChange: AuditTrailEntry["change"] = {
         type: "add-class",
         cls: {
@@ -1042,7 +1079,7 @@ export default function App() {
       setSelectedClassId(newCls.id);
       setSelectedQuantityId(null);
     } catch (e: any) {
-      const message = e?.response?.data?.detail || String(e);
+      const message = formatApiError(e);
       setQuantityActionErr(message);
       throw new Error(message);
     } finally {
@@ -1198,7 +1235,7 @@ export default function App() {
       await api.delete("/schema/custom-edits", {
         params: {
           package: pkg,
-          branch: workspace?.branch || undefined,
+          branch: workspaceBranch || undefined,
         },
       });
     } catch (e) {
@@ -1210,6 +1247,15 @@ export default function App() {
     loadRoots();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pkg, startEmpty, loadRoots]);
+
+  // If user switches away from the scratch package, exit empty mode to restore schema-backed behavior.
+  useEffect(() => {
+    if (startEmpty && pkg !== scratchPackage) {
+      setStartEmpty(false);
+      setEditableMode(false);
+      setCanvasStatus(null);
+    }
+  }, [pkg, scratchPackage, startEmpty]);
 
   useEffect(() => {
     loadBranches();
@@ -1234,6 +1280,7 @@ export default function App() {
     setOverviewBranch(value);
     setBaseBranch((prev) => prev || value);
     setHeadBranch((prev) => prev || value);
+    setWorkspaceBranch(value);
     updateWorkspaceOnServer({ branch: value });
   };
 
@@ -1259,7 +1306,7 @@ export default function App() {
   }, [setSelected]);
 
   const focusRootSection = useCallback(() => {
-    const targetRoot = currentGraph?.root || root;
+    const targetRoot = normalizeId(currentGraph?.root || root);
     if (!targetRoot) return;
 
     const handled = graphHandle?.focusNode(targetRoot);
@@ -1267,23 +1314,22 @@ export default function App() {
 
     const fallbackNode = currentGraph?.nodes?.find?.((n: any) => {
       const label = (n as any).label || (n as any).rawName;
-      return n.id === targetRoot || label === targetRoot;
+      return normalizeId(n.id) === targetRoot || normalizeId(label) === targetRoot;
     }) as any;
 
     if (fallbackNode) {
+      const fallbackId = normalizeId(fallbackNode.id);
+      const fallbackName = normalizeLabel(fallbackNode.label || fallbackNode.rawName, fallbackId);
       setSelected({
-        id: fallbackNode.id,
+        id: fallbackId,
         kind: "class",
-        name: fallbackNode.label || fallbackNode.id,
+        name: fallbackName,
         doc: fallbackNode.doc || "",
         path: fallbackNode.path || "",
         line: typeof fallbackNode.line === "number" ? fallbackNode.line : undefined,
-        fqid:
-          fallbackNode.module && (fallbackNode.label || fallbackNode.id)
-            ? `${fallbackNode.module}.${fallbackNode.label || fallbackNode.id}`
-            : fallbackNode.id,
+        fqid: fqidFromParts(fallbackNode.module, fallbackName, fallbackId),
       });
-      setSelectedClassId(fallbackNode.id);
+      setSelectedClassId(fallbackId);
       setSelectedQuantityId(null);
     }
   }, [currentGraph, graphHandle, root, setSelected, setSelectedClassId, setSelectedQuantityId]);
@@ -1530,12 +1576,16 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  if (!token) {
+  const restoring = token && !sessionChecked;
+
+  if (!token || !sessionChecked || !userName) {
     return (
       <main className="app-shell" ref={appShellRef} style={{ gridTemplateColumns: `${sidebarWidth}px 10px 1fr` }}>
         <div className="sidebar" style={{ gridColumn: "1 / span 3", padding: 24 }}>
-          <h2>Sign in</h2>
-          <p className="subdued">Authenticate to load your personalized workspace.</p>
+          <h2>{restoring ? "Restoring session…" : "Sign in"}</h2>
+          <p className="subdued">
+            {restoring ? "Checking saved credentials. If this hangs, sign in again." : "Authenticate to load your workspace."}
+          </p>
           <form className="action-stack" onSubmit={handleLogin} style={{ maxWidth: 360 }}>
             <label className="label">Username</label>
             <input className="input" value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} />
@@ -1605,17 +1655,19 @@ export default function App() {
           </div>
         </div>
 
-        <div className="brand-card">
-          <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <p className="eyebrow">Signed in</p>
-              <h4 style={{ margin: 0 }}>{userName ?? "User"}</h4>
+        {token && userName ? (
+          <div className="brand-card">
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <p className="eyebrow">Signed in</p>
+                <h4 style={{ margin: 0 }}>{userName ?? "User"}</h4>
+              </div>
+              <button className="btn secondary" onClick={logout} type="button">
+                Logout
+              </button>
             </div>
-            <button className="btn secondary" onClick={logout} type="button">
-              Logout
-            </button>
           </div>
-        </div>
+        ) : null}
 
         <CollapsibleSection title="Workspace" hint="Switch modes on the fly">
           <div className="row" style={{ gap: 10 }}>
@@ -1761,16 +1813,6 @@ export default function App() {
             </div>
 
             <div className="row" style={{ marginTop: 14, justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-              <button
-                className="btn secondary"
-                type="button"
-                onClick={() => {
-                  toggleEmptyMode();
-                }}
-                title={startEmpty ? "Return to schema-backed graph" : "Start a blank canvas"}
-              >
-                {startEmpty ? "Back to schema graph" : "+ Start from empty canvas"}
-              </button>
               <button className="btn" onClick={() => loadGraph()}>
                 Build graph
               </button>
@@ -1996,7 +2038,7 @@ export default function App() {
               </div>
               <div style={{ marginTop: 12 }}>
                 <button className="btn secondary" type="button" onClick={() => toggleEmptyMode()}>
-                  {startEmpty ? "Back to schema graph" : "+ Start from empty canvas"}
+                  {emptyCanvasActive ? "Back to schema graph" : "+ Start from empty canvas"}
                 </button>
               </div>
             </div>

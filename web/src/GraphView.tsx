@@ -5,35 +5,16 @@ import cytoscapeElk from "cytoscape-elk";
 import type { Core, ElementDefinition } from "cytoscape";
 import { useSelection, type QtyMeta, type QtySnapshot } from "./store/selection";
 import { SUPPORTED_DTYPES } from "./components/quantityShared";
+import type { ApiEdge, ApiNode } from "./types/api";
 import type { QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
+import { fqidFromParts } from "./utils/identifier";
 
 type QtyDiffState = "added" | "removed" | "changed" | undefined;
 
 cytoscapeElk(cytoscape, elk as any);
 
-type RawNode = {
-  id: string;
-  kind: "section" | "quantity";
-  label: string;
-  module?: string;
-  dtype?: string | null;
-  data_type?: string | null;
-  type?: string | null;
-  shape?: string | null;
-  card?: string | null;
-  owner?: string | null;
-  doc?: string | null;
-  methods?: string[] | null;
-  path?: string | null;
-  line?: number | null;
-};
-
-type RawEdge = {
-  source: string;
-  target: string;
-  type: "hasQuantity" | "hasSubSection" | "inherits";
-  card?: string | null;
-};
+type RawNode = ApiNode;
+type RawEdge = ApiEdge;
 
 export type GraphExportHandle = {
   toPng: () => string | null;
@@ -185,7 +166,7 @@ export default function GraphView({
       onSelectClass?.(cls);
       setSelected({
         id: cls.id,
-        fqid: cls.module && cls.name ? `${cls.module}.${cls.name}` : cls.id,
+        fqid: fqidFromParts(cls.module, cls.name, cls.id),
         kind: "class",
         name: cls.name,
         doc: cls.doc || "",
