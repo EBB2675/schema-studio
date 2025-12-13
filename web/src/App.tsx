@@ -510,21 +510,6 @@ export default function App() {
     }
   }, [api, crossModules, includeQuantities, includeSubsections, includeInheritance, normalizedNamespace, pkg, root, startEmpty, syncWorkspaceFromResponse, token, workspace?.branch]);
 
-  const toggleEmptyMode = useCallback(async () => {
-    const next = !startEmpty;
-    setStartEmpty(next);
-    if (next) {
-      const targetPkg = scratchPackage;
-      setRoot("");
-      setPkg(targetPkg);
-      setEditableMode(true);
-      setCanvasStatus(null);
-      await loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, forceEmpty: true });
-    } else {
-      await loadGraph({ forceEmpty: false });
-    }
-  }, [loadGraph, normalizedNamespace, scratchPackage, startEmpty]);
-
   const resetEmptyCanvas = useCallback(async () => {
     if (!token) {
       setErr("Login required");
@@ -713,6 +698,32 @@ export default function App() {
       })),
     };
   }, [toQuantityNode]);
+
+  const toggleEmptyMode = useCallback(async () => {
+    const next = !startEmpty;
+    setStartEmpty(next);
+    if (next) {
+      const targetPkg = scratchPackage;
+      const blankGraph: ApiGraph = { package: targetPkg, root: "", nodes: [], edges: [] };
+      setMode("graph");
+      setDiffData(null);
+      setGraphHandle(null);
+      setAuditTrail([]);
+      setGraph(blankGraph);
+      setBaseGraph(blankGraph);
+      setUmlState(buildUmlState(blankGraph));
+      setSelected(null);
+      setSelectedClassId(null);
+      setSelectedQuantityId(null);
+      setRoot("");
+      setPkg(targetPkg);
+      setEditableMode(true);
+      setCanvasStatus(null);
+      await loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, forceEmpty: true });
+    } else {
+      await loadGraph({ forceEmpty: false });
+    }
+  }, [buildUmlState, loadGraph, normalizedNamespace, scratchPackage, setSelected, startEmpty]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
