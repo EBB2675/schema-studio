@@ -1338,6 +1338,24 @@ export default function App() {
     focusRootSection();
   }, [focusRootSection]);
 
+  const returnToHome = useCallback(() => {
+    setMode("graph");
+    setGraph(null);
+    setBaseGraph(null);
+    setDiffData(null);
+    setGraphHandle(null);
+    setUmlState(null);
+    setAuditTrail([]);
+    setSelectedClassId(null);
+    setSelectedQuantityId(null);
+    setSelected(null);
+    setCanvasStatus(null);
+    setQuantityActionErr(null);
+    setCreatingQuantityFor(null);
+    setCreatingClass(false);
+    setEditableMode(false);
+  }, [setSelected]);
+
   const handleOverviewClassSelect = (pkgName: string, className: string) => {
     setMode("graph");
     setPkg(pkgName);
@@ -1941,8 +1959,13 @@ export default function App() {
           ) : diffData ? (
             <>
               <div className="workspace-toolbar" style={{ justifyContent: "space-between" }}>
-                <div>
-                  Base: {diffData.base.branch} ({diffData.base.sha.slice(0, 7)}) → Head: {diffData.head.branch} ({diffData.head.sha.slice(0, 7)})
+                <div className="row" style={{ alignItems: "center" }}>
+                  <button className="btn secondary" type="button" onClick={returnToHome}>
+                    Back to home
+                  </button>
+                  <div>
+                    Base: {diffData.base.branch} ({diffData.base.sha.slice(0, 7)}) → Head: {diffData.head.branch} ({diffData.head.sha.slice(0, 7)})
+                  </div>
                 </div>
                 <div className="row" style={{ gap: 10, alignItems: "center" }}>
                   <span className="pill diff added">🟩 Added</span>
@@ -1964,6 +1987,9 @@ export default function App() {
             <>
               <div style={{ position: "relative", flex: 1 }}>
                 <div className="graph-toolbar">
+                  <button className="btn secondary" type="button" onClick={returnToHome} style={{ alignSelf: "flex-start" }}>
+                    Back to home
+                  </button>
                   <div className="label" style={{ marginBottom: 4 }}>Canvas mode</div>
                   <div className="toggle-group">
                     <button
