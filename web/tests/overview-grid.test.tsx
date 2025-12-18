@@ -58,4 +58,31 @@ describe('OverviewGrid', () => {
 
     expect(onClassSelect).toHaveBeenCalledWith('pkg.one', 'Beta');
   });
+
+  it('shows loading and error states', async () => {
+    const pending = new Promise(() => {});
+    const fetchMock = vi.fn().mockReturnValue(pending);
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <OverviewGrid
+        apiBase="http://api"
+        branch="develop"
+      />
+    );
+
+    expect(await screen.findByText(/Loading…/i)).toBeInTheDocument();
+
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('boom')));
+
+    render(
+      <OverviewGrid
+        apiBase="http://api"
+        branch="develop"
+      />
+    );
+
+    await expect(screen.findByText(/boom/)).resolves.toBeInTheDocument();
+  });
 });
