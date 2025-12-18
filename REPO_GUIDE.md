@@ -74,7 +74,8 @@ Default namespace scope targets `nomad_simulations.schema_packages`. For other p
 - Stored in `src/store/workspace.ts` (branch/pkg/base namespace/startEmpty), synced with backend `/workspace` where available and persisted locally for reloads.
 
 **Contract tests:**
-- `npm run test:contracts` (from `web/`) validates API parsing helpers and identifier normalization.
+- `npm run test:run` (from `web/`) executes frontend UI flows + contract parsing/identifier checks using Vitest + happy-dom.
+- `npm run test:contracts` runs only the contract/identifier subset.
 - Custom classes: `POST /schema/custom-class` with `relation` (`inherits` | `hasSubSection`), always assigns id `{package}.{name}`; adds parent edge if provided.
 - Custom quantities: `POST /schema/custom-quantity` with `class_name` (label), optional `parent_name`/`parent_relation` to reattach parent edge if the class must be materialized server-side.
 - Frontend keeps an audit trail and replays all prior edits onto each fresh server graph so earlier custom edges don’t disappear when adding new ones.

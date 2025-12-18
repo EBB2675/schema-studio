@@ -1,5 +1,4 @@
-import assert from "node:assert";
-import { test } from "node:test";
+import { describe, expect, it } from "vitest";
 import { ensureDiffResponse, ensureGraphResponse } from "../src/types/api";
 import { fqidFromParts, normalizeId, normalizeLabel } from "../src/utils/identifier";
 
@@ -15,34 +14,36 @@ const sampleGraph = {
   ],
 };
 
-test("ensureGraphResponse validates shape and keeps labels", () => {
-  const parsed = ensureGraphResponse(sampleGraph);
-  assert.equal(parsed.package, "example.pkg");
-  assert.equal(parsed.nodes[0].id, "example.pkg.Root");
-  assert.equal(parsed.nodes[1].owner, "example.pkg.Root");
-});
-
-test("ensureGraphResponse rejects missing nodes", () => {
-  assert.throws(() => ensureGraphResponse({ package: "pkg", edges: [] } as any));
-});
-
-test("ensureDiffResponse validates nested graphs", () => {
-  const diff = ensureDiffResponse({
-    base: { branch: "main", sha: "abc1234", graph: sampleGraph },
-    head: { branch: "dev", sha: "def5678", graph: sampleGraph },
-    diff: {
-      nodes: { added: [], removed: [], changed: [{ id: "example.pkg.Root" }] },
-      edges: { added: [], removed: [] },
-    },
+describe("contracts", () => {
+  it("ensureGraphResponse validates shape and keeps labels", () => {
+    const parsed = ensureGraphResponse(sampleGraph);
+    expect(parsed.package).toBe("example.pkg");
+    expect(parsed.nodes[0].id).toBe("example.pkg.Root");
+    expect(parsed.nodes[1].owner).toBe("example.pkg.Root");
   });
-  assert.equal(diff.base.graph.package, "example.pkg");
-  assert.equal(diff.head.branch, "dev");
-  assert.equal(diff.diff.nodes.changed[0].id, "example.pkg.Root");
-});
 
-test("identifier utilities normalize ids and fqids", () => {
-  assert.equal(normalizeId("  spaced.id  "), "spaced.id");
-  assert.equal(normalizeLabel("  ", "fallback"), "fallback");
-  assert.equal(fqidFromParts("pkg.", "Class", "fallback"), "pkg.Class");
-  assert.equal(fqidFromParts("", "", "fallback"), "fallback");
+  it("ensureGraphResponse rejects missing nodes", () => {
+    expect(() => ensureGraphResponse({ package: "pkg", edges: [] } as any)).toThrow();
+  });
+
+  it("ensureDiffResponse validates nested graphs", () => {
+    const diff = ensureDiffResponse({
+      base: { branch: "main", sha: "abc1234", graph: sampleGraph },
+      head: { branch: "dev", sha: "def5678", graph: sampleGraph },
+      diff: {
+        nodes: { added: [], removed: [], changed: [{ id: "example.pkg.Root" }] },
+        edges: { added: [], removed: [] },
+      },
+    });
+    expect(diff.base.graph.package).toBe("example.pkg");
+    expect(diff.head.branch).toBe("dev");
+    expect(diff.diff.nodes.changed[0].id).toBe("example.pkg.Root");
+  });
+
+  it("identifier utilities normalize ids and fqids", () => {
+    expect(normalizeId("  spaced.id  ")).toBe("spaced.id");
+    expect(normalizeLabel("  ", "fallback")).toBe("fallback");
+    expect(fqidFromParts("pkg.", "Class", "fallback")).toBe("pkg.Class");
+    expect(fqidFromParts("", "", "fallback")).toBe("fallback");
+  });
 });

@@ -124,6 +124,7 @@ curl 'http://127.0.0.1:5179/git/branches'
 Optional contract tests for API parsing/normalization (after `npm install` in `web/`):
 ```bash
 cd web
+npm run test:run   # frontend UI + contract suite (Vitest + happy-dom)
 npm run test:contracts
 ```
 

@@ -43,4 +43,7 @@ These Vite env vars (see `App.tsx`) control the initial workspace:
 
 ## Testing & linting
 
-This package relies on Vite defaults. Add your preferred test runner or linter as needed; `npm run build` will validate TypeScript + Vite configuration.
+- Vitest + @testing-library with `happy-dom` powers UI flow tests.
+- `npm run test` (watch) or `npm run test:run` (CI-friendly) to run the suite.
+- `npm run test:contracts` runs the API contract/identifier checks under Vitest.
+- `npm run build` validates TypeScript + Vite configuration.
