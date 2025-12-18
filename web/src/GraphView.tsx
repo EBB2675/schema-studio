@@ -727,7 +727,7 @@ export default function GraphView({
 
   return (
     <div className="graph" style={{ position: "relative" }}>
-      <div className="cy-canvas" ref={containerRef} />
+      <div className={`cy-canvas${showEditingUi ? " is-hidden" : ""}`} ref={containerRef} />
       {showEditingUi && (
         <div
           className="uml-overlay"
