@@ -2279,10 +2279,10 @@ export default function App() {
                             {entry.description}
                             {archived ? " (archived)" : ""}
                           </div>
-                            <div style={{ color: "var(--muted)" }}>
-                              {new Date(entry.timestamp).toLocaleString()}
-                            </div>
-                            <div style={{ color: "var(--subtitle)" }}>Change: {entry.change.type}</div>
+                          <div style={{ color: "var(--muted)" }}>
+                            {new Date(entry.timestamp).toLocaleString()}
+                          </div>
+                          <div style={{ color: "var(--subtitle)" }}>Change: {entry.change.type}</div>
                           </div>
                         </div>
                       </div>
