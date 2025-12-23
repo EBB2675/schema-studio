@@ -1243,20 +1243,25 @@ export default function App() {
     [applyForwardChange, auditTrail, filterActiveAuditForPackage, normalizePackageName, pkg]
   );
 
+  const rebuildGraphWithAudit = useCallback(
+    (entries: AuditTrailEntry[]) => {
+      const baseline = baseGraph ?? graph;
+      if (!baseline) return;
+      const targetPackage = normalizePackageName(baseline.package || pkg);
+      const applicable = filterActiveAuditForPackage(entries, targetPackage);
+      const rebuilt = applicable.reduce((acc, curr) => applyForwardChange(acc, curr.change), baseline);
+      setGraph(rebuilt);
+      setUmlState(buildUmlState(rebuilt));
+    },
+    [applyForwardChange, baseGraph, buildUmlState, filterActiveAuditForPackage, graph, normalizePackageName, pkg]
+  );
+
   const undoAuditEntry = (id: string) => {
     const remaining = auditTrail.filter((a) => a.id !== id && a.change);
     const entry = auditTrail.find((a) => a.id === id);
     if (!entry || !entry.change) return;
 
-    const start = baseGraph ?? graph;
-    if (!start) return;
-
-    const startPackage = start?.package ?? pkg;
-    const applicable = filterActiveAuditForPackage(remaining as AuditTrailEntry[], startPackage);
-    const rebuilt = applicable.reduce((acc, curr) => applyForwardChange(acc, curr.change!), start);
-
-    setGraph(rebuilt);
-    setUmlState(buildUmlState(rebuilt));
+    rebuildGraphWithAudit(remaining as AuditTrailEntry[]);
     setAuditTrail(remaining as AuditTrailEntry[]);
     setQuantityActionErr(null);
   };
@@ -1320,6 +1325,27 @@ export default function App() {
   );
   const activeAuditCount = activeAuditEntries.length;
   const archivedAuditCount = auditTrail.length - activeAuditCount;
+
+  const restoreArchivedEntry = (id: string) => {
+    const updated = auditTrail.map((entry) =>
+      entry.id === id
+        ? { ...entry, replayable: true, package: currentPackageForAudit }
+        : entry
+    );
+    setAuditTrail(updated);
+    rebuildGraphWithAudit(updated);
+  };
+
+  const restoreAllArchivedToCurrent = () => {
+    if (!auditTrail.length) return;
+    const updated = auditTrail.map((entry) => ({
+      ...entry,
+      replayable: true,
+      package: entry.package || currentPackageForAudit,
+    }));
+    setAuditTrail(updated);
+    rebuildGraphWithAudit(updated);
+  };
 
   const handleBranchSelect = (value: string) => {
     setPackageBranch(value);
@@ -2183,6 +2209,15 @@ export default function App() {
                   <button
                     className="btn secondary"
                     type="button"
+                    onClick={restoreAllArchivedToCurrent}
+                    disabled={archivedAuditCount === 0}
+                    title="Reactivate archived edits on this canvas"
+                  >
+                    Restore archived
+                  </button>
+                  <button
+                    className="btn secondary"
+                    type="button"
                     onClick={clearAuditTrail}
                     disabled={!auditTrail.length}
                   >
@@ -2217,22 +2252,33 @@ export default function App() {
                           borderBottom: "1px solid var(--panel-border)",
                         }}
                       >
-                        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                        <button
+                          className="btn secondary"
+                          type="button"
+                          onClick={() => undoAuditEntry(entry.id)}
+                          disabled={archived}
+                          title={archived ? "Archived for a different canvas; undo disabled" : "Undo this change"}
+                          style={{ padding: "6px 10px" }}
+                        >
+                          🗑
+                        </button>
+                        {archived ? (
                           <button
                             className="btn secondary"
                             type="button"
-                            onClick={() => undoAuditEntry(entry.id)}
-                            disabled={archived}
-                            title={archived ? "Archived for a different canvas; undo disabled" : "Undo this change"}
+                            onClick={() => restoreArchivedEntry(entry.id)}
                             style={{ padding: "6px 10px" }}
+                            title="Reactivate this edit on the current canvas"
                           >
-                            🗑
+                            ↺
                           </button>
-                          <div>
-                            <div style={{ fontWeight: 700 }}>
-                              {entry.description}
-                              {archived ? " (archived)" : ""}
-                            </div>
+                        ) : null}
+                        <div>
+                          <div style={{ fontWeight: 700 }}>
+                            {entry.description}
+                            {archived ? " (archived)" : ""}
+                          </div>
                             <div style={{ color: "var(--muted)" }}>
                               {new Date(entry.timestamp).toLocaleString()}
                             </div>
