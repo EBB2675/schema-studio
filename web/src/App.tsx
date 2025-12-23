@@ -103,8 +103,14 @@ export default function App() {
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
-      // drop legacy entries without the new shape
-      return parsed.filter((e: any) => e && e.change && e.id && e.timestamp && e.description);
+      // drop legacy entries without the new shape, and hydrate defaults
+      return parsed
+        .filter((e: any) => e && e.change && e.id && e.timestamp && e.description)
+        .map((e: any) => ({
+          ...e,
+          replayable: e.replayable === false ? false : true,
+          package: typeof e.package === "string" ? e.package : undefined,
+        }));
     } catch {
       return [];
     }
@@ -241,11 +247,40 @@ export default function App() {
     }
   }, []);
 
-  const appendAudit = useCallback((change: AuditTrailEntry["change"], description: string) => {
-    const now = new Date().toISOString();
-    const id = `${now}-${Math.random().toString(16).slice(2)}`;
-    setAuditTrail((prev) => [...prev, { change, description, id, timestamp: now }]);
+  const normalizePackageName = useCallback((value?: string | null) => {
+    if (!value) return "";
+    return normalizeModule(value) || value;
   }, []);
+
+  const filterActiveAuditForPackage = useCallback(
+    (entries: AuditTrailEntry[], targetPackage?: string | null) => {
+      const normalizedTarget = normalizePackageName(targetPackage);
+      return entries.filter(
+        (e) =>
+          e?.change &&
+          e.replayable !== false &&
+          (!e.package || normalizePackageName(e.package) === normalizedTarget)
+      );
+    },
+    [normalizePackageName]
+  );
+
+  const archiveAuditTrail = useCallback(() => {
+    setAuditTrail((prev) => prev.map((entry) => ({ ...entry, replayable: false })));
+  }, []);
+
+  const appendAudit = useCallback(
+    (change: AuditTrailEntry["change"], description: string) => {
+      const now = new Date().toISOString();
+      const id = `${now}-${Math.random().toString(16).slice(2)}`;
+      const pkgForEntry = graph?.package || pkg;
+      setAuditTrail((prev) => [
+        ...prev,
+        { change, description, id, timestamp: now, package: pkgForEntry, replayable: true },
+      ]);
+    },
+    [graph, pkg]
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -551,7 +586,7 @@ export default function App() {
           branch: workspaceBranch || undefined,
         },
       });
-      setAuditTrail([]);
+      archiveAuditTrail();
       setGraph(null);
       setBaseGraph(null);
       setUmlState(null);
@@ -563,7 +598,7 @@ export default function App() {
     } catch (e: any) {
       setCanvasStatus(`Reset failed: ${formatApiError(e)}`);
     }
-  }, [api, loadGraph, normalizedNamespace, scratchPackage, setSelected, token, workspaceBranch]);
+  }, [api, archiveAuditTrail, loadGraph, normalizedNamespace, scratchPackage, setSelected, token, workspaceBranch]);
 
   // fetch git branches
   const loadBranches = useCallback(async () => {
@@ -745,7 +780,7 @@ export default function App() {
       setMode("graph");
       setDiffData(null);
       setGraphHandle(null);
-      setAuditTrail([]);
+      archiveAuditTrail();
       setGraph(blankGraph);
       setBaseGraph(blankGraph);
       setUmlState(buildUmlState(blankGraph));
@@ -760,7 +795,7 @@ export default function App() {
     } else {
       await loadGraph({ forceEmpty: false });
     }
-  }, [auditTrail.length, baseGraph?.package, buildUmlState, emptyCanvasActive, graph?.package, loadGraph, normalizedNamespace, resetEmptyCanvas, scratchPackage, setSelected]);
+  }, [archiveAuditTrail, auditTrail.length, baseGraph?.package, buildUmlState, emptyCanvasActive, graph?.package, loadGraph, normalizedNamespace, resetEmptyCanvas, scratchPackage, setSelected]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -1199,11 +1234,13 @@ export default function App() {
 
   const replayGraphWithAudit = useCallback(
     (serverGraph: ApiGraph, extraChange?: AuditTrailEntry["change"]): ApiGraph => {
-      const changes = auditTrail.map((a) => a.change).filter(Boolean) as AuditTrailEntry["change"][];
+      const targetPackage = normalizePackageName(serverGraph.package) || normalizePackageName(pkg);
+      const scopedEntries = filterActiveAuditForPackage(auditTrail, targetPackage);
+      const changes = scopedEntries.map((a) => a.change).filter(Boolean) as AuditTrailEntry["change"][];
       const allChanges = extraChange ? [...changes, extraChange] : changes;
       return allChanges.reduce((acc, change) => applyForwardChange(acc, change), serverGraph);
     },
-    [applyForwardChange, auditTrail]
+    [applyForwardChange, auditTrail, filterActiveAuditForPackage, normalizePackageName, pkg]
   );
 
   const undoAuditEntry = (id: string) => {
@@ -1214,7 +1251,9 @@ export default function App() {
     const start = baseGraph ?? graph;
     if (!start) return;
 
-    const rebuilt = remaining.reduce((acc, curr) => applyForwardChange(acc, curr.change!), start);
+    const startPackage = start?.package ?? pkg;
+    const applicable = filterActiveAuditForPackage(remaining as AuditTrailEntry[], startPackage);
+    const rebuilt = applicable.reduce((acc, curr) => applyForwardChange(acc, curr.change!), start);
 
     setGraph(rebuilt);
     setUmlState(buildUmlState(rebuilt));
@@ -1274,6 +1313,13 @@ export default function App() {
           : null;
 
   const currentGraph = diffData ? diffData.head?.graph ?? null : graph;
+  const currentPackageForAudit = normalizePackageName(currentGraph?.package || pkg);
+  const activeAuditEntries = useMemo(
+    () => filterActiveAuditForPackage(auditTrail, currentPackageForAudit),
+    [auditTrail, currentPackageForAudit, filterActiveAuditForPackage]
+  );
+  const activeAuditCount = activeAuditEntries.length;
+  const archivedAuditCount = auditTrail.length - activeAuditCount;
 
   const handleBranchSelect = (value: string) => {
     setPackageBranch(value);
@@ -1345,7 +1391,6 @@ export default function App() {
     setDiffData(null);
     setGraphHandle(null);
     setUmlState(null);
-    setAuditTrail([]);
     setSelectedClassId(null);
     setSelectedQuantityId(null);
     setSelected(null);
@@ -1541,7 +1586,7 @@ export default function App() {
         setBaseGraph(nextGraph);
         const nextUml = buildUmlState(nextGraph);
         setUmlState(nextUml);
-        setAuditTrail([]);
+        archiveAuditTrail();
         setSelectedClassId(null);
         setSelectedQuantityId(null);
         setSelected(null);
@@ -2145,7 +2190,9 @@ export default function App() {
                   </button>
                 </div>
                 <div className="small" style={{ color: "var(--muted)" }}>
-                  {auditTrail.length ? `${auditTrail.length} edits recorded` : "No edits yet"}
+                  {auditTrail.length
+                    ? `${activeAuditCount} active edits${archivedAuditCount > 0 ? ` (${archivedAuditCount} archived)` : ""}`
+                    : "No edits yet"}
                 </div>
                 <div
                   style={{
@@ -2158,34 +2205,43 @@ export default function App() {
                     fontSize: 12
                   }}
                 >
-                  {[...auditTrail].reverse().filter((e) => e?.change).map((entry) => (
-                    <div
-                      key={entry.id}
-                      style={{
-                        padding: "6px 8px",
-                        borderBottom: "1px solid var(--panel-border)",
-                      }}
-                    >
-                      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                        <button
-                          className="btn secondary"
-                          type="button"
-                          onClick={() => undoAuditEntry(entry.id)}
-                          title="Undo this change"
-                          style={{ padding: "6px 10px" }}
-                        >
-                          🗑
-                        </button>
-                        <div>
-                          <div style={{ fontWeight: 700 }}>{entry.description}</div>
-                          <div style={{ color: "var(--muted)" }}>
-                            {new Date(entry.timestamp).toLocaleString()}
+                  {[...auditTrail].reverse().filter((e) => e?.change).map((entry) => {
+                    const archived =
+                      entry.replayable === false ||
+                      (entry.package && normalizePackageName(entry.package) !== currentPackageForAudit);
+                    return (
+                      <div
+                        key={entry.id}
+                        style={{
+                          padding: "6px 8px",
+                          borderBottom: "1px solid var(--panel-border)",
+                        }}
+                      >
+                        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                          <button
+                            className="btn secondary"
+                            type="button"
+                            onClick={() => undoAuditEntry(entry.id)}
+                            disabled={archived}
+                            title={archived ? "Archived for a different canvas; undo disabled" : "Undo this change"}
+                            style={{ padding: "6px 10px" }}
+                          >
+                            🗑
+                          </button>
+                          <div>
+                            <div style={{ fontWeight: 700 }}>
+                              {entry.description}
+                              {archived ? " (archived)" : ""}
+                            </div>
+                            <div style={{ color: "var(--muted)" }}>
+                              {new Date(entry.timestamp).toLocaleString()}
+                            </div>
+                            <div style={{ color: "var(--subtitle)" }}>Change: {entry.change.type}</div>
                           </div>
-                          <div style={{ color: "var(--subtitle)" }}>Change: {entry.change.type}</div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </CollapsibleSection>

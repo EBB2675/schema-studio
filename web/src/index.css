@@ -269,7 +269,8 @@ main {
   inset: 0;
 }
 .cy-canvas.is-hidden {
-  visibility: hidden;
+  opacity: 0;
+  pointer-events: auto;
 }
 
 .graph-toolbar {
