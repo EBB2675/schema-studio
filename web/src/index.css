@@ -270,7 +270,7 @@ main {
 }
 .cy-canvas.is-hidden {
   opacity: 0;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .graph-toolbar {
