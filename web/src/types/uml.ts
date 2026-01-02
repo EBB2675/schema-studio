@@ -47,5 +47,7 @@ export type AuditTrailEntry = {
   id: string;
   timestamp: string;
   description: string;
+  package?: string;
+  replayable?: boolean;
   change: AuditChange;
 };

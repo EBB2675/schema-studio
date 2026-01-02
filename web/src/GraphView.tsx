@@ -692,6 +692,8 @@ export default function GraphView({
     const cy = cyRef.current;
     if (!cy) return;
 
+    let rafId: number | null = null;
+
     const updateBoxes = () => {
       const boxes: Record<string, { x: number; y: number; w: number; h: number }> = {};
       const pan = cy.pan();
@@ -702,17 +704,31 @@ export default function GraphView({
         boxes[n.id()] = { x: box.x1, y: box.y1, w: box.w, h: box.h };
       });
 
-      setViewport({ pan, zoom });
+      setViewport((prev) => {
+        const samePan = prev.pan.x === pan.x && prev.pan.y === pan.y;
+        const sameZoom = prev.zoom === zoom;
+        if (samePan && sameZoom) return prev;
+        return { pan, zoom };
+      });
       setCardBoxes(boxes);
     };
 
+    const scheduleUpdate = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        updateBoxes();
+      });
+    };
+
     updateBoxes();
-    cy.on("render", updateBoxes);
-    cy.on("pan zoom", updateBoxes);
+    cy.on("render", scheduleUpdate);
+    cy.on("pan zoom", scheduleUpdate);
 
     return () => {
-      cy.off("render", updateBoxes);
-      cy.off("pan zoom", updateBoxes);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      cy.off("render", scheduleUpdate);
+      cy.off("pan zoom", scheduleUpdate);
     };
   }, [umlState, theme, umlEdges, graphNodes, showQuantityMetadata, diff]);
 

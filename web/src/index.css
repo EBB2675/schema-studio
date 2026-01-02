@@ -269,7 +269,7 @@ main {
   inset: 0;
 }
 .cy-canvas.is-hidden {
-  visibility: hidden;
+  opacity: 0;
 }
 
 .graph-toolbar {
