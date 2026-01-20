@@ -8,6 +8,7 @@ Interactive UML-style editor for NOMAD schema packages. The UI consumes the Fast
 cd web
 npm install
 npm run dev -- --host 0.0.0.0 --port 5173
+# Requires Node 20.19+ (or 22.12+) for Vite.
 ```
 
 The repo root provides `./dev.sh` to start both backend (**5179**) and frontend (**5173**) together after verifying environment variables.

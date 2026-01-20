@@ -17,6 +17,7 @@ from .settings import SCHEMA_REPO, DEFAULT_BASE_PACKAGE, DEFAULT_BRANCH, repo_fo
 from .mongo import connect_to_mongo, close_mongo
 from .auth import (
     authenticate_user,
+    create_user,
     create_access_token,
     db_dep,
     get_user_and_workspace,
@@ -61,6 +62,11 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class RegisterRequest(BaseModel):
+    username: str
+    password: str
+
+
 class WorkspaceUpdate(BaseModel):
     branch: str | None = None
     package: str | None = None
@@ -93,6 +99,14 @@ async def login(req: LoginRequest, db=Depends(db_dep)):
     user = await authenticate_user(db, req.username, req.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_access_token(user)
+    workspace = workspace_payload(await get_workspace(db, user["id"]))
+    return {"access_token": token, "token_type": "bearer", "workspace": workspace, "user": {"username": user["username"]}}
+
+
+@app.post("/auth/register", status_code=201)
+async def register(req: RegisterRequest, db=Depends(db_dep)):
+    user = await create_user(db, req.username, req.password)
     token = create_access_token(user)
     workspace = workspace_payload(await get_workspace(db, user["id"]))
     return {"access_token": token, "token_type": "bearer", "workspace": workspace, "user": {"username": user["username"]}}

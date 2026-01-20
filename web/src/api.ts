@@ -24,7 +24,7 @@ export async function listBranches(): Promise<string[]> {
   return j.branches as string[];
 }
 
-export async function getDiff(base: string, head: string, pkg = DEFAULT_PACKAGE) {
+export async function getDiff(base: string, head: string, pkg = DEFAULT_PACKAGE): Promise<DiffResponse> {
   const r = await fetch(`${BASE}/graph/diff`, {
     method: "POST",
     headers: { "content-type": "application/json", ...authHeaders() },
@@ -33,3 +33,5 @@ export async function getDiff(base: string, head: string, pkg = DEFAULT_PACKAGE)
   if (!r.ok) throw new Error(await r.text());
   return ensureDiffResponse(await r.json());
 }
+
+export type { DiffResponse };

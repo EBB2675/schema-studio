@@ -257,6 +257,13 @@ main {
   box-shadow: none;
 }
 
+.btn.ghost {
+  background: var(--ghost);
+  color: var(--text-primary);
+  border: 1px dashed var(--panel-border);
+  box-shadow: none;
+}
+
 .row { display:flex; gap:8px; align-items:center; flex-wrap: wrap; }
 .small { font-size:12px; color:var(--muted); }
 
