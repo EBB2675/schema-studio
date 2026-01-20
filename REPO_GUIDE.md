@@ -9,7 +9,7 @@ A structured overview of the repository for developers to navigate, understand, 
 **Purpose:** Interactive editor for data models; currently defaults to `nomad-simulations` but works with any schema repo you configure. Build UML diagrams, inspect docstrings/usage, add custom classes (inheritance or subsection), and add quantities inline. Supports branch diff, overview mode, and empty-canvas editing.
 
 **Frontend:** React + TypeScript + Cytoscape + ELK  
-**Backend:** FastAPI + GitPython + MongoDB
+**Backend:** FastAPI (async/Motor) + GitPython + MongoDB
 
 **Main directories:**
 - `web/` — frontend React app  
