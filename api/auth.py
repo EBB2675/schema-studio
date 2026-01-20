@@ -18,7 +18,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .settings import DEFAULT_BASE_PACKAGE, DEFAULT_BRANCH, DEFAULT_PACKAGE
 
@@ -46,6 +46,10 @@ class UserDoc(BaseModel):
     username: str
     password_hash: str
 
+    @field_validator("id", mode="before")
+    def _object_id_to_str(cls, value):
+        return str(value) if isinstance(value, ObjectId) else value
+
 
 class WorkspaceDoc(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -55,6 +59,10 @@ class WorkspaceDoc(BaseModel):
     branch: str = DEFAULT_BRANCH
     package: str = DEFAULT_PACKAGE
     base_namespace: str = DEFAULT_BASE_PACKAGE
+
+    @field_validator("id", "user_id", mode="before")
+    def _object_id_to_str(cls, value):
+        return str(value) if isinstance(value, ObjectId) else value
 
 
 class _Workspace(BaseModel):
