@@ -1,8 +1,8 @@
-import atexit
 import os
 from uuid import uuid4
 
 import pymongo
+import pytest
 
 from api import edit_store
 
@@ -12,7 +12,15 @@ def _pkg_name(prefix: str = "empty_pkg") -> str:
 
 
 _MONGO_CLIENT = pymongo.MongoClient(os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017"))
-atexit.register(_MONGO_CLIENT.close)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _mongo_client_session():
+    """Close the module-level Mongo client at session end."""
+    try:
+        yield _MONGO_CLIENT
+    finally:
+        _MONGO_CLIENT.close()
 
 
 def _db():
