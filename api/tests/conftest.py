@@ -10,6 +10,7 @@ if DATA_DIR.exists():
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 os.environ.setdefault("SCHEMA_UML_DATA_DIR", str(DATA_DIR))
+os.environ.setdefault("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017")
 os.environ.setdefault("SCHEMA_UML_MONGO_DB", "schema_uml_test")
 os.environ.setdefault("SCHEMA_UML_ALLOW_INSECURE_DEFAULTS", "true")
 os.environ.setdefault("SCHEMA_UML_ENABLE_DEFAULT_ADMIN", "true")
@@ -29,9 +30,9 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 def _reset_dbs():
     db = get_db()
-    db["users"].drop()
-    db["workspaces"].drop()
-    db["custom_edits"].drop()
+    db.drop_collection(auth.USERS_COLLECTION)
+    db.drop_collection(auth.WORKSPACES_COLLECTION)
+    db.drop_collection(edit_store.CUSTOM_EDITS_COLLECTION)
     auth.init_db()
     edit_store.init_db()
 
