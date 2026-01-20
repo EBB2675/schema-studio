@@ -116,6 +116,8 @@ The backend now requires a bearer token for every endpoint except `/auth/login`.
 - **Username**: `admin` (override via `SCHEMA_UML_DEFAULT_USER`)
 - **Password**: `admin` (override via `SCHEMA_UML_DEFAULT_PASSWORD`)
 
+You can also create a new account via `POST /auth/register` with a JSON body of `{"username": "...", "password": "..."}`. The response mirrors the login payload (access token + workspace).
+
 Use the sign-in form in the UI or fetch a token manually:
 
 ```bash

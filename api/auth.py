@@ -133,6 +133,19 @@ async def authenticate_user(db: AsyncIOMotorDatabase, username: str, password: s
     return {"id": str(user["_id"]), "username": user["username"]}
 
 
+async def create_user(db: AsyncIOMotorDatabase, username: str, password: str) -> Dict[str, Any]:
+    username = username.strip()
+    if not username or not password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username and password are required")
+    payload = {"username": username, "password_hash": _hash_password(password)}
+    try:
+        result = await db[USERS_COLLECTION].insert_one(payload)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
+    await _ensure_workspace(db, result.inserted_id)
+    return {"id": str(result.inserted_id), "username": username}
+
+
 async def get_user(db: AsyncIOMotorDatabase, user_id: str | int) -> Dict[str, Any]:
     try:
         oid = ObjectId(str(user_id))
