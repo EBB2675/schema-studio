@@ -1,3 +1,4 @@
+import atexit
 import sys
 from pathlib import Path
 from uuid import uuid4
@@ -38,11 +39,16 @@ class TargetSection:
     return pkg_name
 
 
+_MONGO_CLIENT = pymongo.MongoClient(os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017"))
+atexit.register(_MONGO_CLIENT.close)
+
+
+def _db():
+    return _MONGO_CLIENT[os.getenv("SCHEMA_UML_MONGO_DB", "schema_uml_test")]
+
+
 def _admin_user_id():
-    client = pymongo.MongoClient(os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017"))
-    db = client[os.getenv("SCHEMA_UML_MONGO_DB", "schema_uml_test")]
-    doc = db["users"].find_one({"username": "admin"})
-    client.close()
+    doc = _db()["users"].find_one({"username": "admin"})
     return str(doc["_id"]) if doc else None
 
 
@@ -65,10 +71,8 @@ def test_persisted_edits_are_replayed(client, tmp_path: Path, monkeypatch: pytes
     assert create_payload["persisted_edit"]["quantity_name"] == "user_defined"
     admin_id = _admin_user_id()
 
-    mongo = pymongo.MongoClient(os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017"))
-    db = mongo[os.getenv("SCHEMA_UML_MONGO_DB", "schema_uml_test")]
+    db = _db()
     stored = list(db[edit_store.CUSTOM_EDITS_COLLECTION].find({"user_id": admin_id, "branch": DEFAULT_BRANCH, "package": pkg_name}))
-    mongo.close()
     assert stored
 
     # Subsequent schema fetch should replay the persisted edit onto the graph

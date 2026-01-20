@@ -112,7 +112,7 @@ cd "${ROOT_DIR}"
 
 validate_schema_repo
 start_mongo_docker
-echo "Checking MongoDB at ${SCHEMA_UML_MONGO_URI}/${SCHEMA_UML_DB}..."
+echo "Checking MongoDB at ${SCHEMA_UML_MONGO_URI}/${SCHEMA_UML_MONGO_DB}..."
 python - <<'PY'
 import os, sys, asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
