@@ -145,7 +145,7 @@ async def get_user(db: AsyncIOMotorDatabase, user_id: str | int) -> Dict[str, An
     return {"id": str(user["_id"]), "username": user["username"]}
 
 
-async def get_workspace(db: AsyncIOMotorDatabase, user_id: int) -> Dict[str, str]:
+async def get_workspace(db: AsyncIOMotorDatabase, user_id: str | int) -> Dict[str, str]:
     try:
         oid = ObjectId(str(user_id))
     except bson_errors.InvalidId:
