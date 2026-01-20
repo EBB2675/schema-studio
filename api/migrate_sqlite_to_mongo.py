@@ -9,13 +9,12 @@ Usage:
 
 from __future__ import annotations
 
-import asyncio
 import sqlite3
 from pathlib import Path
 
-from pymongo import ReturnDocument, UpdateOne
+from pymongo import MongoClient, ReturnDocument, UpdateOne
 
-from .mongo import connect_to_mongo
+from .mongo import MONGO_DB, MONGO_URI
 from .settings import DATA_DIR
 
 
@@ -123,9 +122,13 @@ def migrate_edits(db, user_id_map: dict[str, object]):
 
 
 def main():
-    db = asyncio.run(connect_to_mongo())
-    user_id_map = migrate_auth(db)
-    migrate_edits(db, user_id_map)
+    client = MongoClient(MONGO_URI, uuidRepresentation="standard")
+    try:
+        db = client[MONGO_DB]
+        user_id_map = migrate_auth(db)
+        migrate_edits(db, user_id_map)
+    finally:
+        client.close()
     print("Migration complete")
 
 
