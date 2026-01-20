@@ -9,7 +9,7 @@ A structured overview of the repository for developers to navigate, understand, 
 **Purpose:** Interactive editor for data models; currently defaults to `nomad-simulations` but works with any schema repo you configure. Build UML diagrams, inspect docstrings/usage, add custom classes (inheritance or subsection), and add quantities inline. Supports branch diff, overview mode, and empty-canvas editing.
 
 **Frontend:** React + TypeScript + Cytoscape + ELK  
-**Backend:** FastAPI + GitPython
+**Backend:** FastAPI + GitPython + MongoDB
 
 **Main directories:**
 - `web/` — frontend React app  
@@ -34,7 +34,14 @@ A structured overview of the repository for developers to navigate, understand, 
   - `SCHEMA_UML_DEFAULT_USER` (default `admin`)
   - `SCHEMA_UML_DEFAULT_PASSWORD` (default `admin`)
 
-**Environment variables (one of):**
+**Environment variables (required):**
+~~~bash
+# MongoDB (required)
+export SCHEMA_UML_MONGO_URI=mongodb://localhost:27017
+export SCHEMA_UML_MONGO_DB=schema_uml
+~~~
+
+**Schema source (one of):**
 ~~~bash
 export SCHEMA_UML_REPO=/path/to/your-schema
 # or (legacy envs still supported)

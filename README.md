@@ -49,11 +49,15 @@ git clone https://github.com/EBB2675/schema-studio.git
 cd schema-studio
 ```
 
-### 2) Environment (Python 3.11)
+### 2) Environment (Python 3.11) + MongoDB
 ```bash
 conda create -n schema-studio python=3.11 -y
 conda activate schema-studio
 pip install -r api/requirements.txt
+# ensure MongoDB is running on mongodb://localhost:27017 (default DB: schema_uml)
+# or override:
+# export SCHEMA_UML_MONGO_URI=mongodb://localhost:27017
+# export SCHEMA_UML_MONGO_DB=schema_uml
 ```
 
 ### 3) Point to your schema repo
@@ -82,7 +86,7 @@ Make it persistent by adding the export to `~/.bashrc` or `~/.zshrc`.
 What it does:
 
 - Starts the FastAPI backend on **5179**.
-- Expects a MongoDB instance (default `mongodb://localhost:27017`, database `schema_uml`); override via `SCHEMA_UML_MONGO_URI` / `SCHEMA_UML_MONGO_DB`.
+- Expects MongoDB (default `mongodb://localhost:27017`, database `schema_uml`); override via `SCHEMA_UML_MONGO_URI` / `SCHEMA_UML_MONGO_DB`.
 - Verifies **SCHEMA_UML_REPO / NOMAD_SIM_REPO / GIT_REPO_DIR** points to a **local git repo** (a subdirectory of a clone is fine; fails fast otherwise).
 - Ensures `web/node_modules` exists (runs `npm install` on first launch).
 - Starts the Vite frontend on **5173**.
