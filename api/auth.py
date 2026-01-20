@@ -17,14 +17,25 @@ except ModuleNotFoundError as exc:
     ) from exc
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pymongo.errors import DuplicateKeyError
+from bson import ObjectId, errors as bson_errors
 
-from .settings import DATA_DIR, DEFAULT_BASE_PACKAGE, DEFAULT_BRANCH, DEFAULT_PACKAGE
+from .mongo import get_db
+from .settings import (
+    DATA_DIR,
+    DEFAULT_BASE_PACKAGE,
+    DEFAULT_BRANCH,
+    DEFAULT_PACKAGE,
+    DB_BACKEND,
+)
 
 
 DB_PATH = Path(DATA_DIR) / "auth.sqlite3"
 TOKEN_EXPIRES_HOURS = int(os.getenv("SCHEMA_UML_TOKEN_HOURS", "12"))
 SECRET_KEY = os.getenv("SCHEMA_UML_SECRET", "schema-uml-secret")
 PASSWORD_SALT = os.getenv("SCHEMA_UML_PW_SALT", "schema-uml-salt")
+USERS_COLLECTION = "users"
+WORKSPACES_COLLECTION = "workspaces"
 
 
 def _connect() -> sqlite3.Connection:
@@ -33,39 +44,64 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+def _using_sqlite() -> bool:
+    return DB_BACKEND == "sqlite"
+
+
 def _hash_password(password: str) -> str:
     return hashlib.sha256(f"{password}{PASSWORD_SALT}".encode()).hexdigest()
 
 
 def init_db() -> None:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with _connect() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL
+    if _using_sqlite():
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL
+                )
+                """
             )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS workspaces (
-                user_id INTEGER PRIMARY KEY,
-                branch TEXT NOT NULL,
-                package TEXT NOT NULL,
-                base_namespace TEXT NOT NULL,
-                FOREIGN KEY(user_id) REFERENCES users(id)
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS workspaces (
+                    user_id INTEGER PRIMARY KEY,
+                    branch TEXT NOT NULL,
+                    package TEXT NOT NULL,
+                    base_namespace TEXT NOT NULL,
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+                """
             )
-            """
-        )
+        ensure_default_user()
+        return
+
+    db = get_db()
+    db[USERS_COLLECTION].create_index("username", unique=True)
+    db[WORKSPACES_COLLECTION].create_index("user_id", unique=True)
     ensure_default_user()
 
 
 def ensure_default_user() -> None:
     username = os.getenv("SCHEMA_UML_DEFAULT_USER", "admin")
     password = os.getenv("SCHEMA_UML_DEFAULT_PASSWORD", "admin")
+
+    if not _using_sqlite():
+        db = get_db()
+        existing = db[USERS_COLLECTION].find_one({"username": username})
+        if existing:
+            return
+        try:
+            result = db[USERS_COLLECTION].insert_one(
+                {"username": username, "password_hash": _hash_password(password)}
+            )
+        except DuplicateKeyError:
+            return
+        _ensure_workspace_mongo(db, result.inserted_id)
+        return
 
     with _connect() as conn:
         existing = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
@@ -90,7 +126,30 @@ def _ensure_workspace(conn: sqlite3.Connection, user_id: int) -> None:
     )
 
 
+def _ensure_workspace_mongo(db, user_id) -> None:
+    db[WORKSPACES_COLLECTION].update_one(
+        {"user_id": user_id},
+        {
+            "$setOnInsert": {
+                "branch": DEFAULT_BRANCH,
+                "package": DEFAULT_PACKAGE,
+                "base_namespace": DEFAULT_BASE_PACKAGE,
+            }
+        },
+        upsert=True,
+    )
+
+
 def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
+    if not _using_sqlite():
+        db = get_db()
+        user = db[USERS_COLLECTION].find_one({"username": username})
+        if not user:
+            return None
+        if user["password_hash"] != _hash_password(password):
+            return None
+        return {"id": str(user["_id"]), "username": user["username"]}
+
     with _connect() as conn:
         row = conn.execute("SELECT id, username, password_hash FROM users WHERE username = ?", (username,)).fetchone()
         if not row:
@@ -101,6 +160,18 @@ def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
 
 
 def get_user(user_id: int) -> Dict[str, Any]:
+    if not _using_sqlite():
+        db = get_db()
+        try:
+            oid = ObjectId(str(user_id))
+        except bson_errors.InvalidId:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        user = db[USERS_COLLECTION].find_one({"_id": oid})
+        if not user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        _ensure_workspace_mongo(db, user["_id"])
+        return {"id": str(user["_id"]), "username": user["username"]}
+
     with _connect() as conn:
         row = conn.execute("SELECT id, username FROM users WHERE id = ?", (user_id,)).fetchone()
         if not row:
@@ -110,6 +181,23 @@ def get_user(user_id: int) -> Dict[str, Any]:
 
 
 def get_workspace(user_id: int) -> Dict[str, str]:
+    if not _using_sqlite():
+        db = get_db()
+        try:
+            oid = ObjectId(str(user_id))
+        except bson_errors.InvalidId:
+            _ensure_workspace_mongo(db, str(user_id))
+            oid = str(user_id)
+        ws = db[WORKSPACES_COLLECTION].find_one({"user_id": oid})
+        if ws is None:
+            _ensure_workspace_mongo(db, oid)
+            ws = db[WORKSPACES_COLLECTION].find_one({"user_id": oid}) or {}
+        return {
+            "branch": ws.get("branch", DEFAULT_BRANCH),
+            "package": ws.get("package", DEFAULT_PACKAGE),
+            "base_namespace": ws.get("base_namespace", DEFAULT_BASE_PACKAGE),
+        }
+
     with _connect() as conn:
         ws = conn.execute(
             "SELECT branch, package, base_namespace FROM workspaces WHERE user_id = ?",
@@ -129,6 +217,29 @@ def get_workspace(user_id: int) -> Dict[str, str]:
 
 
 def update_workspace(user_id: int, *, branch: Optional[str] = None, package: Optional[str] = None, base_namespace: Optional[str] = None) -> Dict[str, str]:
+    if not _using_sqlite():
+        db = get_db()
+        try:
+            oid = ObjectId(str(user_id))
+        except bson_errors.InvalidId:
+            oid = str(user_id)
+        _ensure_workspace_mongo(db, oid)
+        updates = {}
+        if branch is not None:
+            updates["branch"] = branch
+        if package is not None:
+            updates["package"] = package
+        if base_namespace is not None:
+            updates["base_namespace"] = base_namespace
+        if updates:
+            db[WORKSPACES_COLLECTION].update_one({"user_id": oid}, {"$set": updates})
+        ws = db[WORKSPACES_COLLECTION].find_one({"user_id": oid}) or {}
+        return {
+            "branch": ws.get("branch", DEFAULT_BRANCH),
+            "package": ws.get("package", DEFAULT_PACKAGE),
+            "base_namespace": ws.get("base_namespace", DEFAULT_BASE_PACKAGE),
+        }
+
     with _connect() as conn:
         _ensure_workspace(conn, user_id)
         if branch is not None:
@@ -166,7 +277,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_
     if credentials is None or not credentials.credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing credentials")
     payload = decode_token(credentials.credentials)
-    return get_user(int(payload.get("sub")))
+    return get_user(payload.get("sub"))
 
 
 def get_user_and_workspace(user=Depends(get_current_user)):
