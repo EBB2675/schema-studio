@@ -1,10 +1,14 @@
 """
-One-off helper to copy existing SQLite auth/edit data into MongoDB.
+Archived one-off helper to copy existing SQLite auth/edit data into MongoDB.
 
-Usage:
+Usage (offline migration only; not needed for new deployments):
     SCHEMA_UML_MONGO_URI=mongodb://localhost:27017 \
     SCHEMA_UML_MONGO_DB=schema_uml \
-    python -m api.migrate_sqlite_to_mongo
+    python scripts/legacy/migrate_sqlite_to_mongo.py
+
+Note: This script uses a synchronous pymongo.MongoClient and is intended for
+one-off, offline migrations. Do not run it while the main application is
+connected to the same MongoDB instance/database.
 """
 
 from __future__ import annotations
@@ -14,8 +18,8 @@ from pathlib import Path
 
 from pymongo import MongoClient, ReturnDocument, UpdateOne
 
-from .mongo import MONGO_DB, MONGO_URI
-from .settings import DATA_DIR
+from api.mongo import MONGO_DB, MONGO_URI
+from api.settings import DATA_DIR
 
 
 AUTH_DB = Path(DATA_DIR) / "auth.sqlite3"

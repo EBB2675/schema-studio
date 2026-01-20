@@ -22,7 +22,7 @@ def hash_content(content: dict) -> str:
 
 @dataclass
 class PersistedEdit:
-    user_id: Union[int, str]
+    user_id: str
     branch: str
     package: str
     class_name: str
@@ -63,7 +63,7 @@ async def init_db(db: AsyncIOMotorDatabase) -> None:
     )
 
 
-def _doc_to_edit(doc: dict) -> PersistedEdit:
+def doc_to_edit(doc: dict) -> PersistedEdit:
     def _ts(value):
         if isinstance(value, datetime):
             return value.astimezone(timezone.utc).isoformat()
@@ -132,7 +132,7 @@ async def save_edit(db: AsyncIOMotorDatabase, edit: PersistedEdit, *, current_sh
     )
 
     if row:
-        existing = _doc_to_edit(row)
+        existing = doc_to_edit(row)
         if (
             existing.base_sha
             and current_sha
@@ -158,7 +158,7 @@ async def save_edit(db: AsyncIOMotorDatabase, edit: PersistedEdit, *, current_sh
             },
         )
         updated = await coll.find_one({"_id": row["_id"]})
-        return _doc_to_edit(updated)
+        return doc_to_edit(updated)
 
     now = datetime.now(timezone.utc)
     payload = edit.to_db()
@@ -180,19 +180,19 @@ async def save_edit(db: AsyncIOMotorDatabase, edit: PersistedEdit, *, current_sh
             }
         )
         if row:
-            return _doc_to_edit(row)
+            return doc_to_edit(row)
         raise RuntimeError(
             "Persisted edit could not be retrieved after duplicate key error; please retry"
         )
     row = await coll.find_one({"_id": result.inserted_id})
-    return _doc_to_edit(row)
+    return doc_to_edit(row)
 
 
 async def list_edits(db: AsyncIOMotorDatabase, user_id: str, branch: str, package: str) -> List[PersistedEdit]:
     rows = db[CUSTOM_EDITS_COLLECTION].find(
         {"user_id": user_id, "branch": branch, "package": package}
     ).sort("_id", 1)
-    return [_doc_to_edit(r) async for r in rows]
+    return [doc_to_edit(r) async for r in rows]
 
 
 async def delete_edits(db: AsyncIOMotorDatabase, user_id: str, branch: str, package: str) -> int:

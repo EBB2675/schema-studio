@@ -40,7 +40,7 @@ start_mongo_docker() {
   echo "Starting MongoDB container 'schema-uml-mongo'..."
   docker rm -f schema-uml-mongo >/dev/null 2>&1 || true
   if ! docker run --name schema-uml-mongo -p 27017:27017 -v /tmp/mongo-data:/data/db -d mongo:7 >/dev/null; then
-    echo "Failed to start mongo:7 container. Start Mongo manually or check Docker permissions."
+    echo "Failed to start MongoDB 7 (mongo:7) container. Start Mongo manually or check Docker permissions."
     exit 1
   fi
 }

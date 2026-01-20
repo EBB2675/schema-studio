@@ -198,6 +198,7 @@ Legend:
   - `web/src/components/DocPanel.tsx`: shows class/quantity docs; lists quantities with dtype/shape/card; inline actions for editable mode.
   - `web/src/components/UnderTheHoodPanel.tsx`: for the selected class, calls `/usage` on API base and renders the normalization list.
   - `web/src/components/AddQuantityForm.tsx` and `web/src/components/QuantityEditPanel.tsx`: UI for adding/renaming/removing quantities.
+- **Legacy**: An archived SQLite→Mongo migration helper lives at `scripts/legacy/migrate_sqlite_to_mongo.py` for historical one-off data lifts; do not run it alongside the app.
   - `web/src/store/selection.ts`: Zustand store for selected node.
 - **ELK Layout**: layered, right-directed; label size is included in node dimensions.
 

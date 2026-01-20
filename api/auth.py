@@ -164,7 +164,7 @@ async def get_workspace(db: AsyncIOMotorDatabase, user_id: str | int) -> Dict[st
 
 async def update_workspace(
     db: AsyncIOMotorDatabase,
-    user_id: int,
+    user_id: str | int,
     *,
     branch: Optional[str] = None,
     package: Optional[str] = None,
