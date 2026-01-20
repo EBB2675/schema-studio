@@ -7,6 +7,16 @@ API_PORT="${API_PORT:-5179}"
 WEB_PORT="${WEB_PORT:-5173}"
 DEFAULT_SCHEMA_REPO="${HOME}/src/nomad-simulations"
 UVICORN_LOG_LEVEL="${UVICORN_LOG_LEVEL:-warning}"
+# Dev-friendly auth defaults (override via env for non-dev)
+: "${SCHEMA_UML_ALLOW_INSECURE_DEFAULTS:=true}"
+: "${SCHEMA_UML_ENABLE_DEFAULT_ADMIN:=true}"
+: "${SCHEMA_UML_DEFAULT_USER:=admin}"
+: "${SCHEMA_UML_DEFAULT_PASSWORD:=admin}"
+: "${SCHEMA_UML_SECRET:=dev-secret}"
+: "${SCHEMA_UML_PW_SALT:=dev-salt}"
+: "${SCHEMA_UML_MONGO_URI:=mongodb://localhost:27017}"
+: "${SCHEMA_UML_MONGO_DB:=schema_uml}"
+# Set START_MONGO_DOCKER=1 to have this script start a local MongoDB container (mongo:7)
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -18,6 +28,22 @@ need_cmd() {
 need_cmd git
 need_cmd uvicorn
 need_cmd npm
+start_mongo_docker() {
+  if [[ -z "${START_MONGO_DOCKER:-}" ]]; then
+    return
+  fi
+  need_cmd docker
+  if docker ps --format '{{.Names}}' | grep -q '^schema-uml-mongo$'; then
+    echo "MongoDB container 'schema-uml-mongo' is already running."
+    return
+  fi
+  echo "Starting MongoDB container 'schema-uml-mongo'..."
+  docker rm -f schema-uml-mongo >/dev/null 2>&1 || true
+  if ! docker run --name schema-uml-mongo -p 27017:27017 -v /tmp/mongo-data:/data/db -d mongo:7 >/dev/null; then
+    echo "Failed to start MongoDB 7 (mongo:7) container. Start Mongo manually or check Docker permissions."
+    exit 1
+  fi
+}
 
 # Verify required Python packages are installed before starting uvicorn.
 python - <<'PY'
@@ -85,6 +111,29 @@ trap cleanup EXIT INT TERM
 cd "${ROOT_DIR}"
 
 validate_schema_repo
+start_mongo_docker
+echo "Checking MongoDB at ${SCHEMA_UML_MONGO_URI}/${SCHEMA_UML_MONGO_DB}..."
+python - <<'PY'
+import os, sys, asyncio
+from motor.motor_asyncio import AsyncIOMotorClient
+
+uri = os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017")
+
+async def main():
+    client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=10000)
+    try:
+        await client.admin.command("ping")
+        client.close()
+        return True
+    except Exception as exc:  # pragma: no cover
+        sys.stderr.write(f"MongoDB not reachable at {uri}: {exc}\n")
+        client.close()
+        return False
+
+ok = asyncio.run(main())
+if not ok:
+    sys.exit(1)
+PY
 
 echo "Starting FastAPI backend on :${API_PORT}..."
 uvicorn --app-dir "${ROOT_DIR}" api.main:app --reload --port "${API_PORT}" --log-level "${UVICORN_LOG_LEVEL}" &

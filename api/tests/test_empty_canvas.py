@@ -1,9 +1,35 @@
+import os
 from uuid import uuid4
+
+import pymongo
+import pytest
+
 from api import edit_store
 
 
 def _pkg_name(prefix: str = "empty_pkg") -> str:
     return f"{prefix}_{uuid4().hex}"
+
+
+_MONGO_CLIENT = pymongo.MongoClient(os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017"))
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _mongo_client_session():
+    """Close the module-level Mongo client at session end."""
+    try:
+        yield _MONGO_CLIENT
+    finally:
+        _MONGO_CLIENT.close()
+
+
+def _db():
+    return _MONGO_CLIENT[os.getenv("SCHEMA_UML_MONGO_DB", "schema_uml_test")]
+
+
+def _admin_user_id():
+    doc = _db()["users"].find_one({"username": "admin"})
+    return str(doc["_id"]) if doc else None
 
 
 def test_empty_schema_returns_blank_graph(client):
@@ -56,12 +82,15 @@ def test_clearing_edits_removes_persisted_entries(client):
         params={"empty": True},
         json={"package": pkg, "name": "Transient"},
     )
-    stored = edit_store.list_edits(user_id=1, branch="develop", package=pkg)
+    admin_id = _admin_user_id()
+    db = _db()
+    stored = list(db[edit_store.CUSTOM_EDITS_COLLECTION].find({"user_id": admin_id, "branch": "develop", "package": pkg}))
     assert stored
 
     resp = client.delete("/schema/custom-edits", params={"package": pkg, "branch": "develop"})
     assert resp.status_code == 200
     assert resp.json()["deleted"] >= 1
 
-    remaining = edit_store.list_edits(user_id=1, branch="develop", package=pkg)
+    db = _db()
+    remaining = list(db[edit_store.CUSTOM_EDITS_COLLECTION].find({"user_id": admin_id, "branch": "develop", "package": pkg}))
     assert remaining == []

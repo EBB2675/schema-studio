@@ -49,11 +49,15 @@ git clone https://github.com/EBB2675/schema-studio.git
 cd schema-studio
 ```
 
-### 2) Environment (Python 3.11)
+### 2) Environment (Python 3.11) + MongoDB
 ```bash
 conda create -n schema-studio python=3.11 -y
 conda activate schema-studio
 pip install -r api/requirements.txt
+# ensure MongoDB is running on mongodb://localhost:27017 (default DB: schema_uml)
+# or override:
+# export SCHEMA_UML_MONGO_URI=mongodb://localhost:27017
+# export SCHEMA_UML_MONGO_DB=schema_uml
 ```
 
 ### 3) Point to your schema repo
@@ -81,12 +85,29 @@ Make it persistent by adding the export to `~/.bashrc` or `~/.zshrc`.
 
 What it does:
 
-- Starts the FastAPI backend on **5179**.
+- Starts the FastAPI backend on **5179** (async with Motor + MongoDB).
+- Expects MongoDB (default `mongodb://localhost:27017`, database `schema_uml`); override via `SCHEMA_UML_MONGO_URI` / `SCHEMA_UML_MONGO_DB`.
 - Verifies **SCHEMA_UML_REPO / NOMAD_SIM_REPO / GIT_REPO_DIR** points to a **local git repo** (a subdirectory of a clone is fine; fails fast otherwise).
 - Ensures `web/node_modules` exists (runs `npm install` on first launch).
 - Starts the Vite frontend on **5173**.
 - Stops both together on **Ctrl+C** (no manual job control needed).
 - Exits early with a helpful message if `uvicorn` or `npm` are missing (activate your virtualenv first).
+
+#### Quick Mongo (Docker) + dev auth defaults
+If you don’t have Mongo installed locally, spin up a container and run the stack with dev-friendly auth defaults:
+
+```bash
+START_MONGO_DOCKER=1 \
+SCHEMA_UML_ALLOW_INSECURE_DEFAULTS=true \
+SCHEMA_UML_ENABLE_DEFAULT_ADMIN=true \
+SCHEMA_UML_DEFAULT_USER=admin \
+SCHEMA_UML_DEFAULT_PASSWORD=admin \
+SCHEMA_UML_SECRET=dev-secret \
+SCHEMA_UML_PW_SALT=dev-salt \
+./dev.sh
+```
+
+For non-dev, set strong values for `SCHEMA_UML_SECRET` / `SCHEMA_UML_PW_SALT` and disable the default admin (`SCHEMA_UML_ENABLE_DEFAULT_ADMIN=false`).
 
 ### 5) Authenticate (required)
 
@@ -177,6 +198,7 @@ Legend:
   - `web/src/components/DocPanel.tsx`: shows class/quantity docs; lists quantities with dtype/shape/card; inline actions for editable mode.
   - `web/src/components/UnderTheHoodPanel.tsx`: for the selected class, calls `/usage` on API base and renders the normalization list.
   - `web/src/components/AddQuantityForm.tsx` and `web/src/components/QuantityEditPanel.tsx`: UI for adding/renaming/removing quantities.
+- **Legacy**: An archived SQLite→Mongo migration helper lives at `scripts/legacy/migrate_sqlite_to_mongo.py` for historical one-off data lifts; do not run it alongside the app.
   - `web/src/store/selection.ts`: Zustand store for selected node.
 - **ELK Layout**: layered, right-directed; label size is included in node dimensions.
 
