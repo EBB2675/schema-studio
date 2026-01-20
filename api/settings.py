@@ -60,8 +60,7 @@ DEFAULT_BRANCH = os.getenv("SCHEMA_UML_BRANCH", "develop")
 
 EXTRACTOR_ENTRY = os.getenv("SCHEMA_UML_EXTRACTOR", "extractor.graph_builder:build_graph")
 
-# Storage backend toggles
-DB_BACKEND = os.getenv("SCHEMA_UML_STORAGE", "sqlite").lower()
+# Mongo configuration
 MONGO_URI = os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017")
 MONGO_DB = os.getenv("SCHEMA_UML_MONGO_DB", "schema_uml")
 
