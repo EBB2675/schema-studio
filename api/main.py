@@ -1,29 +1,34 @@
 from typing import List, Optional, Literal
 
-from fastapi import Depends, FastAPI, Query, HTTPException
-from fastapi.responses import ORJSONResponse
-from extractor.graph_builder import build_graph, list_sections, _root_namespace
-from fastapi.middleware.cors import CORSMiddleware
 import os, subprocess, tempfile, shutil, ast
+from contextlib import asynccontextmanager
 from pathlib import Path
+
+from fastapi import Depends, FastAPI, Query, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel
 
-from .routes_git import router as git_router
+from extractor.graph_builder import build_graph, list_sections, _root_namespace
 from extractor.usage_index import UsageEntry, get_usage_for_section
+
+from .routes_git import router as git_router
 from .settings import SCHEMA_REPO, DEFAULT_BASE_PACKAGE, DEFAULT_BRANCH, repo_for_base_namespace
+from .mongo import connect_to_mongo, close_mongo
 from .auth import (
     authenticate_user,
     create_access_token,
+    db_dep,
     get_user_and_workspace,
-    get_workspace,
-    init_db,
     update_workspace,
+    get_workspace,
     workspace_payload,
+    init_db as auth_init,
 )
 from .edit_store import (
     EditConflict,
     PersistedEdit,
-    init_db as init_edit_store,
+    init_db as edit_init,
     list_edits,
     delete_edits,
     save_edit,
@@ -51,10 +56,6 @@ SUPPORTED_CUSTOM_DTYPES = {
     "np.float64",
 }
 
-init_db()
-init_edit_store()
-
-
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -65,9 +66,17 @@ class WorkspaceUpdate(BaseModel):
     package: str | None = None
     base_namespace: str | None = None
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    db = await connect_to_mongo()
+    app.state.db = db
+    await auth_init(db)
+    await edit_init(db)
+    yield
+    await close_mongo()
 
 
-app = FastAPI(title="Schema UML API", default_response_class=ORJSONResponse)
+app = FastAPI(title="Schema UML API", default_response_class=ORJSONResponse, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -76,35 +85,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
-def _startup() -> None:
-    init_db()
-    init_edit_store()
-
-
 app.include_router(git_router)
 
 
 @app.post("/auth/login")
-def login(req: LoginRequest):
-    user = authenticate_user(req.username, req.password)
+async def login(req: LoginRequest, db=Depends(db_dep)):
+    user = await authenticate_user(db, req.username, req.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = create_access_token(user)
-    workspace = workspace_payload(get_workspace(user["id"]))
+    workspace = workspace_payload(await get_workspace(db, user["id"]))
     return {"access_token": token, "token_type": "bearer", "workspace": workspace, "user": {"username": user["username"]}}
 
 
 @app.get("/workspace")
-def read_workspace(user_ws=Depends(get_user_and_workspace)):
+async def read_workspace(user_ws=Depends(get_user_and_workspace)):
     _, workspace = user_ws
     return {"workspace": workspace_payload(workspace)}
 
 
 @app.put("/workspace")
-def update_workspace_route(req: WorkspaceUpdate, user_ws=Depends(get_user_and_workspace)):
+async def update_workspace_route(req: WorkspaceUpdate, user_ws=Depends(get_user_and_workspace), db=Depends(db_dep)):
     user, workspace = user_ws
-    updated = update_workspace(
+    updated = await update_workspace(
+        db,
         user["id"],
         branch=req.branch or workspace.get("branch"),
         package=req.package or workspace.get("package"),
@@ -114,17 +118,17 @@ def update_workspace_route(req: WorkspaceUpdate, user_ws=Depends(get_user_and_wo
 
 
 @app.get("/health")
-def health(user_ws=Depends(get_user_and_workspace)):
+async def health(user_ws=Depends(get_user_and_workspace)):
     _, workspace = user_ws
     return {"ok": True, "workspace": workspace_payload(workspace)}
 
 @app.get("/")
-def root(user_ws=Depends(get_user_and_workspace)):
+async def root(user_ws=Depends(get_user_and_workspace)):
     _, workspace = user_ws
     return {"message": "Schema UML API is running", "workspace": workspace_payload(workspace)}
 
 @app.get("/roots")
-def roots(package: str | None = Query(None), user_ws=Depends(get_user_and_workspace)):
+async def roots(package: str | None = Query(None), user_ws=Depends(get_user_and_workspace)):
     """List available section classes for a given package."""
     _, workspace = user_ws
     pkg = package or workspace.get("package") or DEFAULT_BASE_PACKAGE
@@ -134,7 +138,7 @@ def roots(package: str | None = Query(None), user_ws=Depends(get_user_and_worksp
         raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
 
 @app.get("/schema")
-def schema(
+async def schema(
     package: str | None = Query(None),
     root: str | None = Query(None),
     include_quantities: bool = Query(True),
@@ -144,6 +148,7 @@ def schema(
     base_namespace: str | None = Query(None),
     empty: bool = Query(False, description="Return an empty graph shell (replay persisted edits only)"),
     user_ws=Depends(get_user_and_workspace),
+    db=Depends(db_dep),
 ):
     user, workspace = user_ws
     pkg = package or workspace.get("package") or DEFAULT_BASE_PACKAGE
@@ -151,7 +156,7 @@ def schema(
     if base_namespace is None and package and not empty:
         ns = _root_namespace(pkg)
     if package or base_namespace:
-        workspace = update_workspace(user["id"], package=pkg, base_namespace=ns)
+        workspace = await update_workspace(db, user["id"], package=pkg, base_namespace=ns)
     if empty:
         data = {"package": pkg, "root": root, "nodes": [], "edges": []}
     else:
@@ -164,8 +169,8 @@ def schema(
             allow_cross_module=allow_cross_module,
             base_namespace=ns
         )
-    persisted, stale_conflicts, current_sha = _persisted_state(
-        user_id=user["id"], workspace=workspace, package=pkg, base_namespace=ns
+    persisted, stale_conflicts, current_sha = await _persisted_state(
+        db=db, user_id=user["id"], workspace=workspace, package=pkg, base_namespace=ns
     )
     data, apply_conflicts = _apply_persisted_edits(data, persisted)
     data["workspace"] = workspace_payload(workspace)
@@ -372,12 +377,12 @@ def _apply_persisted_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dic
     return graph, conflicts
 
 
-def _persisted_state(
-    *, user_id: int, workspace: dict, package: str, base_namespace: str | None
+async def _persisted_state(
+    *, db, user_id: int, workspace: dict, package: str, base_namespace: str | None
 ) -> tuple[list[PersistedEdit], list[dict], str | None]:
     branch = workspace.get("branch") or DEFAULT_BRANCH
     current_sha = _current_branch_head(branch, base_namespace)
-    edits = list_edits(user_id, branch, package)
+    edits = await list_edits(db, user_id, branch, package)
     applicable, stale = split_conflicts(edits, current_sha=current_sha)
     stale_conflicts = [
         {"edit": _serialize_edit(edit), "reason": "stale_branch_head", "current_sha": current_sha}
@@ -386,8 +391,9 @@ def _persisted_state(
     return applicable, stale_conflicts, current_sha
 
 
-def _persist_edit(
+async def _persist_edit(
     *,
+    db,
     user_id: int,
     workspace: dict,
     edit_type: Literal["class", "quantity"],
@@ -422,7 +428,7 @@ def _persist_edit(
                 edit_type="quantity",
                 base_sha=current_sha,
             )
-        return save_edit(payload, current_sha=current_sha)
+        return await save_edit(db, payload, current_sha=current_sha)
     except EditConflict as conflict:
         raise HTTPException(
             status_code=409,
@@ -565,7 +571,7 @@ def _attach_custom_class(graph: dict, req: CustomClassRequest) -> dict:
 
 
 @app.post("/schema/custom-quantity")
-def add_custom_quantity(
+async def add_custom_quantity(
     req: CustomQuantityRequest,
     root: str | None = Query(None),
     include_subsections: bool = Query(True),
@@ -574,6 +580,7 @@ def add_custom_quantity(
     base_namespace: str | None = Query(None),
     empty: bool = Query(False, description="Skip base graph; start from an empty canvas"),
     user_ws=Depends(get_user_and_workspace),
+    db=Depends(db_dep),
 ):
     user, workspace = user_ws
     ns = base_namespace
@@ -581,7 +588,8 @@ def add_custom_quantity(
         ns = workspace.get("base_namespace")
     if ns is None and not empty:
         ns = _root_namespace(req.package)
-    workspace = update_workspace(
+    workspace = await update_workspace(
+        db,
         user["id"],
         package=req.package,
         base_namespace=ns or workspace.get("base_namespace"),
@@ -599,12 +607,13 @@ def add_custom_quantity(
                 allow_cross_module=allow_cross_module,
                 base_namespace=ns
             )
-        persisted, stale_conflicts, current_sha = _persisted_state(
-            user_id=user["id"], workspace=workspace, package=req.package, base_namespace=ns
+        persisted, stale_conflicts, current_sha = await _persisted_state(
+            db=db, user_id=user["id"], workspace=workspace, package=req.package, base_namespace=ns
         )
         graph, apply_conflicts = _apply_persisted_edits(graph, persisted)
         result = _attach_custom_quantity(graph, req)
-        saved = _persist_edit(
+        saved = await _persist_edit(
+            db=db,
             user_id=user["id"],
             workspace=workspace,
             edit_type="quantity",
@@ -625,7 +634,7 @@ def add_custom_quantity(
 
 
 @app.post("/schema/custom-class")
-def add_custom_class(
+async def add_custom_class(
     req: CustomClassRequest,
     root: str | None = Query(None),
     include_quantities: bool = Query(True),
@@ -635,6 +644,7 @@ def add_custom_class(
     base_namespace: str | None = Query(None),
     empty: bool = Query(False, description="Skip base graph; start from an empty canvas"),
     user_ws=Depends(get_user_and_workspace),
+    db=Depends(db_dep),
 ):
     user, workspace = user_ws
     ns = base_namespace
@@ -642,7 +652,8 @@ def add_custom_class(
         ns = workspace.get("base_namespace")
     if ns is None and not empty:
         ns = _root_namespace(req.package)
-    workspace = update_workspace(
+    workspace = await update_workspace(
+        db,
         user["id"],
         package=req.package,
         base_namespace=ns or workspace.get("base_namespace"),
@@ -660,12 +671,13 @@ def add_custom_class(
                 allow_cross_module=allow_cross_module,
                 base_namespace=ns
             )
-        persisted, stale_conflicts, current_sha = _persisted_state(
-            user_id=user["id"], workspace=workspace, package=req.package, base_namespace=ns
+        persisted, stale_conflicts, current_sha = await _persisted_state(
+            db=db, user_id=user["id"], workspace=workspace, package=req.package, base_namespace=ns
         )
         graph, apply_conflicts = _apply_persisted_edits(graph, persisted)
         result = _attach_custom_class(graph, req)
-        saved = _persist_edit(
+        saved = await _persist_edit(
+            db=db,
             user_id=user["id"],
             workspace=workspace,
             edit_type="class",
@@ -686,10 +698,11 @@ def add_custom_class(
 
 
 @app.delete("/schema/custom-edits")
-def clear_custom_edits(
+async def clear_custom_edits(
     package: str | None = Query(None),
     branch: str | None = Query(None),
     user_ws=Depends(get_user_and_workspace),
+    db=Depends(db_dep),
 ):
     """
     Remove all persisted custom edits for the current user / branch / package.
@@ -697,15 +710,16 @@ def clear_custom_edits(
     user, workspace = user_ws
     pkg = package or workspace.get("package") or DEFAULT_BASE_PACKAGE
     br = branch or workspace.get("branch") or DEFAULT_BRANCH
-    workspace = update_workspace(user["id"], branch=br, package=pkg, base_namespace=workspace.get("base_namespace"))
-    deleted = delete_edits(user["id"], br, pkg)
+    workspace = await update_workspace(db, user["id"], branch=br, package=pkg, base_namespace=workspace.get("base_namespace"))
+    deleted = await delete_edits(db, user["id"], br, pkg)
     return {"deleted": deleted, "workspace": workspace_payload(workspace)}
 
 @app.get("/overview", response_model=OverviewResponse)
-def overview(
+async def overview(
     branch: str | None = Query(None),
     base: str | None = Query(None),
     user_ws=Depends(get_user_and_workspace),
+    db=Depends(db_dep),
 ):
     """
     Bird's-eye overview: packages under `base` and their top-level classes at `branch`.
@@ -716,7 +730,7 @@ def overview(
         branch_to_use = branch or workspace.get("branch") or DEFAULT_BRANCH
         base_to_use = base or workspace.get("base_namespace") or DEFAULT_BASE_PACKAGE
         if branch or base:
-            workspace = update_workspace(user["id"], branch=branch_to_use, base_namespace=base_to_use)
+            workspace = await update_workspace(db, user["id"], branch=branch_to_use, base_namespace=base_to_use)
 
         base_packages = _parse_base_packages(base_to_use)
         if not base_packages:

@@ -6,5 +6,5 @@ gitpython
 orjson
 httpx
 PyJWT
-pymongo>=4.6
+motor>=3.3.1
 pytest>=7

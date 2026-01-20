@@ -1,16 +1,23 @@
-"""Persistence + conflict tracking for synthetic schema edits (Mongo-only)."""
+"""Persistence + conflict tracking for synthetic schema edits (Mongo + Motor, async)."""
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from typing import Iterable, List, Literal, Optional, Tuple, Union
 
+from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo.errors import DuplicateKeyError
 
-from .mongo import get_db
-
 CUSTOM_EDITS_COLLECTION = "custom_edits"
+
+
+def hash_content(content: dict) -> str:
+    """Stable hash for JSON-like dicts; used to detect no-op edit updates."""
+    canonical = json.dumps(content, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 @dataclass
@@ -26,6 +33,7 @@ class PersistedEdit:
     parent_name: Optional[str] = None
     parent_relation: Optional[str] = None
     base_sha: Optional[str] = None
+    content_hash: Optional[str] = None
     id: Optional[int] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -42,9 +50,8 @@ class EditConflict(RuntimeError):
         self.current_sha = current_sha
 
 
-def init_db() -> None:
-    db = get_db()
-    db[CUSTOM_EDITS_COLLECTION].create_index(
+async def init_db(db: AsyncIOMotorDatabase) -> None:
+    await db[CUSTOM_EDITS_COLLECTION].create_index(
         [
             ("user_id", 1),
             ("branch", 1),
@@ -75,6 +82,7 @@ def _doc_to_edit(doc: dict) -> PersistedEdit:
         parent_relation=doc.get("parent_relation"),
         edit_type=doc["edit_type"],
         base_sha=doc.get("base_sha"),
+        content_hash=doc.get("content_hash"),
         created_at=_ts(doc.get("created_at")),
         updated_at=_ts(doc.get("updated_at")),
     )
@@ -94,21 +102,32 @@ def _payload_differs(a: PersistedEdit, b: PersistedEdit) -> bool:
     )
 
 
-def save_edit(edit: PersistedEdit, *, current_sha: Optional[str]) -> PersistedEdit:
+async def save_edit(db: AsyncIOMotorDatabase, edit: PersistedEdit, *, current_sha: Optional[str]) -> PersistedEdit:
     """
     Persist an edit, raising an EditConflict if an existing record was based on
     a different branch head and the payload differs.
     """
     quantity_key = edit.quantity_name or ""
-    db = get_db()
     coll = db[CUSTOM_EDITS_COLLECTION]
-    row = coll.find_one(
+    row = await coll.find_one(
         {
             "user_id": edit.user_id,
             "branch": edit.branch,
             "package": edit.package,
             "class_name": edit.class_name,
             "quantity_name": quantity_key,
+        }
+    )
+
+    edit_hash = hash_content(
+        {
+            "class_name": edit.class_name,
+            "quantity_name": quantity_key,
+            "dtype": edit.dtype,
+            "docstring": edit.docstring,
+            "parent_name": edit.parent_name,
+            "parent_relation": edit.parent_relation,
+            "edit_type": edit.edit_type,
         }
     )
 
@@ -123,7 +142,7 @@ def save_edit(edit: PersistedEdit, *, current_sha: Optional[str]) -> PersistedEd
             raise EditConflict(existing=existing, current_sha=current_sha)
 
         now = datetime.now(timezone.utc)
-        coll.update_one(
+        await coll.update_one(
             {"_id": row["_id"]},
             {
                 "$set": {
@@ -133,23 +152,25 @@ def save_edit(edit: PersistedEdit, *, current_sha: Optional[str]) -> PersistedEd
                     "parent_relation": edit.parent_relation,
                     "edit_type": edit.edit_type,
                     "base_sha": current_sha,
+                    "content_hash": edit_hash,
                     "updated_at": now,
                 }
             },
         )
-        updated = coll.find_one({"_id": row["_id"]})
+        updated = await coll.find_one({"_id": row["_id"]})
         return _doc_to_edit(updated)
 
     now = datetime.now(timezone.utc)
     payload = edit.to_db()
     payload["quantity_name"] = quantity_key
     payload["base_sha"] = current_sha
+    payload["content_hash"] = edit_hash
     payload["created_at"] = now
     payload["updated_at"] = now
     try:
-        result = coll.insert_one(payload)
+        result = await coll.insert_one(payload)
     except DuplicateKeyError:
-        row = coll.find_one(
+        row = await coll.find_one(
             {
                 "user_id": edit.user_id,
                 "branch": edit.branch,
@@ -159,21 +180,19 @@ def save_edit(edit: PersistedEdit, *, current_sha: Optional[str]) -> PersistedEd
             }
         )
         return _doc_to_edit(row) if row else edit
-    row = coll.find_one({"_id": result.inserted_id})
+    row = await coll.find_one({"_id": result.inserted_id})
     return _doc_to_edit(row)
 
 
-def list_edits(user_id: int, branch: str, package: str) -> List[PersistedEdit]:
-    db = get_db()
+async def list_edits(db: AsyncIOMotorDatabase, user_id: int, branch: str, package: str) -> List[PersistedEdit]:
     rows = db[CUSTOM_EDITS_COLLECTION].find(
         {"user_id": user_id, "branch": branch, "package": package}
     ).sort("_id", 1)
-    return [_doc_to_edit(r) for r in rows]
+    return [_doc_to_edit(r) async for r in rows]
 
 
-def delete_edits(user_id: int, branch: str, package: str) -> int:
-    db = get_db()
-    result = db[CUSTOM_EDITS_COLLECTION].delete_many(
+async def delete_edits(db: AsyncIOMotorDatabase, user_id: int, branch: str, package: str) -> int:
+    result = await db[CUSTOM_EDITS_COLLECTION].delete_many(
         {"user_id": user_id, "branch": branch, "package": package}
     )
     return int(result.deleted_count or 0)
@@ -197,7 +216,6 @@ def split_conflicts(
     return applicable, conflicts
 
 
-def clear_all() -> None:
+async def clear_all(db: AsyncIOMotorDatabase) -> None:
     """Helper for tests to start from a clean slate."""
-    db = get_db()
-    db.drop_collection(CUSTOM_EDITS_COLLECTION)
+    await db.drop_collection(CUSTOM_EDITS_COLLECTION)

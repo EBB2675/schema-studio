@@ -9,12 +9,13 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 from pathlib import Path
 
 from pymongo import ReturnDocument, UpdateOne
 
-from .mongo import get_db
+from .mongo import connect_to_mongo
 from .settings import DATA_DIR
 
 
@@ -122,7 +123,7 @@ def migrate_edits(db, user_id_map: dict[str, object]):
 
 
 def main():
-    db = get_db()
+    db = asyncio.run(connect_to_mongo())
     user_id_map = migrate_auth(db)
     migrate_edits(db, user_id_map)
     print("Migration complete")

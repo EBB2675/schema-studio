@@ -1,4 +1,4 @@
-"""Lightweight authentication and workspace persistence."""
+"""Authentication and workspace persistence (Mongo + Motor, async)."""
 
 from __future__ import annotations
 
@@ -13,13 +13,15 @@ except ModuleNotFoundError as exc:
     raise ImportError(
         "PyJWT is required. Install backend dependencies via `pip install -r api/requirements.txt`."
     ) from exc
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pymongo.errors import DuplicateKeyError
 from bson import ObjectId, errors as bson_errors
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.errors import DuplicateKeyError
+from pydantic import BaseModel, ConfigDict, Field
 
-from .mongo import get_db
 from .settings import DEFAULT_BASE_PACKAGE, DEFAULT_BRANCH, DEFAULT_PACKAGE
+
 TOKEN_EXPIRES_HOURS = int(os.getenv("SCHEMA_UML_TOKEN_HOURS", "12"))
 SECRET_KEY = os.getenv("SCHEMA_UML_SECRET", "schema-uml-secret")
 PASSWORD_SALT = os.getenv("SCHEMA_UML_PW_SALT", "schema-uml-salt")
@@ -32,8 +34,33 @@ ENABLE_DEFAULT_ADMIN = os.getenv(
     "SCHEMA_UML_ENABLE_DEFAULT_ADMIN",
     "true" if ALLOW_INSECURE_DEFAULTS else "false",
 ).lower() == "true"
+
 USERS_COLLECTION = "users"
 WORKSPACES_COLLECTION = "workspaces"
+
+
+class UserDoc(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str = Field(alias="_id")
+    username: str
+    password_hash: str
+
+
+class WorkspaceDoc(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: Optional[str] = Field(default=None, alias="_id")
+    user_id: Any
+    branch: str = DEFAULT_BRANCH
+    package: str = DEFAULT_PACKAGE
+    base_namespace: str = DEFAULT_BASE_PACKAGE
+
+
+class _Workspace(BaseModel):
+    branch: str = DEFAULT_BRANCH
+    package: str = DEFAULT_PACKAGE
+    base_namespace: str = DEFAULT_BASE_PACKAGE
 
 
 def _hash_password(password: str) -> str:
@@ -50,35 +77,33 @@ def _validate_security_settings() -> None:
         )
 
 
-def init_db() -> None:
+async def init_db(db: AsyncIOMotorDatabase) -> None:
     _validate_security_settings()
-    db = get_db()
-    db[USERS_COLLECTION].create_index("username", unique=True)
-    db[WORKSPACES_COLLECTION].create_index("user_id", unique=True)
-    ensure_default_user()
+    await db[USERS_COLLECTION].create_index("username", unique=True)
+    await db[WORKSPACES_COLLECTION].create_index("user_id", unique=True)
+    await ensure_default_user(db)
 
 
-def ensure_default_user() -> None:
+async def ensure_default_user(db: AsyncIOMotorDatabase) -> None:
     if not ENABLE_DEFAULT_ADMIN:
         return
     username = os.getenv("SCHEMA_UML_DEFAULT_USER", "admin")
     password = os.getenv("SCHEMA_UML_DEFAULT_PASSWORD", "admin")
 
-    db = get_db()
-    existing = db[USERS_COLLECTION].find_one({"username": username})
+    existing = await db[USERS_COLLECTION].find_one({"username": username})
     if existing:
         return
     try:
-        result = db[USERS_COLLECTION].insert_one(
+        result = await db[USERS_COLLECTION].insert_one(
             {"username": username, "password_hash": _hash_password(password)}
         )
     except DuplicateKeyError:
         return
-    _ensure_workspace_mongo(db, result.inserted_id)
+    await _ensure_workspace(db, result.inserted_id)
 
 
-def _ensure_workspace_mongo(db, user_id) -> None:
-    db[WORKSPACES_COLLECTION].update_one(
+async def _ensure_workspace(db: AsyncIOMotorDatabase, user_id) -> None:
+    await db[WORKSPACES_COLLECTION].update_one(
         {"user_id": user_id},
         {
             "$setOnInsert": {
@@ -91,9 +116,8 @@ def _ensure_workspace_mongo(db, user_id) -> None:
     )
 
 
-def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
-    db = get_db()
-    user = db[USERS_COLLECTION].find_one({"username": username})
+async def authenticate_user(db: AsyncIOMotorDatabase, username: str, password: str) -> Optional[Dict[str, Any]]:
+    user = await db[USERS_COLLECTION].find_one({"username": username})
     if not user:
         return None
     if user["password_hash"] != _hash_password(password):
@@ -101,30 +125,28 @@ def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
     return {"id": str(user["_id"]), "username": user["username"]}
 
 
-def get_user(user_id: int) -> Dict[str, Any]:
-    db = get_db()
+async def get_user(db: AsyncIOMotorDatabase, user_id: int) -> Dict[str, Any]:
     try:
         oid = ObjectId(str(user_id))
     except bson_errors.InvalidId:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    user = db[USERS_COLLECTION].find_one({"_id": oid})
+    user = await db[USERS_COLLECTION].find_one({"_id": oid})
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    _ensure_workspace_mongo(db, user["_id"])
+    await _ensure_workspace(db, user["_id"])
     return {"id": str(user["_id"]), "username": user["username"]}
 
 
-def get_workspace(user_id: int) -> Dict[str, str]:
-    db = get_db()
+async def get_workspace(db: AsyncIOMotorDatabase, user_id: int) -> Dict[str, str]:
     try:
         oid = ObjectId(str(user_id))
     except bson_errors.InvalidId:
-        _ensure_workspace_mongo(db, str(user_id))
+        await _ensure_workspace(db, str(user_id))
         oid = str(user_id)
-    ws = db[WORKSPACES_COLLECTION].find_one({"user_id": oid})
+    ws = await db[WORKSPACES_COLLECTION].find_one({"user_id": oid})
     if ws is None:
-        _ensure_workspace_mongo(db, oid)
-        ws = db[WORKSPACES_COLLECTION].find_one({"user_id": oid}) or {}
+        await _ensure_workspace(db, oid)
+        ws = await db[WORKSPACES_COLLECTION].find_one({"user_id": oid}) or {}
     return {
         "branch": ws.get("branch", DEFAULT_BRANCH),
         "package": ws.get("package", DEFAULT_PACKAGE),
@@ -132,13 +154,19 @@ def get_workspace(user_id: int) -> Dict[str, str]:
     }
 
 
-def update_workspace(user_id: int, *, branch: Optional[str] = None, package: Optional[str] = None, base_namespace: Optional[str] = None) -> Dict[str, str]:
-    db = get_db()
+async def update_workspace(
+    db: AsyncIOMotorDatabase,
+    user_id: int,
+    *,
+    branch: Optional[str] = None,
+    package: Optional[str] = None,
+    base_namespace: Optional[str] = None,
+) -> Dict[str, str]:
     try:
         oid = ObjectId(str(user_id))
     except bson_errors.InvalidId:
         oid = str(user_id)
-    _ensure_workspace_mongo(db, oid)
+    await _ensure_workspace(db, oid)
     updates = {}
     if branch is not None:
         updates["branch"] = branch
@@ -147,8 +175,8 @@ def update_workspace(user_id: int, *, branch: Optional[str] = None, package: Opt
     if base_namespace is not None:
         updates["base_namespace"] = base_namespace
     if updates:
-        db[WORKSPACES_COLLECTION].update_one({"user_id": oid}, {"$set": updates})
-    ws = db[WORKSPACES_COLLECTION].find_one({"user_id": oid}) or {}
+        await db[WORKSPACES_COLLECTION].update_one({"user_id": oid}, {"$set": updates})
+    ws = await db[WORKSPACES_COLLECTION].find_one({"user_id": oid}) or {}
     return {
         "branch": ws.get("branch", DEFAULT_BRANCH),
         "package": ws.get("package", DEFAULT_PACKAGE),
@@ -177,15 +205,22 @@ def decode_token(token: str) -> Dict[str, Any]:
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)):
+def db_dep(request: Request) -> AsyncIOMotorDatabase:
+    db = getattr(request.app.state, "db", None)
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database not available")
+    return db
+
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme), db=Depends(db_dep)):
     if credentials is None or not credentials.credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing credentials")
     payload = decode_token(credentials.credentials)
-    return get_user(payload.get("sub"))
+    return await get_user(db, payload.get("sub"))
 
 
-def get_user_and_workspace(user=Depends(get_current_user)):
-    workspace = get_workspace(user["id"])
+async def get_user_and_workspace(user=Depends(get_current_user), db=Depends(db_dep)):
+    workspace = await get_workspace(db, user["id"])
     return user, workspace
 
 

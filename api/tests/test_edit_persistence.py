@@ -8,9 +8,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+import os
+import pymongo
+
 from api import edit_store, main
 from api.settings import DEFAULT_BRANCH
-from api.mongo import get_db
 
 
 def _create_dummy_package(tmp_path: Path) -> str:
@@ -37,8 +39,10 @@ class TargetSection:
 
 
 def _admin_user_id():
-    db = get_db()
+    client = pymongo.MongoClient(os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017"))
+    db = client[os.getenv("SCHEMA_UML_MONGO_DB", "schema_uml_test")]
     doc = db["users"].find_one({"username": "admin"})
+    client.close()
     return str(doc["_id"]) if doc else None
 
 
@@ -60,7 +64,11 @@ def test_persisted_edits_are_replayed(client, tmp_path: Path, monkeypatch: pytes
     create_payload = create_resp.json()
     assert create_payload["persisted_edit"]["quantity_name"] == "user_defined"
     admin_id = _admin_user_id()
-    stored = edit_store.list_edits(user_id=admin_id, branch=DEFAULT_BRANCH, package=pkg_name)
+
+    mongo = pymongo.MongoClient(os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017"))
+    db = mongo[os.getenv("SCHEMA_UML_MONGO_DB", "schema_uml_test")]
+    stored = list(db[edit_store.CUSTOM_EDITS_COLLECTION].find({"user_id": admin_id, "branch": DEFAULT_BRANCH, "package": pkg_name}))
+    mongo.close()
     assert stored
 
     # Subsequent schema fetch should replay the persisted edit onto the graph

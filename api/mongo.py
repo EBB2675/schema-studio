@@ -1,28 +1,28 @@
-"""MongoDB connection helpers (shared across auth/edit store)."""
+"""Async MongoDB connection helpers using Motor."""
 
 from __future__ import annotations
 
 import os
 from typing import Optional
 
-from pymongo import MongoClient
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 MONGO_URI = os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017")
 MONGO_DB = os.getenv("SCHEMA_UML_MONGO_DB", "schema_uml")
 
-_client: Optional[MongoClient] = None
+_client: Optional[AsyncIOMotorClient] = None
 
 
-def get_db():
-    """Return a singleton Mongo client database handle."""
+async def connect_to_mongo() -> AsyncIOMotorDatabase:
+    """Initialize a global Motor client and return the database handle."""
     global _client
     if _client is None:
-        _client = MongoClient(MONGO_URI, uuidRepresentation="standard")
+        _client = AsyncIOMotorClient(MONGO_URI, uuidRepresentation="standard")
     return _client[MONGO_DB]
 
 
-def close_db() -> None:
+async def close_mongo() -> None:
     global _client
-    if _client:
+    if _client is not None:
         _client.close()
         _client = None
