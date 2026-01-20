@@ -8,7 +8,7 @@ from .settings import DEFAULT_PACKAGE, DEFAULT_BASE_PACKAGE, DEFAULT_BRANCH, rep
 from .git_utils import list_branches, materialize_worktree
 from .graph_runner import build_graph_in_subprocess
 from .diff import diff_graphs
-from .auth import get_user_and_workspace, update_workspace, workspace_payload
+from .auth import get_user_and_workspace, update_workspace, workspace_payload, db_dep
 
 router = APIRouter()
 
@@ -102,15 +102,16 @@ def _primary_repo(package: str | None, base_namespace: str | None) -> str:
 
 
 @router.get("/git/branches")
-def api_branches(
+async def api_branches(
     base_package: str | None = Query(None),
     user_ws=Depends(get_user_and_workspace),
+    db=Depends(db_dep),
 ):
     try:
         user, workspace = user_ws
         namespace = base_package or workspace.get("base_namespace") or DEFAULT_BASE_PACKAGE
         if base_package:
-            workspace = update_workspace(user["id"], base_namespace=namespace)
+            workspace = await update_workspace(db, user["id"], base_namespace=namespace)
 
         bases = _parse_base_packages(namespace)
         repos = _bases_by_repo(bases) if bases else {repo_for_base_namespace(DEFAULT_BASE_PACKAGE): []}
@@ -133,10 +134,11 @@ def api_branches(
 
 
 @router.get("/git/packages")
-def api_packages(
+async def api_packages(
     branch: str | None = Query(None),
     base_package: str | None = Query(None),
     user_ws=Depends(get_user_and_workspace),
+    db=Depends(db_dep),
 ):
     """
     List Python modules under `base_package` for the given branch.
@@ -148,7 +150,7 @@ def api_packages(
         branch_to_use = branch or workspace.get("branch") or DEFAULT_BRANCH
         base_to_use = base_package or workspace.get("base_namespace") or DEFAULT_BASE_PACKAGE
         if branch or base_package:
-            workspace = update_workspace(user["id"], branch=branch_to_use, base_namespace=base_to_use)
+            workspace = await update_workspace(db, user["id"], branch=branch_to_use, base_namespace=base_to_use)
 
         # materialize_worktree returns (worktree_path, sha)
         base_packages = _parse_base_packages(base_to_use)
@@ -190,7 +192,7 @@ def api_packages(
 
 
 @router.post("/graph")
-def api_graph(
+async def api_graph(
     req: GraphRequest,
     base_namespace: str | None = Query(None),
     root: str | None = Query(None),
@@ -200,12 +202,13 @@ def api_graph(
     allow_cross_module: bool = Query(True),
     empty: bool = Query(False, description="Return an empty graph shell instead of extracting schema"),
     user_ws=Depends(get_user_and_workspace),
+    db=Depends(db_dep),
 ):
     user, workspace = user_ws
     pkg = req.package or workspace.get("package") or DEFAULT_PACKAGE
     namespace = base_namespace or workspace.get("base_namespace") or DEFAULT_BASE_PACKAGE
     branch = req.branch or workspace.get("branch") or DEFAULT_BRANCH
-    workspace = update_workspace(user["id"], branch=branch, package=pkg, base_namespace=namespace)
+    workspace = await update_workspace(db, user["id"], branch=branch, package=pkg, base_namespace=namespace)
     try:
         repo_src = _primary_repo(pkg, namespace)
         wt, sha = materialize_worktree(branch, repo_src)
@@ -229,7 +232,7 @@ def api_graph(
 
 
 @router.post("/graph/diff")
-def api_diff(
+async def api_diff(
     req: DiffRequest,
     root: str | None = Query(None),
     include_quantities: bool = Query(True),
@@ -238,11 +241,12 @@ def api_diff(
     allow_cross_module: bool = Query(True),
     base_namespace: str | None = Query(None),
     user_ws=Depends(get_user_and_workspace),
+    db=Depends(db_dep),
 ):
     user, workspace = user_ws
     pkg = req.package or workspace.get("package") or DEFAULT_PACKAGE
     namespace = base_namespace or workspace.get("base_namespace") or DEFAULT_BASE_PACKAGE
-    workspace = update_workspace(user["id"], branch=req.head, package=pkg, base_namespace=namespace)
+    workspace = await update_workspace(db, user["id"], branch=req.head, package=pkg, base_namespace=namespace)
     try:
         repo_src = _primary_repo(pkg, namespace)
         wtb, shab = materialize_worktree(req.base, repo_src)
