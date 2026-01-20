@@ -1,4 +1,3 @@
-import atexit
 import sys
 from pathlib import Path
 from uuid import uuid4
@@ -40,7 +39,15 @@ class TargetSection:
 
 
 _MONGO_CLIENT = pymongo.MongoClient(os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017"))
-atexit.register(_MONGO_CLIENT.close)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _mongo_client_session():
+    """Ensure module-level Mongo client is closed after the test session."""
+    try:
+        yield _MONGO_CLIENT
+    finally:
+        _MONGO_CLIENT.close()
 
 
 def _db():
