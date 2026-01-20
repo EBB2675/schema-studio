@@ -179,7 +179,11 @@ async def save_edit(db: AsyncIOMotorDatabase, edit: PersistedEdit, *, current_sh
                 "quantity_name": quantity_key,
             }
         )
-        return _doc_to_edit(row) if row else edit
+        if row:
+            return _doc_to_edit(row)
+        raise RuntimeError(
+            "Persisted edit could not be retrieved after duplicate key error; please retry"
+        )
     row = await coll.find_one({"_id": result.inserted_id})
     return _doc_to_edit(row)
 
