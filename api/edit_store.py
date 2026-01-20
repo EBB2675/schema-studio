@@ -188,14 +188,14 @@ async def save_edit(db: AsyncIOMotorDatabase, edit: PersistedEdit, *, current_sh
     return _doc_to_edit(row)
 
 
-async def list_edits(db: AsyncIOMotorDatabase, user_id: int, branch: str, package: str) -> List[PersistedEdit]:
+async def list_edits(db: AsyncIOMotorDatabase, user_id: str, branch: str, package: str) -> List[PersistedEdit]:
     rows = db[CUSTOM_EDITS_COLLECTION].find(
         {"user_id": user_id, "branch": branch, "package": package}
     ).sort("_id", 1)
     return [_doc_to_edit(r) async for r in rows]
 
 
-async def delete_edits(db: AsyncIOMotorDatabase, user_id: int, branch: str, package: str) -> int:
+async def delete_edits(db: AsyncIOMotorDatabase, user_id: str, branch: str, package: str) -> int:
     result = await db[CUSTOM_EDITS_COLLECTION].delete_many(
         {"user_id": user_id, "branch": branch, "package": package}
     )

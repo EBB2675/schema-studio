@@ -133,7 +133,7 @@ async def authenticate_user(db: AsyncIOMotorDatabase, username: str, password: s
     return {"id": str(user["_id"]), "username": user["username"]}
 
 
-async def get_user(db: AsyncIOMotorDatabase, user_id: int) -> Dict[str, Any]:
+async def get_user(db: AsyncIOMotorDatabase, user_id: str | int) -> Dict[str, Any]:
     try:
         oid = ObjectId(str(user_id))
     except bson_errors.InvalidId:
