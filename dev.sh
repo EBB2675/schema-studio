@@ -14,6 +14,8 @@ UVICORN_LOG_LEVEL="${UVICORN_LOG_LEVEL:-warning}"
 : "${SCHEMA_UML_DEFAULT_PASSWORD:=admin}"
 : "${SCHEMA_UML_SECRET:=dev-secret}"
 : "${SCHEMA_UML_PW_SALT:=dev-salt}"
+: "${SCHEMA_UML_MONGO_URI:=mongodb://localhost:27017}"
+: "${SCHEMA_UML_MONGO_DB:=schema_uml}"
 # Set START_MONGO_DOCKER=1 to have this script start a local MongoDB container (mongo:7)
 
 need_cmd() {
@@ -110,6 +112,28 @@ cd "${ROOT_DIR}"
 
 validate_schema_repo
 start_mongo_docker
+echo "Checking MongoDB at ${SCHEMA_UML_MONGO_URI}/${SCHEMA_UML_DB}..."
+python - <<'PY'
+import os, sys, asyncio
+from motor.motor_asyncio import AsyncIOMotorClient
+
+uri = os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017")
+
+async def main():
+    client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=2000)
+    try:
+        await client.admin.command("ping")
+        client.close()
+        return True
+    except Exception as exc:  # pragma: no cover
+        sys.stderr.write(f"MongoDB not reachable at {uri}: {exc}\n")
+        client.close()
+        return False
+
+ok = asyncio.run(main())
+if not ok:
+    sys.exit(1)
+PY
 
 echo "Starting FastAPI backend on :${API_PORT}..."
 uvicorn --app-dir "${ROOT_DIR}" api.main:app --reload --port "${API_PORT}" --log-level "${UVICORN_LOG_LEVEL}" &
