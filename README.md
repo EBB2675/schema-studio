@@ -54,6 +54,7 @@ cd schema-studio
 conda create -n schema-studio python=3.11 -y
 conda activate schema-studio
 pip install -r api/requirements.txt
+# Frontend build requires Node 20.19+ (or 22.12+) for Vite.
 # ensure MongoDB is running on mongodb://localhost:27017 (default DB: schema_uml)
 # or override:
 # export SCHEMA_UML_MONGO_URI=mongodb://localhost:27017
