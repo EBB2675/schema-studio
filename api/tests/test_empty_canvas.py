@@ -1,3 +1,4 @@
+import atexit
 import os
 from uuid import uuid4
 
@@ -10,11 +11,16 @@ def _pkg_name(prefix: str = "empty_pkg") -> str:
     return f"{prefix}_{uuid4().hex}"
 
 
+_MONGO_CLIENT = pymongo.MongoClient(os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017"))
+atexit.register(_MONGO_CLIENT.close)
+
+
+def _db():
+    return _MONGO_CLIENT[os.getenv("SCHEMA_UML_MONGO_DB", "schema_uml_test")]
+
+
 def _admin_user_id():
-    client = pymongo.MongoClient(os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017"))
-    db = client[os.getenv("SCHEMA_UML_MONGO_DB", "schema_uml_test")]
-    doc = db["users"].find_one({"username": "admin"})
-    client.close()
+    doc = _db()["users"].find_one({"username": "admin"})
     return str(doc["_id"]) if doc else None
 
 
@@ -69,18 +75,14 @@ def test_clearing_edits_removes_persisted_entries(client):
         json={"package": pkg, "name": "Transient"},
     )
     admin_id = _admin_user_id()
-    mongo = pymongo.MongoClient(os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017"))
-    db = mongo[os.getenv("SCHEMA_UML_MONGO_DB", "schema_uml_test")]
+    db = _db()
     stored = list(db[edit_store.CUSTOM_EDITS_COLLECTION].find({"user_id": admin_id, "branch": "develop", "package": pkg}))
-    mongo.close()
     assert stored
 
     resp = client.delete("/schema/custom-edits", params={"package": pkg, "branch": "develop"})
     assert resp.status_code == 200
     assert resp.json()["deleted"] >= 1
 
-    mongo = pymongo.MongoClient(os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017"))
-    db = mongo[os.getenv("SCHEMA_UML_MONGO_DB", "schema_uml_test")]
+    db = _db()
     remaining = list(db[edit_store.CUSTOM_EDITS_COLLECTION].find({"user_id": admin_id, "branch": "develop", "package": pkg}))
-    mongo.close()
     assert remaining == []
