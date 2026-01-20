@@ -10,10 +10,10 @@ import CollapsibleSection from "./components/CollapsibleSection";
 import { useSelection } from "./store/selection";
 import { jsPDF } from "jspdf";
 import type { AuditTrailEntry, QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
-import { ensureDiffResponse, ensureGraphResponse, type ApiGraph, type DiffResponse } from "./types/api";
+import { ensureDiffResponse, ensureGraphResponse, type ApiEdge, type ApiGraph, type ApiNode, type DiffResponse } from "./types/api";
 import type { WorkspaceState } from "./types/workspace";
 import { API_FEATURE_HEADER, API_VERSION, API_VERSION_HEADER, DEFAULT_FEATURE_FLAGS } from "./constants/api";
-import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_PACKAGE, DEFAULT_ROOT, WORKSPACE_PRESETS } from "./constants/defaults";
+import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_ROOT, WORKSPACE_PRESETS } from "./constants/defaults";
 import { useWorkspaceStore } from "./store/workspace";
 import { fqidFromParts, normalizeId, normalizeLabel, normalizeModule } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
@@ -31,6 +31,7 @@ export default function App() {
   const [sessionChecked, setSessionChecked] = useState<boolean>(false);
   const [workspace, setWorkspace] = useState<WorkspaceState | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [loginUsername, setLoginUsername] = useState<string>("admin");
   const [loginPassword, setLoginPassword] = useState<string>("admin");
   const {
@@ -397,7 +398,8 @@ export default function App() {
     e.preventDefault();
     setAuthError(null);
     try {
-      const res = await axios.post(`${apiBase}/auth/login`, {
+      const endpoint = authMode === "register" ? "/auth/register" : "/auth/login";
+      const res = await axios.post(`${apiBase}${endpoint}`, {
         username: loginUsername,
         password: loginPassword,
       });
@@ -407,7 +409,7 @@ export default function App() {
       applyWorkspace(res.data.workspace as WorkspaceState);
       setSessionChecked(true);
     } catch (error: any) {
-      setAuthError(error?.response?.data?.detail || String(error));
+      setAuthError(error?.response?.data?.detail || formatApiError(error) || String(error));
     }
   };
 
@@ -1123,13 +1125,13 @@ export default function App() {
   };
 
   const removeQuantityFromGraphState = useCallback((g: ApiGraph, quantityId: string): ApiGraph => {
-    const nodes = (g.nodes || []).filter((n: any) => n.id !== quantityId);
-    const edges = (g.edges || []).filter((e: any) => e.source !== quantityId && e.target !== quantityId);
+    const nodes = (g.nodes || []).filter((n) => n.id !== quantityId);
+    const edges = (g.edges || []).filter((e) => e.source !== quantityId && e.target !== quantityId);
     return { ...g, nodes, edges };
   }, []);
 
   const addQuantityToGraphState = useCallback((g: ApiGraph, quantity: QuantityNode): ApiGraph => {
-    const qNode = {
+    const qNode: ApiNode = {
       id: quantity.id,
       kind: "quantity",
       label: quantity.name,
@@ -1141,14 +1143,14 @@ export default function App() {
       path: quantity.path ?? undefined,
       line: quantity.line ?? undefined,
     };
-    const hasNode = (g.nodes || []).some((n: any) => n.id === quantity.id);
-    const nodes = hasNode
-      ? g.nodes.map((n: any) => (n.id === quantity.id ? { ...n, ...qNode } : n))
+    const hasNode = (g.nodes || []).some((n) => n.id === quantity.id);
+    const nodes: ApiNode[] = hasNode
+      ? (g.nodes || []).map((n) => (n.id === quantity.id ? { ...n, ...qNode } : n))
       : [...(g.nodes || []), qNode];
-    const edgeExists = (g.edges || []).some((e: any) => e.source === quantity.ownerId && e.target === quantity.id);
-    const edges = edgeExists
-      ? g.edges
-      : [...(g.edges || []), { source: quantity.ownerId, target: quantity.id, type: "hasQuantity", card: quantity.card ?? null }];
+    const edgeExists = (g.edges || []).some((e) => e.source === quantity.ownerId && e.target === quantity.id);
+    const edges: ApiEdge[] = edgeExists
+      ? g.edges || []
+      : [...(g.edges || []), { source: quantity.ownerId, target: quantity.id, type: "hasQuantity" as const, card: quantity.card ?? null }];
     return { ...g, nodes, edges };
   }, []);
 
@@ -1168,8 +1170,8 @@ export default function App() {
   }, []);
 
   const addClassToGraphState = useCallback((g: ApiGraph, cls: UmlClassNode): ApiGraph => {
-    const nodesWithoutClass = (g.nodes || []).filter((n: any) => !(n.kind === "section" && n.id === cls.id));
-    const sectionNode = {
+    const nodesWithoutClass = (g.nodes || []).filter((n) => !(n.kind === "section" && n.id === cls.id));
+    const sectionNode: ApiNode = {
       id: cls.id,
       kind: "section",
       label: cls.name,
@@ -1178,7 +1180,7 @@ export default function App() {
       path: cls.path ?? null,
       line: cls.line ?? null,
     };
-    const qtyNodes = cls.quantities.map((q) => ({
+    const qtyNodes: ApiNode[] = cls.quantities.map((q) => ({
       id: q.id,
       kind: "quantity",
       label: q.name,
@@ -1190,21 +1192,24 @@ export default function App() {
       path: q.path ?? undefined,
       line: q.line ?? undefined,
     }));
-    const qtyEdges = cls.quantities.map((q) => ({
+    const qtyEdges: ApiEdge[] = cls.quantities.map((q) => ({
       source: q.ownerId,
       target: q.id,
-      type: "hasQuantity",
+      type: "hasQuantity" as const,
       card: q.card ?? null,
     }));
-    const relationType = cls.parentRelation || "inherits";
-    const inheritEdge = cls.parentId ? [{ source: cls.parentId, target: cls.id, type: relationType, card: null }] : [];
+    const relationType: ApiEdge["type"] =
+      cls.parentRelation === "hasSubSection" ? "hasSubSection" : "inherits";
+    const inheritEdge: ApiEdge[] = cls.parentId
+      ? [{ source: cls.parentId, target: cls.id, type: relationType, card: null }]
+      : [];
 
     return {
       ...g,
       nodes: [...nodesWithoutClass, sectionNode, ...qtyNodes],
       edges: [
         ...(g.edges || []).filter(
-          (e: any) =>
+          (e) =>
             !((e.type === "inherits" || e.type === "hasSubSection") && e.target === cls.id)
         ),
         ...qtyEdges,
@@ -1671,9 +1676,13 @@ export default function App() {
     return (
       <main className="app-shell" ref={appShellRef} style={{ gridTemplateColumns: `${sidebarWidth}px 10px 1fr` }}>
         <div className="sidebar" style={{ gridColumn: "1 / span 3", padding: 24 }}>
-          <h2>{restoring ? "Restoring session…" : "Sign in"}</h2>
+          <h2>{restoring ? "Restoring session…" : authMode === "register" ? "Create account" : "Sign in"}</h2>
           <p className="subdued">
-            {restoring ? "Checking saved credentials. If this hangs, sign in again." : "Authenticate to load your workspace."}
+            {restoring
+              ? "Checking saved credentials. If this hangs, sign in again."
+              : authMode === "register"
+                ? "Pick a username and password to create your workspace."
+                : "Authenticate to load your workspace."}
           </p>
           <form className="action-stack" onSubmit={handleLogin} style={{ maxWidth: 360 }}>
             <label className="label">Username</label>
@@ -1686,7 +1695,17 @@ export default function App() {
               onChange={(e) => setLoginPassword(e.target.value)}
             />
             <button className="btn" type="submit">
-              Sign in
+              {authMode === "register" ? "Create account" : "Sign in"}
+            </button>
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={() => {
+                setAuthError(null);
+                setAuthMode((mode) => (mode === "register" ? "login" : "register"));
+              }}
+            >
+              {authMode === "register" ? "Already have an account? Sign in" : "New here? Create an account"}
             </button>
             {authError ? <p style={{ color: "#fca5a5" }}>{authError}</p> : null}
           </form>
@@ -2241,9 +2260,10 @@ export default function App() {
                   }}
                 >
                   {[...auditTrail].reverse().filter((e) => e?.change).map((entry) => {
-                    const archived =
+                    const archived = Boolean(
                       entry.replayable === false ||
-                      (entry.package && normalizePackageName(entry.package) !== currentPackageForAudit);
+                      (entry.package ? normalizePackageName(entry.package) !== currentPackageForAudit : false)
+                    );
                     return (
                       <div
                         key={entry.id}
