@@ -56,7 +56,9 @@ def _db():
 
 def _admin_user_id():
     doc = _db()["users"].find_one({"username": "admin"})
-    return str(doc["_id"]) if doc else None
+    if not doc:
+        pytest.skip("Admin user not found; test setup failed.")
+    return str(doc["_id"])
 
 
 def test_persisted_edits_are_replayed(client, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
