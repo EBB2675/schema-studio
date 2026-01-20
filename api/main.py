@@ -378,7 +378,7 @@ def _apply_persisted_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dic
 
 
 async def _persisted_state(
-    *, db, user_id: int, workspace: dict, package: str, base_namespace: str | None
+    *, db, user_id: str | int, workspace: dict, package: str, base_namespace: str | None
 ) -> tuple[list[PersistedEdit], list[dict], str | None]:
     branch = workspace.get("branch") or DEFAULT_BRANCH
     current_sha = _current_branch_head(branch, base_namespace)
@@ -394,7 +394,7 @@ async def _persisted_state(
 async def _persist_edit(
     *,
     db,
-    user_id: int,
+    user_id: str | int,
     workspace: dict,
     edit_type: Literal["class", "quantity"],
     req: CustomClassRequest | CustomQuantityRequest,
