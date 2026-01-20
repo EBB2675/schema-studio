@@ -324,7 +324,7 @@ class CustomClassRequest(BaseModel):
 
 def _serialize_edit(edit: PersistedEdit) -> dict:
     return {
-        "id": edit.id,
+        "id": edit.edit_id,
         "user_id": edit.user_id,
         "branch": edit.branch,
         "package": edit.package,

@@ -34,7 +34,7 @@ class PersistedEdit:
     parent_relation: Optional[str] = None
     base_sha: Optional[str] = None
     content_hash: Optional[str] = None
-    id: Optional[int] = None
+    edit_id: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -70,7 +70,7 @@ def _doc_to_edit(doc: dict) -> PersistedEdit:
         return value
 
     return PersistedEdit(
-        id=str(doc.get("_id")),
+        edit_id=str(doc.get("_id")),
         user_id=doc.get("user_id"),
         branch=doc["branch"],
         package=doc["package"],
