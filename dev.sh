@@ -120,7 +120,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 uri = os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017")
 
 async def main():
-    client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=2000)
+    client = AsyncIOMotorClient(uri, serverSelectionTimeoutMS=10000)
     try:
         await client.admin.command("ping")
         client.close()
