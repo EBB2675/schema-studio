@@ -27,12 +27,12 @@ def migrate_auth(db):
         print("auth.sqlite3 not found; skipping auth migration")
         return {}
 
-    conn = sqlite3.connect(AUTH_DB)
-    conn.row_factory = sqlite3.Row
-    users = conn.execute("SELECT id, username, password_hash FROM users").fetchall()
-    workspaces = conn.execute(
-        "SELECT user_id, branch, package, base_namespace FROM workspaces"
-    ).fetchall()
+    with sqlite3.connect(AUTH_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        users = conn.execute("SELECT id, username, password_hash FROM users").fetchall()
+        workspaces = conn.execute(
+            "SELECT user_id, branch, package, base_namespace FROM workspaces"
+        ).fetchall()
 
     # Upsert users individually so we can collect the Mongo _id for mapping.
     user_id_map = {}
@@ -78,9 +78,9 @@ def migrate_edits(db, user_id_map: dict[str, object]):
         print("edit_store.sqlite3 not found; skipping edit migration")
         return
 
-    conn = sqlite3.connect(EDIT_DB)
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute("SELECT * FROM custom_edits").fetchall()
+    with sqlite3.connect(EDIT_DB) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT * FROM custom_edits").fetchall()
 
     if not rows:
         print("No edits to migrate")
