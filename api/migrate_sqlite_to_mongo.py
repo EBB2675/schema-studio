@@ -12,7 +12,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from pymongo import UpdateOne
+from pymongo import ReturnDocument, UpdateOne
 
 from .mongo import get_db
 from .settings import DATA_DIR
@@ -25,7 +25,7 @@ EDIT_DB = Path(DATA_DIR) / "edit_store.sqlite3"
 def migrate_auth(db):
     if not AUTH_DB.exists():
         print("auth.sqlite3 not found; skipping auth migration")
-        return
+        return {}
 
     conn = sqlite3.connect(AUTH_DB)
     conn.row_factory = sqlite3.Row
@@ -34,28 +34,29 @@ def migrate_auth(db):
         "SELECT user_id, branch, package, base_namespace FROM workspaces"
     ).fetchall()
 
-    user_ops = []
+    # Upsert users individually so we can collect the Mongo _id for mapping.
+    user_id_map = {}
     for row in users:
-        user_ops.append(
-            UpdateOne(
-                {"username": row["username"]},
-                {
-                    "$setOnInsert": {
-                        "password_hash": row["password_hash"],
-                    }
-                },
-                upsert=True,
-            )
+        doc = db["users"].find_one_and_update(
+            {"username": row["username"]},
+            {"$setOnInsert": {"password_hash": row["password_hash"]}},
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
         )
-    if user_ops:
-        db["users"].bulk_write(user_ops, ordered=False)
-        print(f"Migrated {len(user_ops)} users")
+        if doc:
+            user_id_map[str(row["id"])] = doc["_id"]
+    if user_id_map:
+        print(f"Migrated {len(user_id_map)} users")
 
     ws_ops = []
     for row in workspaces:
+        mongo_user_id = user_id_map.get(str(row["user_id"]))
+        if mongo_user_id is None:
+            print(f"Skipping workspace for missing user_id={row['user_id']}")
+            continue
         ws_ops.append(
             UpdateOne(
-                {"user_id": str(row["user_id"])},
+                {"user_id": mongo_user_id},
                 {
                     "$setOnInsert": {
                         "branch": row["branch"],
@@ -69,9 +70,10 @@ def migrate_auth(db):
     if ws_ops:
         db["workspaces"].bulk_write(ws_ops, ordered=False)
         print(f"Migrated {len(ws_ops)} workspaces")
+    return user_id_map
 
 
-def migrate_edits(db):
+def migrate_edits(db, user_id_map: dict[str, object]):
     if not EDIT_DB.exists():
         print("edit_store.sqlite3 not found; skipping edit migration")
         return
@@ -86,10 +88,14 @@ def migrate_edits(db):
 
     ops = []
     for row in rows:
+        mongo_user_id = user_id_map.get(str(row["user_id"]))
+        if mongo_user_id is None:
+            print(f"Skipping edit for missing user_id={row['user_id']}")
+            continue
         ops.append(
             UpdateOne(
                 {
-                    "user_id": row["user_id"],
+                    "user_id": mongo_user_id,
                     "branch": row["branch"],
                     "package": row["package"],
                     "class_name": row["class_name"],
@@ -117,8 +123,8 @@ def migrate_edits(db):
 
 def main():
     db = get_db()
-    migrate_auth(db)
-    migrate_edits(db)
+    user_id_map = migrate_auth(db)
+    migrate_edits(db, user_id_map)
     print("Migration complete")
 
 

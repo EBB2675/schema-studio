@@ -93,6 +93,22 @@ What it does:
 - Stops both together on **Ctrl+C** (no manual job control needed).
 - Exits early with a helpful message if `uvicorn` or `npm` are missing (activate your virtualenv first).
 
+#### Quick Mongo (Docker) + dev auth defaults
+If you don’t have Mongo installed locally, spin up a container and run the stack with dev-friendly auth defaults:
+
+```bash
+START_MONGO_DOCKER=1 \
+SCHEMA_UML_ALLOW_INSECURE_DEFAULTS=true \
+SCHEMA_UML_ENABLE_DEFAULT_ADMIN=true \
+SCHEMA_UML_DEFAULT_USER=admin \
+SCHEMA_UML_DEFAULT_PASSWORD=admin \
+SCHEMA_UML_SECRET=dev-secret \
+SCHEMA_UML_PW_SALT=dev-salt \
+./dev.sh
+```
+
+For non-dev, set strong values for `SCHEMA_UML_SECRET` / `SCHEMA_UML_PW_SALT` and disable the default admin (`SCHEMA_UML_ENABLE_DEFAULT_ADMIN=false`).
+
 ### 5) Authenticate (required)
 
 The backend now requires a bearer token for every endpoint except `/auth/login`. A default user is created at startup:

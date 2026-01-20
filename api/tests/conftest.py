@@ -3,13 +3,18 @@ import shutil
 from pathlib import Path
 import sys
 
-# Ensure all tests share an isolated data directory so SQLite state does not leak.
+# Ensure all tests share isolated resources (data dir + Mongo db).
 DATA_DIR = Path(__file__).resolve().parent / "_tmp_data"
 if DATA_DIR.exists():
     shutil.rmtree(DATA_DIR)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 os.environ.setdefault("SCHEMA_UML_DATA_DIR", str(DATA_DIR))
+os.environ.setdefault("SCHEMA_UML_MONGO_DB", "schema_uml_test")
+os.environ.setdefault("SCHEMA_UML_ALLOW_INSECURE_DEFAULTS", "true")
+os.environ.setdefault("SCHEMA_UML_ENABLE_DEFAULT_ADMIN", "true")
+os.environ.setdefault("SCHEMA_UML_SECRET", "test-secret")
+os.environ.setdefault("SCHEMA_UML_PW_SALT", "test-salt")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -17,15 +22,16 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import api.auth as auth  # noqa: E402
 import api.edit_store as edit_store  # noqa: E402
+from api.mongo import get_db  # noqa: E402
 from api.main import app  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 
 def _reset_dbs():
-    if auth.DB_PATH.exists():
-        auth.DB_PATH.unlink()
-    if edit_store.DB_PATH.exists():
-        edit_store.DB_PATH.unlink()
+    db = get_db()
+    db["users"].drop()
+    db["workspaces"].drop()
+    db["custom_edits"].drop()
     auth.init_db()
     edit_store.init_db()
 

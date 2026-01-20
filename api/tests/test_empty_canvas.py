@@ -1,9 +1,16 @@
 from uuid import uuid4
 from api import edit_store
+from api.mongo import get_db
 
 
 def _pkg_name(prefix: str = "empty_pkg") -> str:
     return f"{prefix}_{uuid4().hex}"
+
+
+def _admin_user_id():
+    db = get_db()
+    doc = db["users"].find_one({"username": "admin"})
+    return str(doc["_id"]) if doc else None
 
 
 def test_empty_schema_returns_blank_graph(client):
@@ -56,12 +63,13 @@ def test_clearing_edits_removes_persisted_entries(client):
         params={"empty": True},
         json={"package": pkg, "name": "Transient"},
     )
-    stored = edit_store.list_edits(user_id=1, branch="develop", package=pkg)
+    admin_id = _admin_user_id()
+    stored = edit_store.list_edits(user_id=admin_id, branch="develop", package=pkg)
     assert stored
 
     resp = client.delete("/schema/custom-edits", params={"package": pkg, "branch": "develop"})
     assert resp.status_code == 200
     assert resp.json()["deleted"] >= 1
 
-    remaining = edit_store.list_edits(user_id=1, branch="develop", package=pkg)
+    remaining = edit_store.list_edits(user_id=admin_id, branch="develop", package=pkg)
     assert remaining == []

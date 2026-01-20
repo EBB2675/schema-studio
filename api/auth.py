@@ -23,6 +23,15 @@ from .settings import DEFAULT_BASE_PACKAGE, DEFAULT_BRANCH, DEFAULT_PACKAGE
 TOKEN_EXPIRES_HOURS = int(os.getenv("SCHEMA_UML_TOKEN_HOURS", "12"))
 SECRET_KEY = os.getenv("SCHEMA_UML_SECRET", "schema-uml-secret")
 PASSWORD_SALT = os.getenv("SCHEMA_UML_PW_SALT", "schema-uml-salt")
+APP_ENV = os.getenv("SCHEMA_UML_ENV", "dev").lower()
+ALLOW_INSECURE_DEFAULTS = os.getenv(
+    "SCHEMA_UML_ALLOW_INSECURE_DEFAULTS",
+    "true" if APP_ENV != "prod" else "false",
+).lower() == "true"
+ENABLE_DEFAULT_ADMIN = os.getenv(
+    "SCHEMA_UML_ENABLE_DEFAULT_ADMIN",
+    "true" if ALLOW_INSECURE_DEFAULTS else "false",
+).lower() == "true"
 USERS_COLLECTION = "users"
 WORKSPACES_COLLECTION = "workspaces"
 
@@ -31,7 +40,18 @@ def _hash_password(password: str) -> str:
     return hashlib.sha256(f"{password}{PASSWORD_SALT}".encode()).hexdigest()
 
 
+def _validate_security_settings() -> None:
+    if ALLOW_INSECURE_DEFAULTS:
+        return
+    if SECRET_KEY == "schema-uml-secret" or PASSWORD_SALT == "schema-uml-salt":
+        raise RuntimeError(
+            "Set SCHEMA_UML_SECRET and SCHEMA_UML_PW_SALT for non-development use "
+            "(or set SCHEMA_UML_ALLOW_INSECURE_DEFAULTS=true to continue with defaults)."
+        )
+
+
 def init_db() -> None:
+    _validate_security_settings()
     db = get_db()
     db[USERS_COLLECTION].create_index("username", unique=True)
     db[WORKSPACES_COLLECTION].create_index("user_id", unique=True)
@@ -39,6 +59,8 @@ def init_db() -> None:
 
 
 def ensure_default_user() -> None:
+    if not ENABLE_DEFAULT_ADMIN:
+        return
     username = os.getenv("SCHEMA_UML_DEFAULT_USER", "admin")
     password = os.getenv("SCHEMA_UML_DEFAULT_PASSWORD", "admin")
 

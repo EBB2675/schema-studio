@@ -10,6 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from api import edit_store, main
 from api.settings import DEFAULT_BRANCH
+from api.mongo import get_db
 
 
 def _create_dummy_package(tmp_path: Path) -> str:
@@ -35,6 +36,12 @@ class TargetSection:
     return pkg_name
 
 
+def _admin_user_id():
+    db = get_db()
+    doc = db["users"].find_one({"username": "admin"})
+    return str(doc["_id"]) if doc else None
+
+
 def test_persisted_edits_are_replayed(client, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     pkg_name = _create_dummy_package(tmp_path)
     monkeypatch.syspath_prepend(str(tmp_path))
@@ -52,7 +59,8 @@ def test_persisted_edits_are_replayed(client, tmp_path: Path, monkeypatch: pytes
     assert create_resp.status_code == 200
     create_payload = create_resp.json()
     assert create_payload["persisted_edit"]["quantity_name"] == "user_defined"
-    stored = edit_store.list_edits(user_id=1, branch=DEFAULT_BRANCH, package=pkg_name)
+    admin_id = _admin_user_id()
+    stored = edit_store.list_edits(user_id=admin_id, branch=DEFAULT_BRANCH, package=pkg_name)
     assert stored
 
     # Subsequent schema fetch should replay the persisted edit onto the graph
