@@ -38,6 +38,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.caddy
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-/api}
     environment:
       CADDY_DOMAIN: ${CADDY_DOMAIN:-localhost}
     ports:
