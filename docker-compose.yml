@@ -27,6 +27,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.caddy
+    environment:
+      CADDY_DOMAIN: ${CADDY_DOMAIN:-localhost}
     ports:
       - "80:80"
       - "443:443"

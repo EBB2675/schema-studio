@@ -1,4 +1,4 @@
-:80
+{$CADDY_DOMAIN:localhost}
 
 root * /srv
 encode gzip zstd
