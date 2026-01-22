@@ -22,7 +22,7 @@ services:
     restart: unless-stopped
 
   mongo:
-    image: mongo:6
+    image: mongo:6.0.13
     volumes:
       - mongo-data:/data/db
     restart: unless-stopped
