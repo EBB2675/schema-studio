@@ -1,0 +1,43 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    environment:
+      SCHEMA_UML_REPO: /schema-repo
+      SCHEMA_UML_MONGO_URI: mongodb://mongo:27017
+      SCHEMA_UML_MONGO_DB: schema_uml
+      SCHEMA_UML_SECRET: ${SCHEMA_UML_SECRET}
+      SCHEMA_UML_PW_SALT: ${SCHEMA_UML_PW_SALT}
+      SCHEMA_UML_ENABLE_DEFAULT_ADMIN: "false"
+      SCHEMA_UML_ALLOW_INSECURE_DEFAULTS: "false"
+    volumes:
+      - ${SCHEMA_UML_REPO_HOST}:/schema-repo:ro
+    depends_on:
+      - mongo
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:6
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+
+  caddy:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
+  caddy-data:
+  caddy-config:
