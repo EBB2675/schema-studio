@@ -13,7 +13,7 @@ services:
       SCHEMA_UML_ENABLE_DEFAULT_ADMIN: "false"
       SCHEMA_UML_ALLOW_INSECURE_DEFAULTS: "false"
     volumes:
-      - ${SCHEMA_UML_REPO_HOST}:/schema-repo:ro
+      - ${SCHEMA_UML_REPO_HOST:?set SCHEMA_UML_REPO_HOST to your local schema repo path}:/schema-repo:ro
       - schema-data:/schema-data
     depends_on:
       - mongo
