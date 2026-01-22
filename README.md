@@ -5,6 +5,7 @@ Interactive editor for data models.
 Currently defaults to NOMAD-compatible schemas (`nomad-simulations`) but can point to any schema repo you configure.
 
 Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
+Deployment: **Docker Compose + Caddy** (optional).
 
 - Visualizes **sections** as UML cards (attributes = quantities, edges = subsections).
 - Right-hand **Doc Panel** shows the **class docstring** and a **clickable list of quantities**.
@@ -153,6 +154,51 @@ npm run test:contracts
 ```
 
 ---
+
+## 🧱 Deployment (Docker Compose)
+
+Production-leaning single-host setup with HTTPS via Caddy, a FastAPI API container,
+MongoDB, and a read-only mount of the datamodel repo.
+
+### Architecture 
+```
+Internet
+  |
+Caddy (:80/:443)
+  |-- / (static frontend)
+  |-- /api -> FastAPI
+  |
+Docker network
+  |-- api (FastAPI + extractor)
+  |-- mongo (persistent)
+  |-- schema repo (host mount, read-only)
+  |-- schema-data (named volume for repo cache/worktrees)
+```
+
+### 1) Create `.env`
+```bash
+cp .env.example .env
+```
+Fill in:
+- `SCHEMA_UML_REPO_HOST=/absolute/path/to/your/schema-repo`
+- `SCHEMA_UML_SECRET=...` (long random string)
+- `SCHEMA_UML_PW_SALT=...` (long random string)
+- `CADDY_DOMAIN=localhost` for local HTTP, or your real domain for HTTPS
+- `VITE_API_BASE=/api`
+
+### 2) Build and run
+```bash
+docker compose up --build -d
+```
+
+### 3) Open the app
+- `http://localhost` (or `https://your-domain` if you set a real domain)
+
+### Notes
+- The API image bakes in schema dependencies (`nomad-lab[infrastructure]`, `matid`)
+  so startup is fast and repeatable.
+- Set `SCHEMA_UML_INSTALL_SCHEMA_DEPS=false` (default) to avoid runtime installs.
+- The backend stores git mirrors/worktrees under `/schema-data` (named volume).
 
 ## 🧠 How to Use
 
