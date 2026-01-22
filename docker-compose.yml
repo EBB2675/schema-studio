@@ -7,12 +7,14 @@ services:
       SCHEMA_UML_REPO: /schema-repo
       SCHEMA_UML_MONGO_URI: mongodb://mongo:27017
       SCHEMA_UML_MONGO_DB: schema_uml
+      SCHEMA_UML_DATA_DIR: /schema-data
       SCHEMA_UML_SECRET: ${SCHEMA_UML_SECRET:?set SCHEMA_UML_SECRET}
       SCHEMA_UML_PW_SALT: ${SCHEMA_UML_PW_SALT:?set SCHEMA_UML_PW_SALT}
       SCHEMA_UML_ENABLE_DEFAULT_ADMIN: "false"
       SCHEMA_UML_ALLOW_INSECURE_DEFAULTS: "false"
     volumes:
       - ${SCHEMA_UML_REPO_HOST}:/schema-repo:ro
+      - schema-data:/schema-data
     depends_on:
       - mongo
     restart: unless-stopped
@@ -41,5 +43,6 @@ services:
 
 volumes:
   mongo-data:
+  schema-data:
   caddy-data:
   caddy-config:
