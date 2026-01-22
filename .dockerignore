@@ -1,0 +1,6 @@
+**/node_modules
+**/.vite
+web/dist
+api/_data
+.git
+.DS_Store
