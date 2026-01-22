@@ -183,7 +183,7 @@ Fill in:
 - `SCHEMA_UML_REPO_HOST=/absolute/path/to/your/schema-repo`
 - `SCHEMA_UML_SECRET=...` (long random string)
 - `SCHEMA_UML_PW_SALT=...` (long random string)
-- `CADDY_DOMAIN=localhost` for local HTTP, or your real domain for HTTPS
+- `CADDY_DOMAIN=localhost` for local use (Caddy will likely enable HTTPS with a local cert); use your real domain for public HTTPS
 - `VITE_API_BASE=/api`
 
 ### 2) Build and run
@@ -192,7 +192,7 @@ docker compose up --build -d
 ```
 
 ### 3) Open the app
-- `http://localhost` (or `https://your-domain` if you set a real domain)
+- `https://localhost` (or `https://your-domain` if you set a real domain)
 
 ### Notes
 - The API image bakes in schema dependencies (`nomad-lab[infrastructure]`, `matid`)

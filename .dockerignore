@@ -4,3 +4,5 @@ web/dist
 api/_data
 .git
 .DS_Store
+.env
+**/.env
