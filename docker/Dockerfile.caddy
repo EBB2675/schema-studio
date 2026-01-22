@@ -1,0 +1,16 @@
+FROM node:20.19-alpine AS web-build
+
+WORKDIR /web
+
+COPY web/package.json web/package-lock.json /web/
+RUN npm ci
+
+COPY web /web
+ARG VITE_API_BASE=/api
+ENV VITE_API_BASE=${VITE_API_BASE}
+RUN npm run build
+
+FROM caddy:2-alpine
+
+COPY docker/Caddyfile /etc/caddy/Caddyfile
+COPY --from=web-build /web/dist /srv

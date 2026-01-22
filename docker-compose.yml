@@ -1,0 +1,59 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    environment:
+      SCHEMA_UML_REPO: /schema-repo
+      SCHEMA_UML_MONGO_URI: mongodb://mongo:27017
+      SCHEMA_UML_MONGO_DB: schema_uml
+      SCHEMA_UML_DATA_DIR: /schema-data
+      SCHEMA_UML_SECRET: ${SCHEMA_UML_SECRET:?set SCHEMA_UML_SECRET}
+      SCHEMA_UML_PW_SALT: ${SCHEMA_UML_PW_SALT:?set SCHEMA_UML_PW_SALT}
+      SCHEMA_UML_ENABLE_DEFAULT_ADMIN: "false"
+      SCHEMA_UML_ALLOW_INSECURE_DEFAULTS: "false"
+      SCHEMA_UML_INSTALL_SCHEMA_DEPS: ${SCHEMA_UML_INSTALL_SCHEMA_DEPS:-false}
+      PYTHONPATH: /schema-repo/src
+    volumes:
+      - ${SCHEMA_UML_REPO_HOST:?set SCHEMA_UML_REPO_HOST to your local schema repo path}:/schema-repo:ro
+      - schema-data:/schema-data
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:6.0.13
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+
+  caddy:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.caddy
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-/api}
+    environment:
+      CADDY_DOMAIN: ${CADDY_DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - api
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
+  schema-data:
+  caddy-data:
+  caddy-config:

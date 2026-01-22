@@ -8,3 +8,5 @@ httpx
 PyJWT
 motor>=3.3.1
 pytest>=7
+nomad-lab[infrastructure]==1.4.0
+matid==2.1.3

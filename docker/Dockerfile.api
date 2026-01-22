@@ -1,0 +1,22 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+COPY api/requirements.txt /app/api/requirements.txt
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git build-essential \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir -r /app/api/requirements.txt
+
+COPY api /app/api
+COPY extractor /app/extractor
+COPY docker/entrypoint.api.sh /app/entrypoint.api.sh
+RUN chmod +x /app/entrypoint.api.sh
+
+EXPOSE 5179
+
+ENTRYPOINT ["/app/entrypoint.api.sh"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "5179"]
