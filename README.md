@@ -90,6 +90,7 @@ What it does:
 - Starts the FastAPI backend on **5179** (async with Motor + MongoDB).
 - Expects MongoDB (default `mongodb://localhost:27017`, database `schema_uml`); override via `SCHEMA_UML_MONGO_URI` / `SCHEMA_UML_MONGO_DB`.
 - Verifies **SCHEMA_UML_REPO / NOMAD_SIM_REPO / GIT_REPO_DIR** points to a **local git repo** (a subdirectory of a clone is fine; fails fast otherwise).
+- Limits extractor runtime with `SCHEMA_UML_EXTRACTOR_TIMEOUT_SECONDS` (default `120`).
 - Ensures `web/node_modules` exists (runs `npm install` on first launch).
 - Starts the Vite frontend on **5173**.
 - Stops both together on **Ctrl+C** (no manual job control needed).
@@ -185,6 +186,7 @@ Fill in:
 - `SCHEMA_UML_PW_SALT=...` (long random string)
 - `CADDY_DOMAIN=localhost` for local use (Caddy will likely enable HTTPS with a local cert); use your real domain for public HTTPS
 - `VITE_API_BASE=/api`
+- `SCHEMA_UML_EXTRACTOR_TIMEOUT_SECONDS=120` (optional)
 
 ### 2) Build and run
 ```bash

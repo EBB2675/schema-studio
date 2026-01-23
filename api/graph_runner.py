@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Dict, Any
 from .settings import EXTRACTOR_ENTRY
 
+EXTRACTOR_TIMEOUT_SECONDS = int(os.getenv("SCHEMA_UML_EXTRACTOR_TIMEOUT_SECONDS", "120"))
+
 # Path to *this* project (so we can import `extractor.*`)
 APP_ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,14 +58,20 @@ def build_graph_in_subprocess(
     for k, v in kwargs.items():
         if v is not None:
             args.append(f"--{k}={v}")
-    proc = subprocess.run(
-        [sys.executable, "-c", RUNNER_SCRIPT, *args],
-        cwd=str(worktree),
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", RUNNER_SCRIPT, *args],
+            cwd=str(worktree),
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=EXTRACTOR_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(
+            f"Extractor timed out after {EXTRACTOR_TIMEOUT_SECONDS}s for package '{package}'."
+        ) from exc
     if proc.returncode != 0:
         raise RuntimeError(f"Extractor failed:\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
     return json.loads(proc.stdout)
