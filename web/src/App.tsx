@@ -1732,12 +1732,13 @@ export default function App() {
     >
       <aside className="sidebar">
         <div className="brand-card">
-          <p className="eyebrow">Schema explorer</p>
           <h3 className="brand-title">
             <span className="pulse" />
             SchemaStudio
           </h3>
-          <p className="subdued">Craft diagrams, compare branches, and edit schemas.</p>
+          <p className="subdued">
+            Craft diagrams, compare branches, and edit schemas. Currently defaults to nomad-simulations.
+          </p>
           <div className="row" style={{ marginTop: 10 }}>
             <span className="tag">{loading || diffLoading ? "Working…" : "Ready"}</span>
             {selectedClassName ? <span className="tag">Selected: {selectedClassName}</span> : null}
@@ -2108,12 +2109,30 @@ export default function App() {
             </>
           ) : (
             <div className="empty-state">
-              <div style={{ fontSize: 18, marginBottom: 8 }}>Build a diagram to get started</div>
-              <div>
-                Select a package (roots load automatically), pick a root, then “Build graph” — or toggle “Start from
-                empty canvas” to draw your own schema from scratch. You can also compare two branches.
+              <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 16 }}>
+                Build a diagram to get started
               </div>
-              <div style={{ marginTop: 12 }}>
+              <div style={{ lineHeight: 1.5, display: "grid", gap: 10 }}>
+                <div>
+                  1) Go to <strong>Workspace</strong> and pick a root, then hit “Build graph” to load the nomad-simulations schema.
+                </div>
+                <div>
+                  2) See the <strong>Documentation</strong> panel on the right to read class/quantity details as you browse.
+                </div>
+                <div>
+                  3) Switch to <strong>Editable mode</strong> to add, rename, or remove classes and quantities.
+                </div>
+                <div>
+                  4) Prefer to sketch your own? Turn on “Start from empty canvas” to drop in custom classes/quantities without loading existing schema.
+                </div>
+                <div>
+                  5) <strong>Compare branches</strong> to see how two git branches differ in structure.
+                </div>
+                <div>
+                  6) Communicate your edits via <strong>Audit trail</strong> - export or clear the log anytime.
+                </div>
+              </div>
+              <div style={{ marginTop: 14 }}>
                 <button className="btn secondary" type="button" onClick={() => toggleEmptyMode()}>
                   {emptyCanvasActive ? "Back to schema graph" : "+ Start from empty canvas"}
                 </button>
