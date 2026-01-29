@@ -13,7 +13,7 @@ import type { AuditTrailEntry, QuantityNode, UmlClassNode, UmlGraphState } from 
 import { ensureDiffResponse, ensureGraphResponse, type ApiEdge, type ApiGraph, type ApiNode, type DiffResponse } from "./types/api";
 import type { WorkspaceState } from "./types/workspace";
 import { API_FEATURE_HEADER, API_VERSION, API_VERSION_HEADER, DEFAULT_FEATURE_FLAGS } from "./constants/api";
-import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_ROOT, WORKSPACE_PRESETS } from "./constants/defaults";
+import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_ROOT } from "./constants/defaults";
 import { useWorkspaceStore } from "./store/workspace";
 import { fqidFromParts, normalizeId, normalizeLabel, normalizeModule } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
@@ -1732,12 +1732,13 @@ export default function App() {
     >
       <aside className="sidebar">
         <div className="brand-card">
-          <p className="eyebrow">Schema explorer</p>
           <h3 className="brand-title">
             <span className="pulse" />
             SchemaStudio
           </h3>
-          <p className="subdued">Craft diagrams, compare branches, and edit schemas.</p>
+          <p className="subdued">
+            Craft diagrams, compare branches, and edit schemas. Currently defaults to nomad-simulations.
+          </p>
           <div className="row" style={{ marginTop: 10 }}>
             <span className="tag">{loading || diffLoading ? "Working…" : "Ready"}</span>
             {selectedClassName ? <span className="tag">Selected: {selectedClassName}</span> : null}
@@ -1777,56 +1778,17 @@ export default function App() {
           </div>
         ) : null}
 
-        <CollapsibleSection title="Workspace" hint="Switch modes on the fly">
-          <div className="row" style={{ gap: 10 }}>
-            <button
-              className="btn"
-              onClick={() => setMode((m) => (m === "overview" ? "graph" : "overview"))}
-              title="Toggle bird's-eye view"
-            >
-              {mode === "overview" ? "Back to diagram" : "Bird's-eye view"}
-            </button>
-            {mode === "overview" && (
-              <div style={{ flex: 1 }}>
-                <label className="label" style={{ margin: 0 }}>Branch</label>
-                <select
-                  className="select"
-                  value={overviewBranch}
-                  onChange={(e) => handleBranchSelect(e.target.value)}
-                >
-                  {[overviewBranch || DEFAULT_BRANCH, ...branches.filter((b) => b !== overviewBranch)].map((b) => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-          <div className="workspace-presets">
-            {WORKSPACE_PRESETS.map((ws) => {
-              return (
-                <div key={ws.namespace} className="preset-block">
-                  <button
-                    className={`workspace-preset-btn ${normalizedNamespace === ws.namespace ? "active" : ""}`}
-                    onClick={() => {
-                      handleNamespaceChange(ws.namespace);
-                      if (ws.branch) {
-                        handleBranchSelect(ws.branch);
-                      }
-                      if (ws.pkg) handlePackageSelect(ws.pkg);
-                      if (ws.root) setRoot(ws.root);
-                    }}
-                    title={`Set base namespace to ${ws.namespace}`}
-                  >
-                    {ws.label}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </CollapsibleSection>
-
-        <CollapsibleSection title="Package & filters" hint="Pick a backend package and fine-tune the graph">
+        <CollapsibleSection title="Workspace" hint="Pick a backend package and fine-tune the graph">
           <div className="action-stack">
+            <div className="row" style={{ gap: 10 }}>
+              <button
+                className="btn"
+                onClick={() => setMode((m) => (m === "overview" ? "graph" : "overview"))}
+                title="Toggle bird's-eye view"
+              >
+                {mode === "overview" ? "Back to diagram" : "Bird's-eye view"}
+              </button>
+            </div>
             <div className="row" style={{ gap: 10, alignItems: "flex-end" }}>
               <div style={{ flex: 1 }}>
                 <label className="label">Choose from branch</label>
@@ -2147,12 +2109,30 @@ export default function App() {
             </>
           ) : (
             <div className="empty-state">
-              <div style={{ fontSize: 18, marginBottom: 8 }}>Build a diagram to get started</div>
-              <div>
-                Select a package (roots load automatically), pick a root, then “Build graph” — or toggle “Start from
-                empty canvas” to draw your own schema from scratch. You can also compare two branches.
+              <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 16 }}>
+                Build a diagram to get started
               </div>
-              <div style={{ marginTop: 12 }}>
+              <div style={{ lineHeight: 1.5, display: "grid", gap: 10 }}>
+                <div>
+                  1) Go to <strong>Workspace</strong> and pick a root, then hit “Build graph” to load the nomad-simulations schema.
+                </div>
+                <div>
+                  2) See the <strong>Documentation</strong> panel on the right to read class/quantity details as you browse.
+                </div>
+                <div>
+                  3) Switch to <strong>Editable mode</strong> to add, rename, or remove classes and quantities.
+                </div>
+                <div>
+                  4) Prefer to sketch your own? Turn on “Start from empty canvas” to drop in custom classes/quantities without loading existing schema.
+                </div>
+                <div>
+                  5) <strong>Compare branches</strong> to see how two git branches differ in structure.
+                </div>
+                <div>
+                  6) Communicate your edits via <strong>Audit trail</strong> - export or clear the log anytime.
+                </div>
+              </div>
+              <div style={{ marginTop: 14 }}>
                 <button className="btn secondary" type="button" onClick={() => toggleEmptyMode()}>
                   {emptyCanvasActive ? "Back to schema graph" : "+ Start from empty canvas"}
                 </button>
