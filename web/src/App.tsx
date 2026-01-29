@@ -13,7 +13,7 @@ import type { AuditTrailEntry, QuantityNode, UmlClassNode, UmlGraphState } from 
 import { ensureDiffResponse, ensureGraphResponse, type ApiEdge, type ApiGraph, type ApiNode, type DiffResponse } from "./types/api";
 import type { WorkspaceState } from "./types/workspace";
 import { API_FEATURE_HEADER, API_VERSION, API_VERSION_HEADER, DEFAULT_FEATURE_FLAGS } from "./constants/api";
-import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_ROOT, WORKSPACE_PRESETS } from "./constants/defaults";
+import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_ROOT } from "./constants/defaults";
 import { useWorkspaceStore } from "./store/workspace";
 import { fqidFromParts, normalizeId, normalizeLabel, normalizeModule } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
@@ -1777,56 +1777,17 @@ export default function App() {
           </div>
         ) : null}
 
-        <CollapsibleSection title="Workspace" hint="Switch modes on the fly">
-          <div className="row" style={{ gap: 10 }}>
-            <button
-              className="btn"
-              onClick={() => setMode((m) => (m === "overview" ? "graph" : "overview"))}
-              title="Toggle bird's-eye view"
-            >
-              {mode === "overview" ? "Back to diagram" : "Bird's-eye view"}
-            </button>
-            {mode === "overview" && (
-              <div style={{ flex: 1 }}>
-                <label className="label" style={{ margin: 0 }}>Branch</label>
-                <select
-                  className="select"
-                  value={overviewBranch}
-                  onChange={(e) => handleBranchSelect(e.target.value)}
-                >
-                  {[overviewBranch || DEFAULT_BRANCH, ...branches.filter((b) => b !== overviewBranch)].map((b) => (
-                    <option key={b} value={b}>{b}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-          <div className="workspace-presets">
-            {WORKSPACE_PRESETS.map((ws) => {
-              return (
-                <div key={ws.namespace} className="preset-block">
-                  <button
-                    className={`workspace-preset-btn ${normalizedNamespace === ws.namespace ? "active" : ""}`}
-                    onClick={() => {
-                      handleNamespaceChange(ws.namespace);
-                      if (ws.branch) {
-                        handleBranchSelect(ws.branch);
-                      }
-                      if (ws.pkg) handlePackageSelect(ws.pkg);
-                      if (ws.root) setRoot(ws.root);
-                    }}
-                    title={`Set base namespace to ${ws.namespace}`}
-                  >
-                    {ws.label}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </CollapsibleSection>
-
-        <CollapsibleSection title="Package & filters" hint="Pick a backend package and fine-tune the graph">
+        <CollapsibleSection title="Workspace" hint="Pick a backend package and fine-tune the graph">
           <div className="action-stack">
+            <div className="row" style={{ gap: 10 }}>
+              <button
+                className="btn"
+                onClick={() => setMode((m) => (m === "overview" ? "graph" : "overview"))}
+                title="Toggle bird's-eye view"
+              >
+                {mode === "overview" ? "Back to diagram" : "Bird's-eye view"}
+              </button>
+            </div>
             <div className="row" style={{ gap: 10, alignItems: "flex-end" }}>
               <div style={{ flex: 1 }}>
                 <label className="label">Choose from branch</label>
