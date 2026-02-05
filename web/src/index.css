@@ -747,7 +747,7 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 5;
+  z-index: 100;
   padding: 10px;
 }
 
@@ -788,11 +788,24 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   color: var(--text-primary);
   backdrop-filter: blur(6px);
   font-size: 12px;
+  z-index: 2;
+  isolation: isolate;
+  overflow: visible;
+  cursor: grab;
 }
 
 .uml-card.is-selected {
   border-color: var(--accent);
   box-shadow: 0 18px 38px rgba(79, 70, 229, 0.35);
+  z-index: 40;
+}
+
+.uml-card.has-inline {
+  z-index: 50;
+}
+
+.uml-card.dragging {
+  cursor: grabbing;
 }
 
 .uml-card-header {
@@ -844,9 +857,6 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
 
 .uml-inline-form {
   position: absolute;
-  top: 10px;
-  left: 100%;
-  margin-left: 12px;
   width: 230px;
   max-width: 260px;
   max-height: calc(100vh - 60px);
@@ -860,15 +870,12 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   flex-direction: column;
   gap: 8px;
   pointer-events: auto;
+  z-index: 70;
 }
 
-.uml-inline-wrapper {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
+.uml-inline-portal {
+  position: fixed;
+  pointer-events: auto;
 }
 
 .uml-plus {

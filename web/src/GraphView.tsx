@@ -109,12 +109,14 @@ export default function GraphView({
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
+  const overlayRef = useRef<HTMLDivElement | null>(null);
   const [cardBoxes, setCardBoxes] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({});
   const [viewport, setViewport] = useState<{ pan: { x: number; y: number }; zoom: number }>({
     pan: { x: 0, y: 0 },
     zoom: 1,
   });
   const [activeQuantityTarget, setActiveQuantityTarget] = useState<string | null>(null);
+  const dragRef = useRef<{ id: string; startX: number; startY: number; nodeX: number; nodeY: number } | null>(null);
   const [quantityDraft, setQuantityDraft] = useState<{ quantityName: string; dtype: string; docstring: string }>({
     quantityName: "",
     dtype: SUPPORTED_DTYPES[0],
@@ -129,6 +131,7 @@ export default function GraphView({
   });
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [classError, setClassError] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const setSelected = useMemo(() => useSelection.getState().setSelected, []);
 
@@ -741,12 +744,76 @@ export default function GraphView({
     [cardBoxes, classCards]
   );
 
+  const stopDrag = useCallback(() => {
+    dragRef.current = null;
+    setDraggingId(null);
+    window.removeEventListener("mousemove", onDragMove);
+    window.removeEventListener("mouseup", onDragEnd);
+  }, []);
+
+  const onDragMove = useCallback(
+    (e: MouseEvent) => {
+      const state = dragRef.current;
+      if (!state) return;
+      const cy = cyRef.current;
+      if (!cy) return;
+      const node = cy.getElementById(state.id);
+      if (!node || node.empty()) return;
+      const dx = (e.clientX - state.startX) / viewport.zoom;
+      const dy = (e.clientY - state.startY) / viewport.zoom;
+      node.position({ x: state.nodeX + dx, y: state.nodeY + dy });
+      cy.emit("render");
+    },
+    [viewport.zoom]
+  );
+
+  const onDragEnd = useCallback(() => {
+    stopDrag();
+  }, [stopDrag]);
+
+  const startDrag = useCallback(
+    (clsId: string, e: React.MouseEvent) => {
+      if (e.button !== 0) return;
+      const target = e.target as HTMLElement;
+      if (target.closest(".uml-inline-form") || target.closest(".uml-plus") || target.closest(".canvas-toolbar") || target.closest(".canvas-form")) {
+        return;
+      }
+      const cy = cyRef.current;
+      if (!cy) return;
+      const node = cy.getElementById(clsId);
+      if (!node || node.empty()) return;
+      e.preventDefault();
+      const pos = node.position();
+      dragRef.current = { id: clsId, startX: e.clientX, startY: e.clientY, nodeX: pos.x, nodeY: pos.y };
+      setDraggingId(clsId);
+      window.addEventListener("mousemove", onDragMove);
+      window.addEventListener("mouseup", onDragEnd);
+    },
+    [onDragEnd, onDragMove]
+  );
+
+  useEffect(() => {
+    return () => stopDrag();
+  }, [stopDrag]);
+
+  const inlinePortal = useMemo(() => {
+    if (!activeQuantityTarget || !overlayRef.current) return null;
+    const targetCard = cardViews.find((c) => c.cls.id === activeQuantityTarget);
+    const box = targetCard?.box;
+    if (!box) return null;
+    const overlayRect = overlayRef.current.getBoundingClientRect();
+    const left = overlayRect.left + viewport.pan.x + box.x * viewport.zoom + box.w * viewport.zoom + 12;
+    const top = overlayRect.top + viewport.pan.y + box.y * viewport.zoom + 10;
+    return { cls: targetCard.cls, pos: { top, left } };
+  }, [activeQuantityTarget, cardViews, viewport]);
+
   return (
     <div className="graph" style={{ position: "relative" }}>
       <div className={`cy-canvas${showEditingUi ? " is-hidden" : ""}`} ref={containerRef} />
       {showEditingUi && (
         <div
           className="uml-overlay"
+          ref={overlayRef}
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setSelected(null);
@@ -832,16 +899,28 @@ export default function GraphView({
             {cardViews.map(({ cls, box }) => {
               if (!box) return null;
               const isSelected = selectedClassId === cls.id;
+              const hasInline = activeQuantityTarget === cls.id;
+              const zIndex = hasInline ? 1200 : isSelected ? 900 : 200;
               const moduleLabel = cls.module ? (cls.module.split(".").pop() || cls.module) : null;
               return (
                 <div
                   key={cls.id}
-                  className={`uml-card ${isSelected ? "is-selected" : ""}`}
+                  className={`uml-card ${isSelected ? "is-selected" : ""} ${hasInline ? "has-inline" : ""} ${draggingId === cls.id ? "dragging" : ""}`}
                   style={{
                     transform: `translate(${box.x}px, ${box.y}px)`,
                     width: Math.max(box.w + 24, 200),
                     minWidth: 200,
+                    zIndex,
+                    pointerEvents: "auto",
                   }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (selectedClassId !== cls.id) {
+                      setActiveQuantityTarget(null);
+                      handleSelectClass(cls.id);
+                    }
+                  }}
+                  onMouseDown={(e) => startDrag(cls.id, e)}
                 >
                   <div className="uml-card-header">
                     <div>
@@ -876,68 +955,72 @@ export default function GraphView({
                     })}
                   </div>
 
-                  {editingEnabled && activeQuantityTarget === cls.id ? (
-                    <div className="uml-inline-wrapper">
-                      <form
-                        className="uml-inline-form"
-                        onClick={(e) => e.stopPropagation()}
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          handleQuantitySubmit(cls);
-                        }}
-                      >
-                        <div className="label" style={{ marginBottom: 6 }}>New quantity</div>
-                        <input
-                          className="input"
-                          placeholder="name"
-                          value={quantityDraft.quantityName}
-                          onChange={(e) => setQuantityDraft((prev) => ({ ...prev, quantityName: e.target.value }))}
-                        />
-                        <select
-                          className="select"
-                          value={quantityDraft.dtype}
-                          onChange={(e) => setQuantityDraft((prev) => ({ ...prev, dtype: e.target.value }))}
-                        >
-                          {SUPPORTED_DTYPES.map((t) => (
-                            <option key={t} value={t}>
-                              {t}
-                            </option>
-                          ))}
-                        </select>
-                        <textarea
-                          className="input"
-                          placeholder="Docstring (optional)"
-                          style={{ minHeight: 60, resize: "vertical" }}
-                          value={quantityDraft.docstring}
-                          onChange={(e) => setQuantityDraft((prev) => ({ ...prev, docstring: e.target.value }))}
-                        />
-                        {inlineError ? <div className="inline-error">{inlineError}</div> : null}
-                        <div className="row" style={{ justifyContent: "flex-end" }}>
-                          <button
-                            className="btn secondary"
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setActiveQuantityTarget(null);
-                            }}
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            className="btn"
-                            type="submit"
-                            disabled={creatingQuantityFor === cls.id}
-                          >
-                            {creatingQuantityFor === cls.id ? "Adding…" : "Add"}
-                          </button>
-                        </div>
-                      </form>
-                    </div>
-                  ) : null}
                 </div>
               );
             })}
           </div>
+
+          {editingEnabled && inlinePortal ? (
+            <div
+              className="uml-inline-portal"
+              style={{ position: "fixed", top: inlinePortal.pos.top, left: inlinePortal.pos.left, zIndex: 5000, pointerEvents: "auto" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <form
+                className="uml-inline-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleQuantitySubmit(inlinePortal.cls);
+                }}
+              >
+                <div className="label" style={{ marginBottom: 6 }}>New quantity</div>
+                <input
+                  className="input"
+                  placeholder="name"
+                  value={quantityDraft.quantityName}
+                  onChange={(e) => setQuantityDraft((prev) => ({ ...prev, quantityName: e.target.value }))}
+                />
+                <select
+                  className="select"
+                  value={quantityDraft.dtype}
+                  onChange={(e) => setQuantityDraft((prev) => ({ ...prev, dtype: e.target.value }))}
+                >
+                  {SUPPORTED_DTYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+                <textarea
+                  className="input"
+                  placeholder="Docstring (optional)"
+                  style={{ minHeight: 60, resize: "vertical" }}
+                  value={quantityDraft.docstring}
+                  onChange={(e) => setQuantityDraft((prev) => ({ ...prev, docstring: e.target.value }))}
+                />
+                {inlineError ? <div className="inline-error">{inlineError}</div> : null}
+                <div className="row" style={{ justifyContent: "flex-end" }}>
+                  <button
+                    className="btn secondary"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveQuantityTarget(null);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="btn"
+                    type="submit"
+                    disabled={creatingQuantityFor === inlinePortal.cls.id}
+                  >
+                    {creatingQuantityFor === inlinePortal.cls.id ? "Adding…" : "Add"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : null}
         </div>
       )}
     </div>
