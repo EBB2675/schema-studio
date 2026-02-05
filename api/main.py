@@ -13,6 +13,7 @@ from extractor.graph_builder import build_graph, list_sections, _root_namespace
 from extractor.usage_index import UsageEntry, get_usage_for_section
 
 from .routes_git import router as git_router
+from .routes_tasks import router as tasks_router
 from .settings import SCHEMA_REPO, DEFAULT_BASE_PACKAGE, DEFAULT_BRANCH, repo_for_base_namespace
 from .mongo import connect_to_mongo, close_mongo
 from .auth import (
@@ -92,6 +93,7 @@ app.add_middleware(
 )
 
 app.include_router(git_router)
+app.include_router(tasks_router)
 
 
 @app.post("/auth/login")

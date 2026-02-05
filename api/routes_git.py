@@ -4,11 +4,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from pathlib import Path
 from typing import Optional, List
-from .settings import DEFAULT_PACKAGE, DEFAULT_BASE_PACKAGE, DEFAULT_BRANCH, repo_for_base_namespace
+from .settings import DEFAULT_PACKAGE, DEFAULT_BASE_PACKAGE, DEFAULT_BRANCH
 from .git_utils import list_branches, materialize_worktree
 from .graph_runner import build_graph_in_subprocess
 from .diff import diff_graphs
 from .auth import get_user_and_workspace, update_workspace, workspace_payload, db_dep
+from .repo_utils import (
+    bases_by_repo,
+    parse_base_packages,
+    primary_repo,
+    python_root,
+    list_modules_under,
+)
 
 router = APIRouter()
 
@@ -24,83 +31,6 @@ class DiffRequest(BaseModel):
     extractor: Optional[str] = None
 
 
-
-def _python_root(wt: Path) -> Path:
-    """
-    Return the directory under which Python packages live in the worktree.
-
-    In many NOMAD schemas this is typically <worktree>/src.
-    If that does not exist, fall back to the worktree root.
-    """
-    src = wt / "src"
-    return src if src.exists() else wt
-
-
-def _list_modules_under(root: Path, base_package: str) -> List[str]:
-    """
-    List all importable Python modules under the given base package.
-
-    Example:
-        root         = /.../worktrees/develop/src
-        base_package = "nomad_simulations.schema_packages"
-        → finds modules like:
-          "nomad_simulations.schema_packages.model_method",
-          "nomad_simulations.schema_packages.workflow.general", ...
-    """
-    parts = base_package.split(".")
-    pkg_dir = root.joinpath(*parts)
-    if not pkg_dir.exists():
-        return []
-
-    modules: set[str] = set()
-
-    for path in pkg_dir.rglob("*.py"):
-        # Compute module name relative to python root (src or repo root)
-        rel = path.relative_to(root)
-
-        # Strip .py suffix and convert path to dotted module path
-        rel_no_ext = rel.with_suffix("")
-        mod_name = ".".join(rel_no_ext.parts)
-
-        modules.add(mod_name)
-
-    return sorted(modules)
-
-
-def _parse_base_packages(raw: str) -> list[str]:
-    """Normalize a comma-separated list of base packages."""
-
-    return [chunk.strip() for chunk in raw.split(",") if chunk.strip()]
-
-
-def _bases_by_repo(base_packages: list[str]) -> dict[str, list[str]]:
-    mapping: dict[str, list[str]] = {}
-    for base in base_packages:
-        repo = repo_for_base_namespace(base)
-        mapping.setdefault(repo, []).append(base)
-    return mapping
-
-
-def _primary_repo(package: str | None, base_namespace: str | None) -> str:
-    if base_namespace:
-        bases = _parse_base_packages(base_namespace)
-        if bases:
-            return repo_for_base_namespace(bases[0])
-    if package:
-        # Use the top-level namespace to infer the owning repository
-        prefix = package.split(".")
-        for i in range(len(prefix), 0, -1):
-            candidate = ".".join(prefix[:i])
-            if candidate.startswith("nomad_measurements"):
-                return repo_for_base_namespace(candidate)
-        return repo_for_base_namespace(package)
-
-    defaults = _parse_base_packages(DEFAULT_BASE_PACKAGE)
-    if defaults:
-        return repo_for_base_namespace(defaults[0])
-    return repo_for_base_namespace(DEFAULT_BASE_PACKAGE)
-
-
 @router.get("/git/branches")
 async def api_branches(
     base_package: str | None = Query(None),
@@ -113,8 +43,8 @@ async def api_branches(
         if base_package:
             workspace = await update_workspace(db, user["id"], base_namespace=namespace)
 
-        bases = _parse_base_packages(namespace)
-        repos = _bases_by_repo(bases) if bases else {repo_for_base_namespace(DEFAULT_BASE_PACKAGE): []}
+        bases = parse_base_packages(namespace)
+        repos = bases_by_repo(bases) if bases else bases_by_repo([DEFAULT_BASE_PACKAGE])
 
         names: set[str] = set()
         errors: list[str] = []
@@ -153,7 +83,7 @@ async def api_packages(
             workspace = await update_workspace(db, user["id"], branch=branch_to_use, base_namespace=base_to_use)
 
         # materialize_worktree returns (worktree_path, sha)
-        base_packages = _parse_base_packages(base_to_use)
+        base_packages = parse_base_packages(base_to_use)
         if not base_packages:
             raise HTTPException(400, "Provide at least one base package")
 
@@ -161,7 +91,7 @@ async def api_packages(
         repo_shas: list[dict] = []
         errors: list[str] = []
 
-        for repo_src, bases in _bases_by_repo(base_packages).items():
+        for repo_src, bases in bases_by_repo(base_packages).items():
             try:
                 wt, sha = materialize_worktree(branch_to_use, repo_src)
             except Exception as e:
@@ -170,9 +100,9 @@ async def api_packages(
 
             repo_shas.append({"source": repo_src, "sha": sha})
 
-            root = _python_root(wt)
+            root = python_root(wt)
             for base in bases:
-                packages.update(_list_modules_under(root, base))
+                packages.update(list_modules_under(root, base))
 
         if not packages and errors:
             raise HTTPException(500, "; ".join(errors))
@@ -210,7 +140,7 @@ async def api_graph(
     branch = req.branch or workspace.get("branch") or DEFAULT_BRANCH
     workspace = await update_workspace(db, user["id"], branch=branch, package=pkg, base_namespace=namespace)
     try:
-        repo_src = _primary_repo(pkg, namespace)
+        repo_src = primary_repo(pkg, namespace)
         wt, sha = materialize_worktree(branch, repo_src)
         if empty:
             graph = {"package": pkg, "root": root, "nodes": [], "edges": []}
@@ -248,7 +178,7 @@ async def api_diff(
     namespace = base_namespace or workspace.get("base_namespace") or DEFAULT_BASE_PACKAGE
     workspace = await update_workspace(db, user["id"], branch=req.head, package=pkg, base_namespace=namespace)
     try:
-        repo_src = _primary_repo(pkg, namespace)
+        repo_src = primary_repo(pkg, namespace)
         wtb, shab = materialize_worktree(req.base, repo_src)
         wth, shah = materialize_worktree(req.head, repo_src)
 

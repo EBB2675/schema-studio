@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 API_PORT="${API_PORT:-5179}"
+API_HOST="${API_HOST:-127.0.0.1}"
 WEB_PORT="${WEB_PORT:-5173}"
 DEFAULT_SCHEMA_REPO="${HOME}/src/nomad-simulations"
 UVICORN_LOG_LEVEL="${UVICORN_LOG_LEVEL:-warning}"
@@ -136,7 +137,7 @@ if not ok:
 PY
 
 echo "Starting FastAPI backend on :${API_PORT}..."
-uvicorn --app-dir "${ROOT_DIR}" api.main:app --reload --port "${API_PORT}" --log-level "${UVICORN_LOG_LEVEL}" &
+uvicorn --app-dir "${ROOT_DIR}" api.main:app --reload --host "${API_HOST}" --port "${API_PORT}" --log-level "${UVICORN_LOG_LEVEL}" &
 API_PID=$!
 
 echo "Switching to frontend (web/)"

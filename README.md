@@ -39,120 +39,43 @@ Deployment: **Docker Compose + Caddy** (optional).
 - **Editable quantities/classes**: Toggle Editable mode to add classes (as inheritance or subsection relationships) and add, rename, or remove quantities from the selected class card (full editor, not just a viewer).
 - **Optional overlays**: Inheritance edges and dtype/shape metadata are toggles (inheritance now on by default so new class relationships are visible).
 - **Export**: Save the current graph as JSON or a PDF (PNG-backed) snapshot.
+- **Async extraction**: Graph builds and branch diffs run through Celery background jobs (Redis by default) so the API stays responsive under load. The UI polls task endpoints automatically; disable with `VITE_USE_TASK_API=false` if you prefer synchronous calls.
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (pick one)
 
-### 1) Clone
+### Option A — Docker Compose (easiest)
 ```bash
 git clone https://github.com/EBB2675/schema-studio.git
 cd schema-studio
+cp .env.example .env
+# set SCHEMA_UML_REPO_HOST to your local schema repo path, and set SCHEMA_UML_SECRET / SCHEMA_UML_PW_SALT
+docker compose up --build
 ```
+Then open https://localhost (Caddy handles API + frontend). Redis, Celery worker, Mongo, API, and frontend all start in this one command.
 
-### 2) Environment (Python 3.11) + MongoDB
-```bash
-conda create -n schema-studio python=3.11 -y
-conda activate schema-studio
-pip install -r api/requirements.txt
-# Frontend build requires Node 20.19+ (or 22.12+) for Vite.
-# ensure MongoDB is running on mongodb://localhost:27017 (default DB: schema_uml)
-# or override:
-# export SCHEMA_UML_MONGO_URI=mongodb://localhost:27017
-# export SCHEMA_UML_MONGO_DB=schema_uml
-```
+### Option B — Local dev (`dev.sh`) with one extra Redis + worker
+1) Create env: `conda create -n schema-studio python=3.11 -y && conda activate schema-studio`
+2) Install deps: `pip install -r api/requirements.txt`
+3) Run Redis (Docker is fine): `docker run --name schema-uml-redis -p 6379:6379 redis:7-alpine`
+4) Start Celery worker (new terminal):
+   ```bash
+   conda activate schema-studio
+   export CELERY_BROKER_URL=redis://localhost:6379/0
+   export CELERY_RESULT_BACKEND=redis://localhost:6379/1
+   celery -A api.celery_app.celery_app worker --loglevel=info
+   ```
+5) Start API + frontend (original terminal):
+   ```bash
+   export SCHEMA_UML_REPO=/path/to/your/schema-repo
+   ./dev.sh
+   ```
+6) Log in at http://localhost:5173 with `admin` / `admin` (change via env).
 
-### 3) Point to your schema repo
-The backend reads from a local clone. Set one of (required before starting the stack):
-```bash
-# preferred (general, any schema repo)
-export SCHEMA_UML_REPO=<path-or-URL-to-your-schema-repo>
-
-# optional legacy envs for nomad-* clones (still accepted)
-# export NOMAD_SIM_REPO=/path/to/nomad-simulations
-# export NOMAD_MEASURE_REPO=/path/to/nomad-measurements
-# export GIT_REPO_DIR=/path/to/nomad-simulations
-
-# optional: override defaults used in the UI
-# export SCHEMA_UML_BASE_PACKAGE=my_schema_root[,another.namespace]
-# export SCHEMA_UML_PACKAGE=my_schema_root.module
-```
-By default, the viewer scopes to `nomad_simulations.schema_packages`. For other projects, set `SCHEMA_UML_BASE_PACKAGE` to your base namespace (comma separated for multiple roots) and ensure each namespace exists in the repo you configured.
-Make it persistent by adding the export to `~/.bashrc` or `~/.zshrc`.
-
-### 4) Run everything with one command
-```bash
-./dev.sh
-```
-
-What it does:
-
-- Starts the FastAPI backend on **5179** (async with Motor + MongoDB).
-- Expects MongoDB (default `mongodb://localhost:27017`, database `schema_uml`); override via `SCHEMA_UML_MONGO_URI` / `SCHEMA_UML_MONGO_DB`.
-- Verifies **SCHEMA_UML_REPO / NOMAD_SIM_REPO / GIT_REPO_DIR** points to a **local git repo** (a subdirectory of a clone is fine; fails fast otherwise).
-- Limits extractor runtime with `SCHEMA_UML_EXTRACTOR_TIMEOUT_SECONDS` (default `120`).
-- Ensures `web/node_modules` exists (runs `npm install` on first launch).
-- Starts the Vite frontend on **5173**.
-- Stops both together on **Ctrl+C** (no manual job control needed).
-- Exits early with a helpful message if `uvicorn` or `npm` are missing (activate your virtualenv first).
-
-#### Quick Mongo (Docker) + dev auth defaults
-If you don’t have Mongo installed locally, spin up a container and run the stack with dev-friendly auth defaults:
-
-```bash
-START_MONGO_DOCKER=1 \
-SCHEMA_UML_ALLOW_INSECURE_DEFAULTS=true \
-SCHEMA_UML_ENABLE_DEFAULT_ADMIN=true \
-SCHEMA_UML_DEFAULT_USER=admin \
-SCHEMA_UML_DEFAULT_PASSWORD=admin \
-SCHEMA_UML_SECRET=dev-secret \
-SCHEMA_UML_PW_SALT=dev-salt \
-./dev.sh
-```
-
-For non-dev, set strong values for `SCHEMA_UML_SECRET` / `SCHEMA_UML_PW_SALT` and disable the default admin (`SCHEMA_UML_ENABLE_DEFAULT_ADMIN=false`).
-
-### 5) Authenticate (required)
-
-The backend now requires a bearer token for every endpoint except `/auth/login`. A default user is created at startup:
-
-- **Username**: `admin` (override via `SCHEMA_UML_DEFAULT_USER`)
-- **Password**: `admin` (override via `SCHEMA_UML_DEFAULT_PASSWORD`)
-
-You can also create a new account via `POST /auth/register` with a JSON body of `{"username": "...", "password": "..."}`. The response mirrors the login payload (access token + workspace).
-
-Use the sign-in form in the UI or fetch a token manually:
-
-```bash
-TOKEN=$(curl -s -X POST http://127.0.0.1:5179/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"admin"}' | jq -r .access_token)
-```
-
-Include the token when calling other endpoints:
-
-```bash
-curl -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:5179/roots?package=nomad_simulations.schema_packages.model_method'
-```
-
-Stop both with **Ctrl+C**. Override ports via `API_PORT` / `WEB_PORT` env vars.
-
-Branch-specific render (no diff): set **Package branch** to load `/graph` for a chosen branch instead of the working tree.
-The UI sends API compatibility headers (`X-Schema-UML-Version` and feature flags) so backends can enforce contracts across repos.
-
-Sanity checks (optional, while `./dev.sh` is running):
-```bash
-curl 'http://127.0.0.1:5179/roots?package=nomad_simulations.schema_packages.model_method'
-curl 'http://127.0.0.1:5179/schema?package=nomad_simulations.schema_packages.model_method&root=ModelMethod&include_quantities=true'
-curl 'http://127.0.0.1:5179/git/branches'
-```
-
-Optional contract tests for API parsing/normalization (after `npm install` in `web/`):
-```bash
-cd web
-npm run test:run   # frontend UI + contract suite (Vitest + happy-dom)
-npm run test:contracts
-```
+Notes:
+- Mongo: install locally or let `START_MONGO_DOCKER=1 ./dev.sh` spin up a container.
+- If Redis is missing, Celery falls back to eager mode (tasks run inline); background jobs are better.
 
 ---
 
@@ -171,6 +94,8 @@ Caddy (:80/:443)
   |
 Docker network
   |-- api (FastAPI + extractor)
+  |-- celery-worker (background jobs)
+  |-- redis (broker/result backend)
   |-- mongo (persistent)
   |-- schema repo (host mount, read-only)
   |-- schema-data (named volume for repo cache/worktrees)
@@ -187,6 +112,7 @@ Fill in:
 - `CADDY_DOMAIN=localhost` for local use (Caddy will likely enable HTTPS with a local cert); use your real domain for public HTTPS
 - `VITE_API_BASE=/api`
 - `SCHEMA_UML_EXTRACTOR_TIMEOUT_SECONDS=120` (optional)
+- Celery / Redis: `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `CELERY_WORKER_CONCURRENCY`, `CELERY_TASK_SOFT_TIME_LIMIT`, `CELERY_TASK_TIME_LIMIT`
 
 ### 2) Build and run
 ```bash
@@ -201,6 +127,8 @@ docker compose up --build -d
   so startup is fast and repeatable.
 - Set `SCHEMA_UML_INSTALL_SCHEMA_DEPS=false` (default) to avoid runtime installs.
 - The backend stores git mirrors/worktrees under `/schema-data` (named volume).
+- Docker Compose starts Redis + a Celery worker; graph builds and diffs run asynchronously. If you swap brokers, update `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` and adjust worker concurrency. For local dev without Redis, you can set `CELERY_TASK_ALWAYS_EAGER=true` to execute tasks inline (not recommended for production).
+- Redis in `docker-compose.yml` runs with persistence disabled (`--save "" --appendonly no`) to keep the dev stack ephemeral; for production deployments that need durable task history, drop that command or enable AOF/RDB persistence.
 
 ## 🧠 How to Use
 
@@ -229,8 +157,11 @@ Legend:
   - `nodes[*].kind ∈ {\"section\",\"quantity\"}`
   - `nodes[*].doc` is populated for **both sections and quantities**
 - `POST /graph` → build a graph from a specific branch/worktree
+- `POST /tasks/graph` → enqueue a graph build (returns `task_id`); poll `/tasks/{id}` for the result
 - `GET /git/branches` → `{\"branches\":[...], \"active\": \"...\", \"head\": \"SHA\"}`
 - `POST /graph/diff` → `{ base:{branch,sha,graph}, head:{...}, diff:{nodes:{added,removed,changed}, edges:{added,removed}} }`
+- `POST /tasks/graph/diff` → enqueue a diff; poll `/tasks/{id}` for the result
+- `GET /tasks/{task_id}` → background task status `{status, ready, result?, error?}`
 - `POST /schema/custom-quantity` → inject a validated quantity onto a class (used by Editable mode; will materialize a synthetic section if the class was just created client-side)
 - `GET /usage` → list normalize methods / helper functions for a given section class
 

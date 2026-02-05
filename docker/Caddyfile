@@ -1,13 +1,17 @@
-{$CADDY_DOMAIN:localhost}
-
-root * /srv
-encode gzip zstd
-
-handle_path /api/* {
-  reverse_proxy api:5179
+{
+  auto_https off
 }
 
-handle {
-  try_files {path} /index.html
-  file_server
+:80 {
+  root * /srv
+  encode gzip zstd
+
+  handle_path /api/* {
+    reverse_proxy api:5179
+  }
+
+  handle {
+    try_files {path} /index.html
+    file_server
+  }
 }

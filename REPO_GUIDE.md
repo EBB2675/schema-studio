@@ -9,7 +9,7 @@ A structured overview of the repository for developers to navigate, understand, 
 **Purpose:** Interactive editor for data models; currently defaults to `nomad-simulations` but works with any schema repo you configure. Build UML diagrams, inspect docstrings/usage, add custom classes (inheritance or subsection), and add quantities inline. Supports branch diff, overview mode, and empty-canvas editing.
 
 **Frontend:** React + TypeScript + Cytoscape + ELK  
-**Backend:** FastAPI (async/Motor) + GitPython + MongoDB
+**Backend:** FastAPI (async/Motor) + GitPython + MongoDB + Celery (Redis)
 
 **Main directories:**
 - `web/` — frontend React app  
@@ -22,6 +22,9 @@ A structured overview of the repository for developers to navigate, understand, 
 - `GET /schema` — build a graph from the working tree (single branch)
 - `POST /graph` — build a graph from a specific branch/worktree (single branch)
 - `POST /graph/diff` — compare two branches and return a diff
+- `POST /tasks/graph` — enqueue graph build (poll `/tasks/{id}`)
+- `POST /tasks/graph/diff` — enqueue diff (poll `/tasks/{id}`)
+- `GET /tasks/{id}` — task status/result
 - `POST /schema/custom-class` — add a synthetic class (id is always package-qualified); relation `inherits|hasSubSection`
 - `POST /schema/custom-quantity` — add a quantity to a class; will create the class if missing (honors parent relation)
 - `GET /overview` — bird’s-eye list of packages and top-level classes at a branch
@@ -34,26 +37,23 @@ A structured overview of the repository for developers to navigate, understand, 
   - `SCHEMA_UML_DEFAULT_USER` (default `admin`)
   - `SCHEMA_UML_DEFAULT_PASSWORD` (default `admin`)
 
-**Environment variables (required):**
+**Essential env:**
 ~~~bash
-# MongoDB (required)
+# schema repo (required)
+export SCHEMA_UML_REPO=/path/to/your-schema
+# Mongo
 export SCHEMA_UML_MONGO_URI=mongodb://localhost:27017
 export SCHEMA_UML_MONGO_DB=schema_uml
+# Celery / Redis (for async tasks)
+export CELERY_BROKER_URL=redis://localhost:6379/0
+export CELERY_RESULT_BACKEND=redis://localhost:6379/1
 ~~~
-
-**Schema source (one of):**
-~~~bash
-export SCHEMA_UML_REPO=/path/to/your-schema
-# or (legacy envs still supported)
-export NOMAD_SIM_REPO=/path/to/nomad-simulations
-export GIT_REPO_DIR=/path/to/nomad-simulations
-# optional defaults for base package / module when the UI opens
-export SCHEMA_UML_BASE_PACKAGE=my_schema_root[,another.namespace]
-export SCHEMA_UML_PACKAGE=my_schema_root.module
-~~~
+Optional defaults: `SCHEMA_UML_BASE_PACKAGE`, `SCHEMA_UML_PACKAGE`. Legacy `NOMAD_SIM_REPO` / `GIT_REPO_DIR` still work.
 Default namespace scope targets `nomad_simulations.schema_packages`. For other projects, set `SCHEMA_UML_BASE_PACKAGE` to your namespace root (comma separated for multiple roots) and ensure each namespace exists in the repo you configured.
 
-**Unified dev command:** `./dev.sh` starts the FastAPI backend (**5179**) and Vite frontend (**5173**), checks for `uvicorn`/`npm`, validates **SCHEMA_UML_REPO / NOMAD_SIM_REPO / GIT_REPO_DIR** points to a local git repo (a subdirectory of a clone is fine), installs frontend deps on first run, and stops both on **Ctrl+C**. Override ports via `API_PORT` / `WEB_PORT`.
+**Start it quickly:**
+- Docker Compose (one shot): set `.env` with `SCHEMA_UML_REPO_HOST`, secrets, then `docker compose up --build`. Brings up API, web, Mongo, Redis, Celery worker.
+- Local dev: `./dev.sh` (API + web). For real async tasks, also run Redis and a Celery worker with the broker/backends above; otherwise Celery runs eagerly in-process. Override ports via `API_PORT` / `WEB_PORT`.
 
 **UX highlights:**
 - UML cards show **sections**; **quantities** appear as attributes inside the card (not separate nodes).
