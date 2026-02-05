@@ -18,6 +18,15 @@ import { useWorkspaceStore } from "./store/workspace";
 import { fqidFromParts, normalizeId, normalizeLabel, normalizeModule } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
 
+type TaskStatusResponse = {
+  task_id: string;
+  status: string;
+  ready: boolean;
+  result?: any;
+  error?: string;
+  workspace?: WorkspaceState;
+};
+
 export default function App() {
   const apiBase = DEFAULT_API;
   const [token, setToken] = useState<string>(() => {
@@ -195,6 +204,22 @@ export default function App() {
 
   const emptyCanvasActive = startEmpty && graph?.package === scratchPackage && graph?.root === "";
 
+  const preferTaskApi = useMemo(() => {
+    const raw = import.meta.env.VITE_USE_TASK_API;
+    if (typeof raw === "string" && raw.toLowerCase() === "false") return false;
+    return true;
+  }, []);
+
+  const taskPollInterval = useMemo(() => {
+    const raw = Number.parseInt(import.meta.env.VITE_TASK_POLL_MS ?? "1000", 10);
+    return Number.isFinite(raw) && raw > 0 ? raw : 1000;
+  }, []);
+
+  const taskPollTimeout = useMemo(() => {
+    const raw = Number.parseInt(import.meta.env.VITE_TASK_POLL_TIMEOUT_MS ?? "180000", 10);
+    return Number.isFinite(raw) && raw > 0 ? raw : 180000;
+  }, []);
+
   const applyWorkspace = useCallback((ws: WorkspaceState | null) => {
     if (!ws) return;
     const prev = workspaceStateRef.current;
@@ -234,6 +259,81 @@ export default function App() {
       }
     },
     [api, applyWorkspace, token]
+  );
+
+  const pollTaskStatus = useCallback(
+    async (taskId: string): Promise<TaskStatusResponse> => {
+      const started = Date.now();
+      let delay = taskPollInterval;
+      while (true) {
+        const res = await api.get<TaskStatusResponse>(`/tasks/${taskId}`);
+        if (res.data?.workspace) syncWorkspaceFromResponse(res.data);
+        if (res.data.status === "SUCCESS") return res.data;
+        if (res.data.status === "FAILURE") {
+          const msg = res.data.error || "Task failed";
+          throw new Error(msg);
+        }
+        if (Date.now() - started > taskPollTimeout) {
+          throw new Error("Timed out waiting for background task");
+        }
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        delay = Math.min(Math.round(delay * 1.3), 4000);
+      }
+    },
+    [api, syncWorkspaceFromResponse, taskPollInterval, taskPollTimeout]
+  );
+
+  const taskUnavailable = (err: any) => {
+    const code = err?.response?.status;
+    return code === 404 || code === 405 || code === 501;
+  };
+
+  const enqueueGraphTask = useCallback(
+    async (body: any, params: Record<string, any>): Promise<any | null> => {
+      if (!preferTaskApi) return null;
+      try {
+        setCanvasStatus((prev) => prev ?? "Queued background job…");
+        const res = await api.post("/tasks/graph", body, { params });
+        if (res.data?.workspace) syncWorkspaceFromResponse(res.data);
+        if (res.data?.result) return res.data.result;
+        if (res.data?.task_id) {
+          const finalStatus = await pollTaskStatus(res.data.task_id);
+          if (finalStatus?.workspace) syncWorkspaceFromResponse(finalStatus);
+          return finalStatus.result ?? null;
+        }
+        return null;
+      } catch (error: any) {
+        if (taskUnavailable(error)) return null;
+        throw error;
+      } finally {
+        setCanvasStatus(null);
+      }
+    },
+    [api, pollTaskStatus, preferTaskApi, syncWorkspaceFromResponse]
+  );
+
+  const enqueueDiffTask = useCallback(
+    async (body: any, params: Record<string, any>): Promise<any | null> => {
+      if (!preferTaskApi) return null;
+      try {
+        setCanvasStatus((prev) => prev ?? "Queued background job…");
+        const res = await api.post("/tasks/graph/diff", body, { params });
+        if (res.data?.workspace) syncWorkspaceFromResponse(res.data);
+        if (res.data?.result) return res.data.result;
+        if (res.data?.task_id) {
+          const finalStatus = await pollTaskStatus(res.data.task_id);
+          if (finalStatus?.workspace) syncWorkspaceFromResponse(finalStatus);
+          return finalStatus.result ?? null;
+        }
+        return null;
+      } catch (error: any) {
+        if (taskUnavailable(error)) return null;
+        throw error;
+      } finally {
+        setCanvasStatus(null);
+      }
+    },
+    [api, pollTaskStatus, preferTaskApi, syncWorkspaceFromResponse]
   );
 
   const logout = useCallback(() => {
@@ -527,25 +627,42 @@ export default function App() {
         return;
       }
       if (branchToUse) {
-        const r = await api.post(
-          "/graph",
+        const asyncResult = await enqueueGraphTask(
+          { branch: branchToUse, package: pkgToUse },
           {
-            branch: branchToUse,
-            package: pkgToUse,
-          },
-          {
-            params: {
-              root: rootToUse,
-              include_quantities: includeQuantities,
-              include_subsections: includeSubsections,
-              include_inheritance: includeInheritance,
-              allow_cross_module: crossModules,
-              base_namespace: namespaceToUse || undefined,
-            },
+            root: rootToUse,
+            include_quantities: includeQuantities,
+            include_subsections: includeSubsections,
+            include_inheritance: includeInheritance,
+            allow_cross_module: crossModules,
+            base_namespace: namespaceToUse || undefined,
           }
         );
-        parsed = ensureGraphResponse(r.data?.graph ?? r.data);
-        syncWorkspaceFromResponse(r.data);
+        if (asyncResult) {
+          parsed = ensureGraphResponse(asyncResult?.graph ?? asyncResult);
+          syncWorkspaceFromResponse(asyncResult);
+        }
+        if (!parsed) {
+          const r = await api.post(
+            "/graph",
+            {
+              branch: branchToUse,
+              package: pkgToUse,
+            },
+            {
+              params: {
+                root: rootToUse,
+                include_quantities: includeQuantities,
+                include_subsections: includeSubsections,
+                include_inheritance: includeInheritance,
+                allow_cross_module: crossModules,
+                base_namespace: namespaceToUse || undefined,
+              },
+            }
+          );
+          parsed = ensureGraphResponse(r.data?.graph ?? r.data);
+          syncWorkspaceFromResponse(r.data);
+        }
       } else {
         const r = await api.get("/schema", {
           params: {
@@ -571,7 +688,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [api, crossModules, includeQuantities, includeSubsections, includeInheritance, normalizedNamespace, pkg, root, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
+  }, [api, crossModules, enqueueGraphTask, includeQuantities, includeSubsections, includeInheritance, normalizedNamespace, pkg, root, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
 
   const resetEmptyCanvas = useCallback(async () => {
     if (!token) {
@@ -672,27 +789,36 @@ export default function App() {
     setGraph(null); // switch to diff mode
     setGraphHandle(null);
     try {
-      const r = await api.post(
-        "/graph/diff",
-        {
-          base: baseBranch,
-          head: headBranch,
-          package: pkg,
-        },
-        {
-          params: {
-            root,
-            include_quantities: includeQuantities,
-            include_subsections: includeSubsections,
-            include_inheritance: includeInheritance,
-            allow_cross_module: crossModules,
-            base_namespace: normalizedNamespace || undefined,
-          },
-        }
+      const params = {
+        root,
+        include_quantities: includeQuantities,
+        include_subsections: includeSubsections,
+        include_inheritance: includeInheritance,
+        allow_cross_module: crossModules,
+        base_namespace: normalizedNamespace || undefined,
+      };
+
+      const asyncResult = await enqueueDiffTask(
+        { base: baseBranch, head: headBranch, package: pkg },
+        params
       );
-      const parsed = ensureDiffResponse(r.data);
+      const responseData = asyncResult
+        ? asyncResult
+        : (
+          await api.post(
+            "/graph/diff",
+            {
+              base: baseBranch,
+              head: headBranch,
+              package: pkg,
+            },
+            { params }
+          )
+        ).data;
+
+      const parsed = ensureDiffResponse(responseData);
       setDiffData(parsed);
-      syncWorkspaceFromResponse(r.data);
+      syncWorkspaceFromResponse(responseData);
     } catch (e: any) {
       setErr(formatApiError(e));
       setDiffData(null);

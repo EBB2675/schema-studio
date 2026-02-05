@@ -14,12 +14,50 @@ services:
       SCHEMA_UML_ALLOW_INSECURE_DEFAULTS: "false"
       SCHEMA_UML_INSTALL_SCHEMA_DEPS: ${SCHEMA_UML_INSTALL_SCHEMA_DEPS:-false}
       PYTHONPATH: /schema-repo/src
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      CELERY_TASK_DEFAULT_QUEUE: ${CELERY_TASK_DEFAULT_QUEUE:-schema-uml}
+      CELERY_TASK_SOFT_TIME_LIMIT: ${CELERY_TASK_SOFT_TIME_LIMIT:-240}
+      CELERY_TASK_TIME_LIMIT: ${CELERY_TASK_TIME_LIMIT:-300}
     volumes:
       - ${SCHEMA_UML_REPO_HOST:?set SCHEMA_UML_REPO_HOST to your local schema repo path}:/schema-repo:ro
       - schema-data:/schema-data
     depends_on:
       mongo:
         condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    environment:
+      SCHEMA_UML_REPO: /schema-repo
+      SCHEMA_UML_MONGO_URI: mongodb://mongo:27017
+      SCHEMA_UML_MONGO_DB: schema_uml
+      SCHEMA_UML_DATA_DIR: /schema-data
+      SCHEMA_UML_SECRET: ${SCHEMA_UML_SECRET:?set SCHEMA_UML_SECRET}
+      SCHEMA_UML_PW_SALT: ${SCHEMA_UML_PW_SALT:?set SCHEMA_UML_PW_SALT}
+      SCHEMA_UML_ENABLE_DEFAULT_ADMIN: "false"
+      SCHEMA_UML_ALLOW_INSECURE_DEFAULTS: "false"
+      SCHEMA_UML_INSTALL_SCHEMA_DEPS: ${SCHEMA_UML_INSTALL_SCHEMA_DEPS:-false}
+      PYTHONPATH: /schema-repo/src
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      CELERY_TASK_DEFAULT_QUEUE: ${CELERY_TASK_DEFAULT_QUEUE:-schema-uml}
+      CELERY_TASK_SOFT_TIME_LIMIT: ${CELERY_TASK_SOFT_TIME_LIMIT:-240}
+      CELERY_TASK_TIME_LIMIT: ${CELERY_TASK_TIME_LIMIT:-300}
+    command: celery -A api.celery_app.celery_app worker --loglevel=info --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
+    volumes:
+      - ${SCHEMA_UML_REPO_HOST:?set SCHEMA_UML_REPO_HOST to your local schema repo path}:/schema-repo:ro
+      - schema-data:/schema-data
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
 
   mongo:
@@ -32,6 +70,13 @@ services:
       start_period: 10s
     volumes:
       - mongo-data:/data/db
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
     restart: unless-stopped
 
   caddy:

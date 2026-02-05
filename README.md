@@ -39,6 +39,7 @@ Deployment: **Docker Compose + Caddy** (optional).
 - **Editable quantities/classes**: Toggle Editable mode to add classes (as inheritance or subsection relationships) and add, rename, or remove quantities from the selected class card (full editor, not just a viewer).
 - **Optional overlays**: Inheritance edges and dtype/shape metadata are toggles (inheritance now on by default so new class relationships are visible).
 - **Export**: Save the current graph as JSON or a PDF (PNG-backed) snapshot.
+- **Async extraction**: Graph builds and branch diffs run through Celery background jobs (Redis by default) so the API stays responsive under load. The UI polls task endpoints automatically; disable with `VITE_USE_TASK_API=false` if you prefer synchronous calls.
 
 ---
 
@@ -171,6 +172,8 @@ Caddy (:80/:443)
   |
 Docker network
   |-- api (FastAPI + extractor)
+  |-- celery-worker (background jobs)
+  |-- redis (broker/result backend)
   |-- mongo (persistent)
   |-- schema repo (host mount, read-only)
   |-- schema-data (named volume for repo cache/worktrees)
@@ -187,6 +190,7 @@ Fill in:
 - `CADDY_DOMAIN=localhost` for local use (Caddy will likely enable HTTPS with a local cert); use your real domain for public HTTPS
 - `VITE_API_BASE=/api`
 - `SCHEMA_UML_EXTRACTOR_TIMEOUT_SECONDS=120` (optional)
+- Celery / Redis: `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `CELERY_WORKER_CONCURRENCY`, `CELERY_TASK_SOFT_TIME_LIMIT`, `CELERY_TASK_TIME_LIMIT`
 
 ### 2) Build and run
 ```bash
@@ -201,6 +205,7 @@ docker compose up --build -d
   so startup is fast and repeatable.
 - Set `SCHEMA_UML_INSTALL_SCHEMA_DEPS=false` (default) to avoid runtime installs.
 - The backend stores git mirrors/worktrees under `/schema-data` (named volume).
+- Docker Compose starts Redis + a Celery worker; graph builds and diffs run asynchronously. If you swap brokers, update `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` and adjust worker concurrency. For local dev without Redis, you can set `CELERY_TASK_ALWAYS_EAGER=true` to execute tasks inline (not recommended for production).
 
 ## 🧠 How to Use
 
@@ -229,8 +234,11 @@ Legend:
   - `nodes[*].kind ∈ {\"section\",\"quantity\"}`
   - `nodes[*].doc` is populated for **both sections and quantities**
 - `POST /graph` → build a graph from a specific branch/worktree
+- `POST /tasks/graph` → enqueue a graph build (returns `task_id`); poll `/tasks/{id}` for the result
 - `GET /git/branches` → `{\"branches\":[...], \"active\": \"...\", \"head\": \"SHA\"}`
 - `POST /graph/diff` → `{ base:{branch,sha,graph}, head:{...}, diff:{nodes:{added,removed,changed}, edges:{added,removed}} }`
+- `POST /tasks/graph/diff` → enqueue a diff; poll `/tasks/{id}` for the result
+- `GET /tasks/{task_id}` → background task status `{status, ready, result?, error?}`
 - `POST /schema/custom-quantity` → inject a validated quantity onto a class (used by Editable mode; will materialize a synthetic section if the class was just created client-side)
 - `GET /usage` → list normalize methods / helper functions for a given section class
 
