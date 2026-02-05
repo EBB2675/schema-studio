@@ -50,7 +50,6 @@ export default function App() {
     startEmpty,
     setBranch: setWorkspaceBranch,
     setPkg,
-    setBaseNamespace: setNamespace,
     setStartEmpty,
     applyWorkspace: applyWorkspaceInStore,
   } = useWorkspaceStore();
@@ -1490,11 +1489,6 @@ export default function App() {
   const handlePackageSelect = (value: string) => {
     setPkg(value);
     updateWorkspaceOnServer({ package: value });
-  };
-
-  const handleNamespaceChange = (value: string) => {
-    setNamespace(value);
-    updateWorkspaceOnServer({ base_namespace: value });
   };
 
   const handleCanvasClassSelect = useCallback((cls: UmlClassNode) => {
