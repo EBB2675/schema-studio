@@ -17,6 +17,7 @@ from bson import ObjectId, errors as bson_errors
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -187,17 +188,36 @@ async def update_workspace(
         oid = ObjectId(str(user_id))
     except bson_errors.InvalidId:
         oid = str(user_id)
-    await _ensure_workspace(db, oid)
-    updates = {}
+    updates: Dict[str, str] = {}
     if branch is not None:
         updates["branch"] = branch
     if package is not None:
         updates["package"] = package
     if base_namespace is not None:
         updates["base_namespace"] = base_namespace
+
+    set_on_insert = {
+        "branch": DEFAULT_BRANCH,
+        "package": DEFAULT_PACKAGE,
+        "base_namespace": DEFAULT_BASE_PACKAGE,
+    }
+    # Avoid conflicting updates on the same path when both $set and $setOnInsert are present.
+    for key in list(updates.keys()):
+        set_on_insert.pop(key, None)
+
+    update_doc: Dict[str, Dict[str, Dict[str, str]]] = {}
     if updates:
-        await db[WORKSPACES_COLLECTION].update_one({"user_id": oid}, {"$set": updates})
-    ws = await db[WORKSPACES_COLLECTION].find_one({"user_id": oid}) or {}
+        update_doc["$set"] = updates
+    if set_on_insert:
+        update_doc["$setOnInsert"] = set_on_insert
+
+    ws = await db[WORKSPACES_COLLECTION].find_one_and_update(
+        {"user_id": oid},
+        update_doc,
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+    )
+    ws = ws or {}
     return {
         "branch": ws.get("branch", DEFAULT_BRANCH),
         "package": ws.get("package", DEFAULT_PACKAGE),

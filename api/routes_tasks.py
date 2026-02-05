@@ -25,8 +25,8 @@ class TaskStatus(BaseModel):
 
 def _assert_task_owner(res: AsyncResult, user_id: str) -> None:
     """
-    Prevent leakage across users by ensuring the owner_id (if present) matches.
-    Missing owner metadata is treated as public.
+    Prevent leakage across users by ensuring the owner_id matches.
+    Missing ownership metadata is treated as unknown and rejected.
     """
     owner = None
     meta = res.info if isinstance(res.info, dict) else {}
@@ -35,7 +35,10 @@ def _assert_task_owner(res: AsyncResult, user_id: str) -> None:
     if res.successful() and isinstance(res.result, dict):
         owner = res.result.get("owner_id", owner)
 
-    if owner and str(owner) != str(user_id):
+    if owner is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    if str(owner) != str(user_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Task does not belong to the current user")
 
 
@@ -46,6 +49,9 @@ def _serialize_failure(res: AsyncResult) -> str:
 
 
 def _require_result_backend() -> None:
+    # In eager mode Celery executes tasks in-process and does not need a result backend.
+    if getattr(celery_app.conf, "task_always_eager", False):
+        return
     backend = getattr(celery_app, "backend", None)
     if backend is None or getattr(backend, "is_disabled", False):
         raise HTTPException(
@@ -137,6 +143,7 @@ async def task_status(task_id: str, user_ws=Depends(get_user_and_workspace)):
     if res.successful():
         result = res.result
         if isinstance(result, dict):
+            result = dict(result)
             result.pop("owner_id", None)
         payload["result"] = result
         return payload

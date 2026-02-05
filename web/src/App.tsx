@@ -268,6 +268,14 @@ export default function App() {
         const res = await api.get<TaskStatusResponse>(`/tasks/${taskId}`);
         if (res.data?.workspace) syncWorkspaceFromResponse(res.data);
         if (res.data.status === "SUCCESS") return res.data;
+        if (res.data.status === "REVOKED" || res.data.status === "RETRY") {
+          const msg = res.data.error || `Task ${res.data.status.toLowerCase()}`;
+          throw new Error(msg);
+        }
+        if (res.data.ready && res.data.status !== "SUCCESS") {
+          const msg = res.data.error || `Task ${res.data.status.toLowerCase()}`;
+          throw new Error(msg);
+        }
         if (res.data.status === "FAILURE") {
           const msg = res.data.error || "Task failed";
           throw new Error(msg);
@@ -302,7 +310,11 @@ export default function App() {
         }
         return null;
       } catch (error: any) {
-        if (taskUnavailable(error)) return null;
+        if (taskUnavailable(error)) {
+          setCanvasStatus(null);
+          return null;
+        }
+        setCanvasStatus(null);
         throw error;
       } finally {
         setCanvasStatus(null);
@@ -326,7 +338,11 @@ export default function App() {
         }
         return null;
       } catch (error: any) {
-        if (taskUnavailable(error)) return null;
+        if (taskUnavailable(error)) {
+          setCanvasStatus(null);
+          return null;
+        }
+        setCanvasStatus(null);
         throw error;
       } finally {
         setCanvasStatus(null);

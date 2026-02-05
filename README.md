@@ -128,6 +128,7 @@ docker compose up --build -d
 - Set `SCHEMA_UML_INSTALL_SCHEMA_DEPS=false` (default) to avoid runtime installs.
 - The backend stores git mirrors/worktrees under `/schema-data` (named volume).
 - Docker Compose starts Redis + a Celery worker; graph builds and diffs run asynchronously. If you swap brokers, update `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` and adjust worker concurrency. For local dev without Redis, you can set `CELERY_TASK_ALWAYS_EAGER=true` to execute tasks inline (not recommended for production).
+- Redis in `docker-compose.yml` runs with persistence disabled (`--save "" --appendonly no`) to keep the dev stack ephemeral; for production deployments that need durable task history, drop that command or enable AOF/RDB persistence.
 
 ## 🧠 How to Use
 

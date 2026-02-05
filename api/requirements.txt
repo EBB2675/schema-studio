@@ -11,4 +11,4 @@ pytest>=7
 nomad-lab[infrastructure]==1.4.0
 matid==2.1.3
 celery[redis]>=5.3,<6
-redis>=5.0
+redis>=5,<6
