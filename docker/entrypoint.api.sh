@@ -5,6 +5,10 @@ schema_repo_path="${SCHEMA_UML_REPO:-/schema-repo}"
 schema_data_dir="${SCHEMA_UML_DATA_DIR:-/schema-data}"
 install_deps="${SCHEMA_UML_INSTALL_SCHEMA_DEPS:-true}"
 
+# Allow git operations on the mounted schema repo even if ownership differs inside the container.
+git config --global --add safe.directory "${schema_repo_path}" >/dev/null 2>&1 || true
+git config --global --add safe.directory "${schema_repo_path}/.git" >/dev/null 2>&1 || true
+
 if [ -d "${schema_repo_path}/src" ]; then
   export PYTHONPATH="${schema_repo_path}/src:${PYTHONPATH}"
 fi
