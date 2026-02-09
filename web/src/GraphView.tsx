@@ -11,7 +11,7 @@ import { fqidFromParts } from "./utils/identifier";
 
 type QtyDiffState = "added" | "removed" | "changed" | undefined;
 
-cytoscapeElk(cytoscape, elk as any);
+cytoscapeElk(cytoscape, elk);
 
 type RawNode = ApiNode;
 type RawEdge = ApiEdge;
@@ -22,15 +22,15 @@ export type GraphExportHandle = {
   refit: () => void;
 };
 
+type DiffNodes = { added: ApiNode[]; removed: ApiNode[]; changed: { id: string }[] };
+type DiffEdges = { added: ApiEdge[]; removed: ApiEdge[] };
+
 type Props = {
   nodes: RawNode[];
   edges: RawEdge[];
   diff?: {
-    nodes: { added: any[]; removed: any[]; changed: { id: string }[] };
-    edges: {
-      added: { source: string; target: string; type?: string }[];
-      removed: { source: string; target: string; type?: string }[];
-    };
+    nodes: DiffNodes;
+    edges: DiffEdges;
   } | null;
   onReady?: (handle: GraphExportHandle | null) => void;
   showQuantityMetadata?: boolean;
@@ -226,8 +226,9 @@ export default function GraphView({
         setInlineError(null);
         setActiveQuantityTarget(null);
         setQuantityDraft({ quantityName: "", dtype: SUPPORTED_DTYPES[0], docstring: "" });
-      } catch (e: any) {
-        setInlineError(e?.message || "Failed to add quantity");
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : "Failed to add quantity";
+        setInlineError(message);
       }
     },
     [onCreateQuantity, quantityDraft]
@@ -250,8 +251,9 @@ export default function GraphView({
       setClassError(null);
       setShowClassForm(false);
       setClassDraft({ name: "", parentId: "", docstring: "", relation: "inherits" });
-    } catch (e: any) {
-      setClassError(e?.message || "Failed to add class");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Failed to add class";
+      setClassError(message);
     }
   }, [classDraft, onCreateClass]);
 
@@ -263,21 +265,21 @@ export default function GraphView({
 
     if (!diff) return map;
 
-    diff.nodes?.added?.forEach((n: any) => {
+    diff.nodes?.added?.forEach((n) => {
       if (n?.kind === "quantity" && n.id) {
         map.set(n.id, { state: "added", after: n });
       }
     });
 
-    diff.nodes?.removed?.forEach((n: any) => {
+    diff.nodes?.removed?.forEach((n) => {
       if (n?.kind === "quantity" && n.id) {
         map.set(n.id, { state: "removed", before: n });
       }
     });
 
-    diff.nodes?.changed?.forEach((entry: any) => {
-      const before = entry?.before;
-      const after = entry?.after;
+    diff.nodes?.changed?.forEach((entry) => {
+      const before = (entry as { before?: RawNode | null }).before ?? undefined;
+      const after = (entry as { after?: RawNode | null }).after ?? undefined;
       const id = entry?.id;
       const isQuantity = before?.kind === "quantity" || after?.kind === "quantity";
       if (isQuantity && id) {
@@ -291,7 +293,7 @@ export default function GraphView({
   const graphNodes = useMemo(() => {
     const base = [...nodes];
     if (diff?.nodes?.removed?.length) {
-      diff.nodes.removed.forEach((n: any) => {
+      diff.nodes.removed.forEach((n) => {
         if (!n?.id || (n?.kind !== "section" && n?.kind !== "quantity")) return;
         base.push(n as RawNode);
       });
@@ -317,7 +319,7 @@ export default function GraphView({
       if (!n) return undefined;
       return {
         name: n.label,
-        dtype: n.dtype ?? (n as any).data_type ?? (n as any).type ?? undefined,
+        dtype: n.dtype ?? n.data_type ?? n.type ?? undefined,
         shape: n.shape ?? undefined,
         card: n.card ?? undefined,
         doc: n.doc ?? undefined,
@@ -383,7 +385,7 @@ export default function GraphView({
         id: qid,
         name: diffInfo.before?.label || qid.split(".").pop() || qid,
         dtype:
-          diffInfo.before?.dtype ?? (diffInfo.before as any)?.data_type ?? (diffInfo.before as any)?.type ?? undefined,
+          diffInfo.before?.dtype ?? diffInfo.before?.data_type ?? diffInfo.before?.type ?? undefined,
         shape: diffInfo.before?.shape ?? undefined,
         card: diffInfo.before?.card ?? undefined,
         doc: diffInfo.before?.doc ?? undefined,
@@ -398,7 +400,7 @@ export default function GraphView({
 
     const baseEdges = [...edges];
     if (diff?.edges?.removed?.length) {
-      diff.edges.removed.forEach((e: any) => {
+      diff.edges.removed.forEach((e) => {
         if (!e?.source || !e?.target) return;
         const type = (e.type as RawEdge["type"]) ?? "hasSubSection";
         baseEdges.push({
@@ -488,7 +490,7 @@ export default function GraphView({
             "shadow-color": "#94a3b8",
             "shadow-offset-x": 2,
             "shadow-offset-y": 4
-          } as any
+          } as Record<string, string | number>
         },
         {
           selector: "edge[relationship='composition']",
@@ -509,7 +511,7 @@ export default function GraphView({
             "text-background-opacity": 1,
             "text-background-padding": "2px",
             color: palette.composition
-          }
+          } as Record<string, string | number>
         },
         {
           selector: "edge[relationship='inheritance']",
@@ -545,7 +547,7 @@ export default function GraphView({
           "elk.layered.mergeEdges": true,
           "elk.edgeRouting": "ORTHOGONAL"
         }
-      } as any
+      } as unknown as cytoscape.LayoutOptions
     });
 
     let refitTimeout: number | null = null;
@@ -661,9 +663,9 @@ export default function GraphView({
 
     // Diff highlights (unchanged)
     if (diff) {
-      const addedIds   = new Set(diff.nodes?.added?.map((n: any) => n.id));
-      const removedIds = new Set(diff.nodes?.removed?.map((n: any) => n.id));
-      const changedIds = new Set(diff.nodes?.changed?.map((c: any) => c.id));
+      const addedIds   = new Set(diff.nodes?.added?.map((n) => n.id));
+      const removedIds = new Set(diff.nodes?.removed?.map((n) => n.id));
+      const changedIds = new Set(diff.nodes?.changed?.map((c) => c.id));
 
       cy.$("node").forEach((n) => {
         const id = n.id();
@@ -672,7 +674,7 @@ export default function GraphView({
         if (changedIds.has(id)) n.addClass("diff-changed");
       });
 
-      const edgeKey = (e: any) => `${e.source}|${e.target}|${e.type ?? ""}`;
+      const edgeKey = (e: ApiEdge) => `${e.source}|${e.target}|${e.type ?? ""}`;
       const addedE   = new Set(diff.edges?.added?.map(edgeKey));
       const removedE = new Set(diff.edges?.removed?.map(edgeKey));
 
@@ -744,13 +746,6 @@ export default function GraphView({
     [cardBoxes, classCards]
   );
 
-  const stopDrag = useCallback(() => {
-    dragRef.current = null;
-    setDraggingId(null);
-    window.removeEventListener("mousemove", onDragMove);
-    window.removeEventListener("mouseup", onDragEnd);
-  }, []);
-
   const onDragMove = useCallback(
     (e: MouseEvent) => {
       const state = dragRef.current;
@@ -768,8 +763,11 @@ export default function GraphView({
   );
 
   const onDragEnd = useCallback(() => {
-    stopDrag();
-  }, [stopDrag]);
+    dragRef.current = null;
+    setDraggingId(null);
+    window.removeEventListener("mousemove", onDragMove);
+    window.removeEventListener("mouseup", onDragEnd);
+  }, [onDragMove]);
 
   const startDrag = useCallback(
     (clsId: string, e: React.MouseEvent) => {
@@ -793,8 +791,8 @@ export default function GraphView({
   );
 
   useEffect(() => {
-    return () => stopDrag();
-  }, [stopDrag]);
+    return () => onDragEnd();
+  }, [onDragEnd]);
 
   const inlinePortal = useMemo(() => {
     if (!activeQuantityTarget || !overlayRef.current) return null;
@@ -861,7 +859,12 @@ export default function GraphView({
                   id="new-class-relation"
                   className="select"
                   value={classDraft.relation}
-                  onChange={(e) => setClassDraft((prev) => ({ ...prev, relation: e.target.value as any }))}
+                  onChange={(e) =>
+                    setClassDraft((prev) => ({
+                      ...prev,
+                      relation: e.target.value as "inherits" | "hasSubSection",
+                    }))
+                  }
                   disabled={!classDraft.parentId}
                   title={classDraft.parentId ? "Choose how this class links to its parent" : "Select a parent to set relationship"}
                 >

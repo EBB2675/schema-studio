@@ -49,7 +49,7 @@ const UnderTheHoodPanel: React.FC<Props> = ({ apiBase, token }) => {
         setUsage([]);
         setLoading(false);
       });
-  }, [selected, apiBase]);
+  }, [selected, apiBase, token]);
 
   return (
     <div className="panel under-the-hood-panel">

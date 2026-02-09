@@ -43,8 +43,11 @@ export default function OverviewList({
       .then((json) => {
         if (!cancelled) setData(json);
       })
-      .catch((e: any) => {
-        if (!cancelled) setErr(e?.message || String(e));
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          const msg = e instanceof Error ? e.message : String(e);
+          setErr(msg);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

@@ -18,13 +18,34 @@ import { useWorkspaceStore } from "./store/workspace";
 import { fqidFromParts, normalizeId, normalizeLabel, normalizeModule } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
 
+type WorkspaceEnvelope = { workspace?: WorkspaceState };
+
 type TaskStatusResponse = {
   task_id: string;
   status: string;
   ready: boolean;
-  result?: any;
+  result?: unknown;
   error?: string;
   workspace?: WorkspaceState;
+};
+
+type GraphRequestParams = {
+  root?: string;
+  include_quantities?: boolean;
+  include_subsections?: boolean;
+  include_inheritance?: boolean;
+  allow_cross_module?: boolean;
+  base_namespace?: string;
+};
+
+type GraphTaskBody = {
+  branch: string;
+  package: string;
+};
+
+type TaskEnqueueResponse = WorkspaceEnvelope & {
+  result?: unknown;
+  task_id?: string;
 };
 
 export default function App() {
@@ -112,25 +133,41 @@ export default function App() {
   const [openDocumentation, setOpenDocumentation] = useState<boolean>(true);
   const [openAuditTrail, setOpenAuditTrail] = useState<boolean>(true);
 
-  const [auditTrail, setAuditTrail] = useState<AuditTrailEntry[]>((() => {
+  const isAuditChange = (value: unknown): value is AuditTrailEntry["change"] => {
+    if (!value || typeof value !== "object") return false;
+    const candidate = value as Record<string, unknown>;
+    return typeof candidate.type === "string";
+  };
+
+  const parseAuditEntry = (value: unknown): AuditTrailEntry | null => {
+    if (!value || typeof value !== "object") return null;
+    const entry = value as Record<string, unknown>;
+    if (typeof entry.id !== "string" || typeof entry.timestamp !== "string" || typeof entry.description !== "string") {
+      return null;
+    }
+    if (!isAuditChange(entry.change)) return null;
+    return {
+      id: entry.id,
+      timestamp: entry.timestamp,
+      description: entry.description,
+      change: entry.change,
+      replayable: entry.replayable === false ? false : true,
+      package: typeof entry.package === "string" ? entry.package : undefined,
+    };
+  };
+
+  const [auditTrail, setAuditTrail] = useState<AuditTrailEntry[]>(() => {
     if (typeof window === "undefined") return [];
     try {
       const raw = window.localStorage.getItem("schema-uml-audit");
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
-      // drop legacy entries without the new shape, and hydrate defaults
-      return parsed
-        .filter((e: any) => e && e.change && e.id && e.timestamp && e.description)
-        .map((e: any) => ({
-          ...e,
-          replayable: e.replayable === false ? false : true,
-          package: typeof e.package === "string" ? e.package : undefined,
-        }));
+      return parsed.map(parseAuditEntry).filter((e): e is AuditTrailEntry => Boolean(e));
     } catch {
       return [];
     }
-  })());
+  });
 
   // editable mode
   const [editableMode, setEditableMode] = useState<boolean>(false);
@@ -248,8 +285,8 @@ export default function App() {
   }, [applyWorkspaceInStore]);
 
   const syncWorkspaceFromResponse = useCallback(
-    (payload: any) => {
-      if (payload?.workspace) applyWorkspace(payload.workspace as WorkspaceState);
+    (payload: WorkspaceEnvelope | null | undefined) => {
+      if (payload?.workspace) applyWorkspace(payload.workspace);
     },
     [applyWorkspace]
   );
@@ -260,7 +297,7 @@ export default function App() {
       try {
         const res = await api.put("/workspace", updates);
         applyWorkspace(res.data.workspace as WorkspaceState);
-      } catch (error) {
+      } catch (error: unknown) {
         console.error("Failed to update workspace", error);
       }
     },
@@ -297,17 +334,20 @@ export default function App() {
     [api, syncWorkspaceFromResponse, taskPollInterval, taskPollTimeout]
   );
 
-  const taskUnavailable = (err: any) => {
-    const code = err?.response?.status;
-    return code === 404 || code === 405 || code === 501;
+  const taskUnavailable = (err: unknown) => {
+    if (axios.isAxiosError(err) && err.response) {
+      const code = err.response.status;
+      return code === 404 || code === 405 || code === 501;
+    }
+    return false;
   };
 
   const enqueueGraphTask = useCallback(
-    async (body: any, params: Record<string, any>): Promise<any | null> => {
+    async (body: GraphTaskBody, params: GraphRequestParams): Promise<unknown | null> => {
       if (!preferTaskApi) return null;
       try {
         setCanvasStatus((prev) => prev ?? "Queued background job…");
-        const res = await api.post("/tasks/graph", body, { params });
+        const res = await api.post<TaskEnqueueResponse>("/tasks/graph", body, { params });
         if (res.data?.workspace) syncWorkspaceFromResponse(res.data);
         if (res.data?.result) return res.data.result;
         if (res.data?.task_id) {
@@ -316,7 +356,7 @@ export default function App() {
           return finalStatus.result ?? null;
         }
         return null;
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (taskUnavailable(error)) {
           setCanvasStatus(null);
           return null;
@@ -331,11 +371,11 @@ export default function App() {
   );
 
   const enqueueDiffTask = useCallback(
-    async (body: any, params: Record<string, any>): Promise<any | null> => {
+    async (body: { base: string; head: string; package: string }, params: GraphRequestParams): Promise<unknown | null> => {
       if (!preferTaskApi) return null;
       try {
         setCanvasStatus((prev) => prev ?? "Queued background job…");
-        const res = await api.post("/tasks/graph/diff", body, { params });
+        const res = await api.post<TaskEnqueueResponse>("/tasks/graph/diff", body, { params });
         if (res.data?.workspace) syncWorkspaceFromResponse(res.data);
         if (res.data?.result) return res.data.result;
         if (res.data?.task_id) {
@@ -344,7 +384,7 @@ export default function App() {
           return finalStatus.result ?? null;
         }
         return null;
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (taskUnavailable(error)) {
           setCanvasStatus(null);
           return null;
@@ -438,12 +478,12 @@ export default function App() {
         return;
       }
       try {
-      const res = await api.get("/workspace");
-      if (cancelled) return;
-      applyWorkspace(res.data.workspace as WorkspaceState);
-      setAuthError(null);
-      setUserName((prev) => res.data?.user?.username || prev || null);
-      } catch (error) {
+        const res = await api.get("/workspace");
+        if (cancelled) return;
+        applyWorkspace(res.data.workspace as WorkspaceState);
+        setAuthError(null);
+        setUserName((prev) => res.data?.user?.username || prev || null);
+      } catch (error: unknown) {
         if (cancelled) return;
         setAuthError(formatApiError(error));
         logout();
@@ -530,8 +570,9 @@ export default function App() {
       setUserName(res.data.user?.username ?? loginUsername);
       applyWorkspace(res.data.workspace as WorkspaceState);
       setSessionChecked(true);
-    } catch (error: any) {
-      setAuthError(error?.response?.data?.detail || formatApiError(error) || String(error));
+    } catch (error: unknown) {
+      const detail = axios.isAxiosError(error) ? error.response?.data?.detail : undefined;
+      setAuthError((detail && String(detail)) || formatApiError(error) || String(error));
     }
   };
 
@@ -637,7 +678,7 @@ export default function App() {
       setRoots(list);
       if (list.length > 0 && !list.includes(root)) setRoot(list[0]);
       syncWorkspaceFromResponse(r.data);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setErr(formatApiError(e));
       setRoots([]);
     }
@@ -700,8 +741,9 @@ export default function App() {
           }
         );
         if (asyncResult) {
-          parsed = ensureGraphResponse(asyncResult?.graph ?? asyncResult);
-          syncWorkspaceFromResponse(asyncResult);
+          const maybeGraph = (asyncResult as { graph?: unknown })?.graph ?? asyncResult;
+          parsed = ensureGraphResponse(maybeGraph);
+          syncWorkspaceFromResponse(asyncResult as WorkspaceEnvelope);
         }
         if (!parsed) {
           const r = await api.post(
@@ -741,7 +783,7 @@ export default function App() {
       }
       setGraph(parsed);
       setBaseGraph(parsed);
-    } catch (e: any) {
+    } catch (e: unknown) {
       const message = formatApiError(e);
       setErr(message || "Failed to load graph");
       setGraph(null);
@@ -749,7 +791,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [api, crossModules, enqueueGraphTask, includeQuantities, includeSubsections, includeInheritance, normalizedNamespace, pkg, root, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
+  }, [api, crossModules, enqueueGraphTask, includeQuantities, includeSubsections, includeInheritance, normalizedNamespace, pkg, root, setStartEmpty, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
 
   const resetEmptyCanvas = useCallback(async () => {
     if (!token) {
@@ -775,7 +817,7 @@ export default function App() {
       setSelectedQuantityId(null);
       await loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, branch: workspaceBranch, forceEmpty: true });
       setCanvasStatus("Canvas reset to empty.");
-    } catch (e: any) {
+    } catch (e: unknown) {
       setCanvasStatus(`Reset failed: ${formatApiError(e)}`);
     }
   }, [api, archiveAuditTrail, loadGraph, normalizedNamespace, scratchPackage, setSelected, token, workspaceBranch]);
@@ -828,7 +870,7 @@ export default function App() {
       // surface the error so users know why the dropdown is empty
       setErr(formatApiError(e));
     }
-  }, [api, normalizedNamespace, packageBranch, pkg, scratchPackage, startEmpty, syncWorkspaceFromResponse, token]);
+  }, [api, normalizedNamespace, packageBranch, pkg, scratchPackage, setPkg, startEmpty, syncWorkspaceFromResponse, token]);
 
   useEffect(() => {
     if (!workspace || !token) return;
@@ -880,7 +922,7 @@ export default function App() {
       const parsed = ensureDiffResponse(responseData);
       setDiffData(parsed);
       syncWorkspaceFromResponse(responseData);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setErr(formatApiError(e));
       setDiffData(null);
     } finally {
@@ -888,7 +930,7 @@ export default function App() {
     }
   };
 
-  const toQuantityNode = useCallback((n: any): QuantityNode => {
+  const toQuantityNode = useCallback((n: ApiNode): QuantityNode => {
     const id = normalizeId(n.id);
     const ownerId = normalizeId(n.owner);
     const fallbackName = id.split(".").pop() || id;
@@ -910,25 +952,25 @@ export default function App() {
     const nodes = g.nodes || [];
     const edges = g.edges || [];
     const normalizedEdges = edges
-      .map((e: any) => ({
+      .map((e: ApiEdge) => ({
         source: normalizeId(e.source),
         target: normalizeId(e.target),
         type: e.type,
         card: e.card ?? null,
       }))
-      .filter((e: any) => e.source && e.target && e.type);
-    const sections = nodes.filter((n: any) => n.kind === "section");
-    const quantities = nodes.filter((n: any) => n.kind === "quantity").map((q: any) => toQuantityNode(q));
+      .filter((e) => e.source && e.target && e.type);
+    const sections = nodes.filter((n) => n.kind === "section");
+    const quantities = nodes.filter((n) => n.kind === "quantity").map((q) => toQuantityNode(q));
     const parentInfoByChild = new Map<string, { id: string; relation: string }>();
-    normalizedEdges.forEach((e: any) => {
+    normalizedEdges.forEach((e) => {
       if ((e.type === "inherits" || e.type === "hasSubSection") && e.target && e.source) {
         parentInfoByChild.set(e.target, { id: e.source, relation: e.type });
       }
     });
 
-    const classList: UmlClassNode[] = sections.map((sec: any) => {
+    const classList: UmlClassNode[] = sections.map((sec) => {
       const id = normalizeId(sec.id);
-      const ownedQuantities = quantities.filter((q: any) => q.ownerId === id);
+      const ownedQuantities = quantities.filter((q) => q.ownerId === id);
 
       const parentInfo = parentInfoByChild.get(id);
       const relation = parentInfo?.relation === "hasSubSection" ? "hasSubSection" : parentInfo?.relation === "inherits" ? "inherits" : null;
@@ -984,7 +1026,7 @@ export default function App() {
     } else {
       await loadGraph({ forceEmpty: false });
     }
-  }, [archiveAuditTrail, auditTrail.length, baseGraph?.package, buildUmlState, emptyCanvasActive, graph?.package, loadGraph, normalizedNamespace, resetEmptyCanvas, scratchPackage, setSelected]);
+  }, [archiveAuditTrail, auditTrail.length, baseGraph?.package, buildUmlState, emptyCanvasActive, graph?.package, loadGraph, normalizedNamespace, resetEmptyCanvas, scratchPackage, setPkg, setSelected, setStartEmpty]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -1220,7 +1262,7 @@ export default function App() {
       );
       setSelectedClassId(updatedClass.id);
       setSelectedQuantityId(addedQuantity.id);
-    } catch (e: any) {
+    } catch (e: unknown) {
       const message = formatApiError(e);
       setQuantityActionErr(message);
       throw new Error(message);
@@ -1302,7 +1344,7 @@ export default function App() {
       );
       setSelectedClassId(newCls.id);
       setSelectedQuantityId(null);
-    } catch (e: any) {
+    } catch (e: unknown) {
       const message = formatApiError(e);
       setQuantityActionErr(message);
       throw new Error(message);
@@ -1342,12 +1384,12 @@ export default function App() {
   }, []);
 
   const removeClassFromGraphState = useCallback((g: ApiGraph, classId: string): ApiGraph => {
-    const removedQuantityIds = (g.nodes || []).filter((n: any) => n.owner === classId).map((n: any) => n.id);
+    const removedQuantityIds = (g.nodes || []).filter((n) => n.owner === classId).map((n) => n.id);
     const nodes = (g.nodes || []).filter(
-      (n: any) => n.id !== classId && !removedQuantityIds.includes(n.id)
+      (n) => n.id !== classId && !removedQuantityIds.includes(n.id)
     );
     const edges = (g.edges || []).filter(
-      (e: any) =>
+      (e) =>
         e.source !== classId &&
         e.target !== classId &&
         !removedQuantityIds.includes(e.source) &&
@@ -1481,7 +1523,6 @@ export default function App() {
 
   useEffect(() => {
     loadRoots();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pkg, startEmpty, loadRoots]);
 
   // If user switches away from the scratch package, exit empty mode to restore schema-backed behavior.
@@ -1491,13 +1532,12 @@ export default function App() {
       setEditableMode(false);
       setCanvasStatus(null);
     }
-  }, [pkg, scratchPackage, startEmpty]);
+  }, [pkg, scratchPackage, setStartEmpty, startEmpty]);
 
   useEffect(() => {
     loadBranches();
     loadPackages();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [normalizedNamespace, packageBranch]);
+  }, [loadBranches, loadPackages, normalizedNamespace, packageBranch]);
 
   const selectedClassName = selected?.kind === "class" ? selected.name : null;
   const addBlockedReason =
@@ -1571,14 +1611,17 @@ export default function App() {
     const handled = graphHandle?.focusNode(targetRoot);
     if (handled) return;
 
-    const fallbackNode = currentGraph?.nodes?.find?.((n: any) => {
-      const label = (n as any).label || (n as any).rawName;
+    const fallbackNode = currentGraph?.nodes?.find?.((n) => {
+      const label = n.label || (n as { rawName?: string }).rawName || "";
       return normalizeId(n.id) === targetRoot || normalizeId(label) === targetRoot;
-    }) as any;
+    });
 
     if (fallbackNode) {
       const fallbackId = normalizeId(fallbackNode.id);
-      const fallbackName = normalizeLabel(fallbackNode.label || fallbackNode.rawName, fallbackId);
+      const fallbackName = normalizeLabel(
+        fallbackNode.label || (fallbackNode as { rawName?: string }).rawName || "",
+        fallbackId
+      );
       setSelected({
         id: fallbackId,
         kind: "class",
@@ -1783,14 +1826,15 @@ export default function App() {
         if (!raw || typeof raw !== "object") {
           throw new Error("File is empty or invalid JSON.");
         }
-        if (!Array.isArray((raw as any).nodes) || !Array.isArray((raw as any).edges)) {
+        const candidate = raw as Record<string, unknown>;
+        if (!Array.isArray(candidate.nodes) || !Array.isArray(candidate.edges)) {
           throw new Error("Expected nodes[] and edges[] in the workspace file.");
         }
         const nextGraph: ApiGraph = {
-          package: (raw as any).package ?? pkg,
-          root: (raw as any).root ?? null,
-          nodes: (raw as any).nodes,
-          edges: (raw as any).edges,
+          package: typeof candidate.package === "string" ? candidate.package : pkg,
+          root: typeof candidate.root === "string" || candidate.root === null ? (candidate.root as string | null) : null,
+          nodes: candidate.nodes as ApiNode[],
+          edges: candidate.edges as ApiEdge[],
         };
         setMode("graph");
         setDiffData(null);
@@ -1807,8 +1851,9 @@ export default function App() {
         if (nextGraph.root) setRoot(nextGraph.root);
         setImportStatus(`Imported ${file.name}`);
         setErr(null);
-      } catch (error: any) {
-        setImportStatus(`Import failed: ${error?.message || "Invalid workspace file."}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : "Invalid workspace file.";
+        setImportStatus(`Import failed: ${message}`);
       } finally {
         e.target.value = "";
       }

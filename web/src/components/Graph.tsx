@@ -141,7 +141,6 @@ export default function Graph() {
     };
 
     init().catch(err => {
-      // eslint-disable-next-line no-console
       console.error(err);
     });
 
