@@ -42,7 +42,7 @@ export type DiffResponse = {
   base: BranchGraphPayload;
   head: BranchGraphPayload;
   diff: {
-    nodes: { added: ApiNode[]; removed: ApiNode[]; changed: { id: string }[] };
+    nodes: { added: ApiNode[]; removed: ApiNode[]; changed: { id: string; before?: ApiNode; after?: ApiNode }[] };
     edges: { added: ApiEdge[]; removed: ApiEdge[] };
   };
   workspace?: WorkspaceState;
@@ -159,7 +159,22 @@ export const ensureDiffResponse = (payload: unknown): DiffResponse => {
 
   const addedNodes = Array.isArray(nodes.added) ? nodes.added.map(ensureNode) : [];
   const removedNodes = Array.isArray(nodes.removed) ? nodes.removed.map(ensureNode) : [];
-  const changedNodes = Array.isArray(nodes.changed) ? nodes.changed.map((c: unknown) => ({ id: asString((c as Record<string, unknown>)?.id) })) : [];
+  const changedNodes = Array.isArray(nodes.changed)
+    ? nodes.changed.map((c: unknown) => {
+        if (!isRecord(c)) {
+          return { id: asString((c as Record<string, unknown>)?.id) };
+        }
+        const id = asString(c.id);
+        const result: { id: string; before?: ApiNode; after?: ApiNode } = { id };
+        if ("before" in c && c.before != null) {
+          result.before = ensureNode(c.before);
+        }
+        if ("after" in c && c.after != null) {
+          result.after = ensureNode(c.after);
+        }
+        return result;
+      })
+    : [];
 
   const addedEdges = Array.isArray(edges.added) ? edges.added.map(ensureEdge) : [];
   const removedEdges = Array.isArray(edges.removed) ? edges.removed.map(ensureEdge) : [];
