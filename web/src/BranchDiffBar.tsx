@@ -17,7 +17,7 @@ export default function BranchDiffBar({ onDiff }: { onDiff: (d: DiffResponse) =>
     try {
       const d = await getDiff(base, head);
       onDiff(d);
-    } catch (e:any) {
+    } catch (e: unknown) {
       setErr(formatApiError(e));
     } finally {
       setLoading(false);

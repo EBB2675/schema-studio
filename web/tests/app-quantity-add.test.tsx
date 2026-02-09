@@ -49,7 +49,7 @@ vi.mock('axios', () => {
 vi.mock('../src/GraphView', () => {
   return {
     __esModule: true,
-    default: ({ onCreateQuantity }: any) => (
+    default: ({ onCreateQuantity }: { onCreateQuantity?: (classId: string, data: { quantityName: string; dtype: string; docstring: string }) => Promise<void> | void }) => (
       <div>
         <button
           type="button"
@@ -114,7 +114,7 @@ describe('App editable quantity add flow', () => {
       };
     }
 
-    mockGet.mockImplementation(async (url: string, options?: any) => {
+    mockGet.mockImplementation(async (url: string, options?: { params?: Record<string, unknown> }) => {
       if (url === '/workspace') {
         return {
           data: {

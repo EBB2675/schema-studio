@@ -42,13 +42,13 @@ export type DiffResponse = {
   base: BranchGraphPayload;
   head: BranchGraphPayload;
   diff: {
-    nodes: { added: ApiNode[]; removed: ApiNode[]; changed: { id: string }[] };
+    nodes: { added: ApiNode[]; removed: ApiNode[]; changed: { id: string; before?: ApiNode; after?: ApiNode }[] };
     edges: { added: ApiEdge[]; removed: ApiEdge[] };
   };
   workspace?: WorkspaceState;
 };
 
-const isRecord = (v: unknown): v is Record<string, any> =>
+const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
 const asString = (v: unknown) => (typeof v === "string" ? v : "");
@@ -71,21 +71,31 @@ const ensureNode = (node: unknown): ApiNode => {
   const id = asString(node.id);
   if (!id) throw new Error("Node is missing id");
   const label = asString(node.label) || id;
+  const module = typeof node.module === "string" ? node.module : null;
+  const dtype = typeof node.dtype === "string" ? node.dtype : null;
+  const dataType = typeof node.data_type === "string" ? node.data_type : null;
+  const type = typeof node.type === "string" ? node.type : null;
+  const shape = typeof node.shape === "string" ? node.shape : null;
+  const card = typeof node.card === "string" ? node.card : null;
+  const owner = typeof node.owner === "string" ? node.owner : null;
+  const doc = typeof node.doc === "string" ? node.doc : null;
+  const path = typeof node.path === "string" ? node.path : null;
+  const line = typeof node.line === "number" ? node.line : null;
   return {
     id,
     kind,
     label,
-    module: node.module ?? null,
-    dtype: node.dtype ?? null,
-    data_type: node.data_type ?? null,
-    type: node.type ?? null,
-    shape: node.shape ?? null,
-    card: node.card ?? null,
-    owner: node.owner ?? null,
-    doc: node.doc ?? null,
+    module,
+    dtype,
+    data_type: dataType,
+    type,
+    shape,
+    card,
+    owner,
+    doc,
     methods: Array.isArray(node.methods) ? node.methods.map(asString) : null,
-    path: node.path ?? null,
-    line: typeof node.line === "number" ? node.line : null,
+    path,
+    line,
   };
 };
 
@@ -102,7 +112,7 @@ const ensureEdge = (edge: unknown): ApiEdge => {
     source,
     target,
     type,
-    card: edge.card ?? null,
+    card: typeof edge.card === "string" ? edge.card : null,
   };
 };
 
@@ -149,7 +159,22 @@ export const ensureDiffResponse = (payload: unknown): DiffResponse => {
 
   const addedNodes = Array.isArray(nodes.added) ? nodes.added.map(ensureNode) : [];
   const removedNodes = Array.isArray(nodes.removed) ? nodes.removed.map(ensureNode) : [];
-  const changedNodes = Array.isArray(nodes.changed) ? nodes.changed.map((c: any) => ({ id: asString(c?.id) })) : [];
+  const changedNodes = Array.isArray(nodes.changed)
+    ? nodes.changed.map((c: unknown) => {
+        if (!isRecord(c)) {
+          return { id: asString((c as Record<string, unknown>)?.id) };
+        }
+        const id = asString(c.id);
+        const result: { id: string; before?: ApiNode; after?: ApiNode } = { id };
+        if ("before" in c && c.before != null) {
+          result.before = ensureNode(c.before);
+        }
+        if ("after" in c && c.after != null) {
+          result.after = ensureNode(c.after);
+        }
+        return result;
+      })
+    : [];
 
   const addedEdges = Array.isArray(edges.added) ? edges.added.map(ensureEdge) : [];
   const removedEdges = Array.isArray(edges.removed) ? edges.removed.map(ensureEdge) : [];

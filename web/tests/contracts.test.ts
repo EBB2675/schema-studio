@@ -23,7 +23,7 @@ describe("contracts", () => {
   });
 
   it("ensureGraphResponse rejects missing nodes", () => {
-    expect(() => ensureGraphResponse({ package: "pkg", edges: [] } as any)).toThrow();
+    expect(() => ensureGraphResponse({ package: "pkg", edges: [] } as unknown)).toThrow();
   });
 
   it("ensureDiffResponse validates nested graphs", () => {
