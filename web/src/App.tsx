@@ -105,6 +105,13 @@ export default function App() {
   const [diffData, setDiffData] = useState<DiffResponse | null>(null);
   const [diffLoading, setDiffLoading] = useState<boolean>(false);
 
+  // collapsible controls for accessibility / quick-open links
+  const [openWorkspace, setOpenWorkspace] = useState<boolean>(false);
+  const [openUnderTheHood, setOpenUnderTheHood] = useState<boolean>(false);
+  const [openCompare, setOpenCompare] = useState<boolean>(false);
+  const [openDocumentation, setOpenDocumentation] = useState<boolean>(true);
+  const [openAuditTrail, setOpenAuditTrail] = useState<boolean>(true);
+
   const [auditTrail, setAuditTrail] = useState<AuditTrailEntry[]>((() => {
     if (typeof window === "undefined") return [];
     try {
@@ -556,6 +563,39 @@ export default function App() {
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", stop);
   };
+
+  const helpSummary = useMemo(
+    () => [
+      "Workspace (left): pick branch, package, root, toggles; then Build graph.",
+      "Graph canvas (center): pan/zoom, select classes, toggle UML/Edit.",
+      "Documentation (right): class and quantity docs; edit quantities in Edit mode.",
+      "Audit trail (right bottom): log of edits; export/reset.",
+      "Compare branches (left): diff two git branches.",
+      "Empty canvas: start custom schema without loading existing graph.",
+    ],
+    []
+  );
+
+  const [helpOpen, setHelpOpen] = useState<boolean>(false);
+
+  const focusAndOpen = useCallback((section: "workspace" | "documentation" | "audit" | "compare" | "under" ) => {
+    const mapping: Record<typeof section, { setter: (v: boolean) => void; elementId: string }> = {
+      workspace: { setter: setOpenWorkspace, elementId: "section-workspace" },
+      documentation: { setter: setOpenDocumentation, elementId: "section-documentation" },
+      audit: { setter: setOpenAuditTrail, elementId: "section-audit" },
+      compare: { setter: setOpenCompare, elementId: "section-compare" },
+      under: { setter: setOpenUnderTheHood, elementId: "section-under" },
+    };
+
+    const target = mapping[section];
+    target.setter(true);
+    const el = document.getElementById(target.elementId);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      const headerBtn = el.querySelector("button.collapsible-header") as HTMLButtonElement | null;
+      headerBtn?.focus({ preventScroll: true });
+    }
+  }, []);
 
   const startDocResize = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -1914,7 +1954,13 @@ export default function App() {
           </div>
         ) : null}
 
-        <CollapsibleSection title="Workspace" hint="Pick a backend package and fine-tune the graph">
+        <CollapsibleSection
+          title="Workspace"
+          hint="Pick a backend package and fine-tune the graph"
+          id="section-workspace"
+          open={openWorkspace}
+          onToggle={setOpenWorkspace}
+        >
           <div className="action-stack">
             <div className="row" style={{ gap: 10 }}>
               <button
@@ -2062,11 +2108,23 @@ export default function App() {
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection title="Under the hood" hint="Raw schema structure">
+        <CollapsibleSection
+          title="Under the hood"
+          hint="Raw schema structure"
+          id="section-under"
+          open={openUnderTheHood}
+          onToggle={setOpenUnderTheHood}
+        >
           <UnderTheHoodPanel apiBase={apiBase} token={token} />
         </CollapsibleSection>
 
-        <CollapsibleSection title="Compare branches" hint="Diff diagrams across git">
+        <CollapsibleSection
+          title="Compare branches"
+          hint="Diff diagrams across git"
+          id="section-compare"
+          open={openCompare}
+          onToggle={setOpenCompare}
+        >
           <div className="action-stack">
             <div>
               <label className="label">Base branch</label>
@@ -2110,11 +2168,11 @@ export default function App() {
           </div>
         </CollapsibleSection>
       </aside>
-        <div
-          className="resizer"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize sidebar"
+      <div
+        className="resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize sidebar"
           onMouseDown={startSidebarResize}
         />
 
@@ -2124,6 +2182,27 @@ export default function App() {
         ref={workspaceRef}
         style={{ gridTemplateColumns: `minmax(0, 1fr) 10px ${docPanelWidth}px` }}
       >
+        {/* Persistent help button */}
+        <div className="floating-help">
+          <details open={helpOpen} onToggle={(e) => setHelpOpen((e.target as HTMLDetailsElement).open)}>
+            <summary aria-label="Help me">❔ Help me</summary>
+            <div className="help-body">
+              <div className="help-grid">
+                {helpSummary.map((line, idx) => (
+                  <div key={idx}>{line}</div>
+                ))}
+              </div>
+              <div className="help-links">
+                <button className="link-button" type="button" onClick={() => focusAndOpen("workspace")}>Workspace 👈</button>
+                <button className="link-button" type="button" onClick={() => focusAndOpen("documentation")}>Documentation 👉</button>
+                <button className="link-button" type="button" onClick={() => focusAndOpen("audit")}>Audit trail 👉</button>
+                <button className="link-button" type="button" onClick={() => focusAndOpen("compare")}>Compare branches 👈</button>
+                <button className="link-button" type="button" onClick={() => setMode("overview")}>Overview 👈</button>
+              </div>
+            </div>
+          </details>
+        </div>
+
         {/* Left: graph area */}
         <div
           style={{
@@ -2250,10 +2329,10 @@ export default function App() {
               </div>
               <div style={{ lineHeight: 1.5, display: "grid", gap: 10 }}>
                 <div>
-                  1) Go to <strong>Workspace</strong> and pick a root, then hit “Build graph” to load the nomad-simulations schema.
+                  1) Go to <button className="link-button" type="button" onClick={() => focusAndOpen("workspace")}>Workspace 👈</button> and pick a root, then hit “Build graph” to load the nomad-simulations schema.
                 </div>
                 <div>
-                  2) See the <strong>Documentation</strong> panel on the right to read class/quantity details as you browse.
+                  2) See the <button className="link-button" type="button" onClick={() => focusAndOpen("documentation")}>Documentation 👉</button> panel to read class/quantity details as you browse.
                 </div>
                 <div>
                   3) Switch to <strong>Editable mode</strong> to add, rename, or remove classes and quantities.
@@ -2262,10 +2341,10 @@ export default function App() {
                   4) Prefer to sketch your own? Turn on “Start from empty canvas” to drop in custom classes/quantities without loading existing schema.
                 </div>
                 <div>
-                  5) <strong>Compare branches</strong> to see how two git branches differ in structure.
+                  5) <button className="link-button" type="button" onClick={() => focusAndOpen("compare")}>Compare branches 👈</button> to see how two git branches differ in structure.
                 </div>
                 <div>
-                  6) Communicate your edits via <strong>Audit trail</strong> - export or clear the log anytime.
+                  6) Communicate your edits via <button className="link-button" type="button" onClick={() => focusAndOpen("audit")}>Audit trail 👉</button> - export or clear the log anytime.
                 </div>
               </div>
               <div style={{ marginTop: 14 }}>
@@ -2305,7 +2384,14 @@ export default function App() {
               overflowY: "auto"
             }}
           >
-            <CollapsibleSection title="Documentation" hint="Browse docs and edit quantities" className="panel">
+            <CollapsibleSection
+              title="Documentation"
+              hint="Browse docs and edit quantities"
+              className="panel"
+              id="section-documentation"
+              open={openDocumentation}
+              onToggle={setOpenDocumentation}
+            >
               <DocPanel
                 editableMode={editableMode}
                 onRemoveQuantity={removeQuantity}
@@ -2329,6 +2415,9 @@ export default function App() {
               title="Audit trail"
               hint="Track edits and export"
               className="panel"
+              id="section-audit"
+              open={openAuditTrail}
+              onToggle={setOpenAuditTrail}
             >
               <div className="action-stack" style={{ gap: 10 }}>
                 <div className="row" style={{ gap: 8 }}>

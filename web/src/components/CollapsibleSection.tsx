@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 interface CollapsibleSectionProps {
   title: string;
@@ -6,6 +6,9 @@ interface CollapsibleSectionProps {
   children: ReactNode;
   defaultOpen?: boolean;
   className?: string;
+  open?: boolean;
+  onToggle?: (open: boolean) => void;
+  id?: string;
 }
 
 export default function CollapsibleSection({
@@ -14,16 +17,35 @@ export default function CollapsibleSection({
   children,
   defaultOpen = false,
   className = "",
+  open: controlledOpen,
+  onToggle,
+  id,
 }: CollapsibleSectionProps) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
+
+  const open = useMemo(() => {
+    if (typeof controlledOpen === "boolean") return controlledOpen;
+    return uncontrolledOpen;
+  }, [controlledOpen, uncontrolledOpen]);
+
+  const bodyId = id ? `${id}-body` : undefined;
+
+  const toggle = () => {
+    const next = !open;
+    if (typeof controlledOpen !== "boolean") {
+      setUncontrolledOpen(next);
+    }
+    onToggle?.(next);
+  };
 
   return (
-    <div className={`section collapsible ${className}`.trim()}>
+    <div className={`section collapsible ${className}`.trim()} id={id}>
       <button
         type="button"
         className="collapsible-header"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         aria-expanded={open}
+        aria-controls={bodyId}
       >
         <div className="section-title">
           <span>{title}</span>
@@ -34,7 +56,7 @@ export default function CollapsibleSection({
         </span>
       </button>
 
-      <div className="collapsible-body" style={{ display: open ? "block" : "none" }}>
+      <div className="collapsible-body" id={bodyId} style={{ display: open ? "block" : "none" }}>
         {children}
       </div>
     </div>
