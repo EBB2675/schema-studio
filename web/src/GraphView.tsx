@@ -61,12 +61,7 @@ function umlLabel(
   methods: string[],
   showMetadata: boolean
 ) {
-  const MAX_A = 18;
-  const MAX_M = 14;
-  const shownA = attrs.slice(0, MAX_A);
-  const shownM = methods.slice(0, MAX_M);
-
-  const attrLines = shownA.map(a => {
+  const attrLines = attrs.map(a => {
     const parts = [] as string[];
     if (a.diff === "added") parts.push("🟢 ");
     if (a.diff === "removed") parts.push("🔴 ");
@@ -79,13 +74,10 @@ function umlLabel(
     if (a.card) parts.push(` [${a.card}]`);
     return parts.join("");
   });
-  const moreA = attrs.length > MAX_A ? [`… (+${attrs.length - MAX_A} more)`] : [];
+  const methodLines = methods.map(s => s + "()");
 
-  const methodLines = shownM.map(s => s + "()");
-  const moreM = methods.length > MAX_M ? [`… (+${methods.length - MAX_M} more)`] : [];
-
-  const lines = [name, "────────────", ...attrLines, ...moreA];
-  if (methods.length) lines.push("────────────", ...methodLines, ...moreM);
+  const lines = [name, "────────────", ...attrLines];
+  if (methods.length) lines.push("────────────", ...methodLines);
   return lines.join("\n");
 }
 

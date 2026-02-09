@@ -744,17 +744,30 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   border-radius: 8px;
   background: var(--code-chip-bg);
   color: var(--code-chip-color);
+  display: inline-block;
+  max-width: 100%;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .uth-module {
   font-size: 12px;
   color: var(--muted);
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .uth-doc {
   font-size: 13px;
   line-height: 1.55;
   color: var(--text-primary);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.uth-item {
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .qty-count {
@@ -792,6 +805,9 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   color: var(--code-chip-color);
   border: 1px solid var(--doc-stroke);
   font-family: var(--font-mono);
+  max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .doc-empty {
@@ -844,7 +860,7 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   padding: 10px;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
   min-width: 200px;
-  max-width: 420px;
+  max-width: 520px;
   color: var(--text-primary);
   backdrop-filter: blur(6px);
   font-size: 12px;
@@ -852,6 +868,9 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   isolation: isolate;
   overflow: visible;
   cursor: grab;
+  /* allow long module paths to wrap instead of overflowing */
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .uml-card.is-selected {
