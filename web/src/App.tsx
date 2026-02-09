@@ -1,4 +1,4 @@
-import type { ChangeEvent, FormEvent } from "react";
+import type { ChangeEvent, FormEvent, SyntheticEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import GraphView, { type GraphExportHandle } from "./GraphView";
@@ -591,7 +591,13 @@ export default function App() {
     target.setter(true);
     const el = document.getElementById(target.elementId);
     if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      const behavior: ScrollBehavior =
+        typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth";
+      el.scrollIntoView({ behavior, block: "start" });
       const headerBtn = el.querySelector("button.collapsible-header") as HTMLButtonElement | null;
       headerBtn?.focus({ preventScroll: true });
     }
@@ -2184,7 +2190,10 @@ export default function App() {
       >
         {/* Persistent help button */}
         <div className="floating-help">
-          <details open={helpOpen} onToggle={(e) => setHelpOpen((e.target as HTMLDetailsElement).open)}>
+          <details
+            open={helpOpen}
+            onToggle={(e: SyntheticEvent<HTMLDetailsElement>) => setHelpOpen(e.currentTarget.open)}
+          >
             <summary aria-label="Help">❔ Help</summary>
             <div className="help-body">
               <div className="help-close-row">

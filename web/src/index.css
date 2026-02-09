@@ -371,6 +371,12 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   gap: 6px;
 }
 
+.floating-help summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 9999px;
+}
+
 .floating-help summary::-webkit-details-marker { display: none; }
 
 .help-body { margin-top: 8px; display: grid; gap: 10px; }
