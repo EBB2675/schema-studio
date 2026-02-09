@@ -375,6 +375,11 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
 
 .help-body { margin-top: 8px; display: grid; gap: 10px; }
 
+.help-close-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .help-grid { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
 
 .help-links { display: flex; gap: 8px; flex-wrap: wrap; }

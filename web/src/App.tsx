@@ -2185,19 +2185,29 @@ export default function App() {
         {/* Persistent help button */}
         <div className="floating-help">
           <details open={helpOpen} onToggle={(e) => setHelpOpen((e.target as HTMLDetailsElement).open)}>
-            <summary aria-label="Help me">❔ Help me</summary>
+            <summary aria-label="Help">❔ Help</summary>
             <div className="help-body">
+              <div className="help-close-row">
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  onClick={() => setHelpOpen(false)}
+                  aria-label="Close help panel"
+                >
+                  ×
+                </button>
+              </div>
               <div className="help-grid">
                 {helpSummary.map((line, idx) => (
                   <div key={idx}>{line}</div>
                 ))}
               </div>
               <div className="help-links">
-                <button className="link-button" type="button" onClick={() => focusAndOpen("workspace")}>Workspace 👈</button>
-                <button className="link-button" type="button" onClick={() => focusAndOpen("documentation")}>Documentation 👉</button>
-                <button className="link-button" type="button" onClick={() => focusAndOpen("audit")}>Audit trail 👉</button>
-                <button className="link-button" type="button" onClick={() => focusAndOpen("compare")}>Compare branches 👈</button>
-                <button className="link-button" type="button" onClick={() => setMode("overview")}>Overview 👈</button>
+                <button className="link-button" type="button" onClick={() => focusAndOpen("workspace")}>Workspace</button>
+                <button className="link-button" type="button" onClick={() => focusAndOpen("documentation")}>Documentation</button>
+                <button className="link-button" type="button" onClick={() => focusAndOpen("audit")}>Audit trail</button>
+                <button className="link-button" type="button" onClick={() => focusAndOpen("compare")}>Compare branches</button>
+                <button className="link-button" type="button" onClick={() => setMode("overview")}>Overview</button>
               </div>
             </div>
           </details>
