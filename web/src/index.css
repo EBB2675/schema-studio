@@ -744,6 +744,10 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   border-radius: 8px;
   background: var(--code-chip-bg);
   color: var(--code-chip-color);
+  display: inline-block;
+  max-width: 100%;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .uth-module {
@@ -757,6 +761,13 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   font-size: 13px;
   line-height: 1.55;
   color: var(--text-primary);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.uth-item {
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .qty-count {
