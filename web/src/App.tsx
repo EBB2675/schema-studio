@@ -1188,25 +1188,34 @@ export default function App() {
         const next = prev.map((entry) => {
           if (entry.replayable === false) return entry;
           const change = entry.change;
-          const exists = (() => {
+          const applied = (() => {
             switch (change.type) {
               case "add-class":
+                // Change is already reflected if class is present.
                 return classIds.has(normalizeId(change.cls.id));
               case "remove-class":
+                // Reflected if class is gone.
                 return !classIds.has(normalizeId(change.cls.id));
               case "add-quantity":
+                // Reflected if quantity is present.
                 return quantityIds.has(normalizeId(change.quantity.id));
               case "remove-quantity":
+                // Reflected if quantity is gone.
                 return !quantityIds.has(normalizeId(change.quantity.id));
               case "edit-quantity":
+                // Reflected if the updated quantity exists.
                 return quantityIds.has(normalizeId(change.after.id));
               default:
                 return false;
             }
           })();
-          if (exists) return entry;
+          // If the change is already applied in the server graph, archive it.
+          if (applied) {
+            mutated = true;
+            return { ...entry, replayable: false };
+          }
           mutated = true;
-          return { ...entry, replayable: false };
+          return entry;
         });
         return mutated ? next : prev;
       });
