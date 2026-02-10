@@ -440,6 +440,12 @@ export default function App() {
     setAuditTrail((prev) => prev.map((entry) => ({ ...entry, replayable: false })));
   }, []);
 
+  const archiveAllAuditEntries = useCallback(() => {
+    setAuditTrail((prev) =>
+      prev.length ? prev.map((entry) => ({ ...entry, replayable: false })) : prev
+    );
+  }, [setAuditTrail]);
+
   const appendAudit = useCallback(
     (change: AuditTrailEntry["change"], description: string) => {
       const now = new Date().toISOString();
@@ -1222,12 +1228,6 @@ export default function App() {
     },
     [setAuditTrail]
   );
-
-  const archiveAllAuditEntries = useCallback(() => {
-    setAuditTrail((prev) =>
-      prev.length ? prev.map((entry) => ({ ...entry, replayable: false })) : prev
-    );
-  }, [setAuditTrail]);
 
   useEffect(() => {
     archiveStaleAuditEntries(graph);
