@@ -18,6 +18,7 @@ A structured overview of the repository for developers to navigate, understand, 
 - `api/_data/` — auto-generated bare mirror + worktrees (gitignored)
 
 **Key endpoints:**
+- Auth/workspace/health: `POST /auth/login`, `POST /auth/register`, `GET /workspace`, `PUT /workspace`, `GET /health`, `GET /`
 - `GET /roots` — list section roots for a package
 - `GET /schema` — build a graph from the working tree (single branch)
 - `POST /graph` — build a graph from a specific branch/worktree (single branch)
@@ -25,15 +26,16 @@ A structured overview of the repository for developers to navigate, understand, 
 - `POST /tasks/graph` — enqueue graph build (poll `/tasks/{id}`)
 - `POST /tasks/graph/diff` — enqueue diff (poll `/tasks/{id}`)
 - `GET /tasks/{id}` — task status/result
-- `POST /schema/custom-class` — add a synthetic class (id is always package-qualified); relation `inherits|hasSubSection`
-- `POST /schema/custom-quantity` — add a quantity to a class; will create the class if missing (honors parent relation)
+- Custom edits: `POST /schema/custom-class`, `POST /schema/custom-quantity`, `DELETE /schema/custom-edits`
 - `GET /overview` — bird’s-eye list of packages and top-level classes at a branch
 - `GET /git/branches` — list local branches of the repo
 - `GET /git/packages` — list Python modules under a base package
 - `GET /usage` — list normalize methods / helper functions for a given section class
 
+Shared query flags for `/schema`, `/graph`, `/graph/diff`, and their task variants: `include_quantities`, `include_subsections`, `include_inheritance`, `allow_cross_module`, `base_namespace`, `root`, and `empty` (empty-canvas mode).
+
 **Authentication:**
-- Every endpoint (except `/auth/login`) requires a bearer token. The backend seeds a default user on startup:
+- Every endpoint (except `/auth/login` and `/auth/register`) requires a bearer token. The backend seeds a default user on startup:
   - `SCHEMA_UML_DEFAULT_USER` (default `admin`)
   - `SCHEMA_UML_DEFAULT_PASSWORD` (default `admin`)
 

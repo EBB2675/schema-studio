@@ -20,7 +20,9 @@ Deployment: **Docker Compose + Caddy** (optional).
 
 # Overview
 
-![Schema UML homepage](assets/homepage-11-12.png)
+![Schema Studio homepage](assets/homepage-10-02.png)
+
+![UML diagram](assets/UMLdiagram-10-02.png)
 
 ![gitdiff](assets/gitdiff-04-12.png)
 
@@ -51,9 +53,10 @@ git clone https://github.com/EBB2675/schema-studio.git
 cd schema-studio
 cp .env.example .env
 # set SCHEMA_UML_REPO_HOST to your local schema repo path, and set SCHEMA_UML_SECRET / SCHEMA_UML_PW_SALT
-docker compose up --build
+docker compose up --build -d
 ```
 Then open https://localhost (Caddy handles API + frontend). Redis, Celery worker, Mongo, API, and frontend all start in this one command.
+Default ports (Docker Compose): frontend 5173, API 5179, Redis 6379, Mongo 27017, Caddy 80/443.
 
 ### Option B — Local dev (`dev.sh`) with one extra Redis + worker
 1) Create env: `conda create -n schema-studio python=3.11 -y && conda activate schema-studio`
@@ -150,23 +153,41 @@ Legend:
 
 ## ⚙️ Backend Endpoints (summary)
 
-- `GET /roots?package=...` → `{\"sections\": [...]}`
-- `GET /schema`
-  Params: `package, root?, include_quantities?, include_subsections?, allow_cross_module?, base_namespace?`
-  Returns: `{ package, root, nodes, edges }` where:
-  - `nodes[*].kind ∈ {\"section\",\"quantity\"}`
-  - `nodes[*].doc` is populated for **both sections and quantities**
-- `POST /graph` → build a graph from a specific branch/worktree
-- `POST /tasks/graph` → enqueue a graph build (returns `task_id`); poll `/tasks/{id}` for the result
-- `GET /git/branches` → `{\"branches\":[...], \"active\": \"...\", \"head\": \"SHA\"}`
-- `POST /graph/diff` → `{ base:{branch,sha,graph}, head:{...}, diff:{nodes:{added,removed,changed}, edges:{added,removed}} }`
-- `POST /tasks/graph/diff` → enqueue a diff; poll `/tasks/{id}` for the result
-- `GET /tasks/{task_id}` → background task status `{status, ready, result?, error?}`
-- `POST /schema/custom-quantity` → inject a validated quantity onto a class (used by Editable mode; will materialize a synthetic section if the class was just created client-side)
-- `GET /usage` → list normalize methods / helper functions for a given section class
+- Shared query flags: see **Shared query flags** below (used by `/schema`, `/graph`, `/graph/diff`, `/tasks/graph`, `/tasks/graph/diff`).
+- Auth/workspace/health: `POST /auth/login`, `POST /auth/register`, `GET /workspace`, `PUT /workspace`, `GET /health`, `GET /` (api/main.py)
+- `GET /roots?package=...` → `{"sections": [...]}` (api/main.py)
+- `GET /schema` → graph from working tree (api/main.py)
+- `POST /graph` → graph from a specific branch/worktree (api/routes_git.py)
+- `POST /tasks/graph` → enqueue graph build; poll `/tasks/{id}` (api/routes_tasks.py)
+- `GET /git/branches` → `{"branches":[...], "active": "...", "head": "SHA"}` (api/routes_git.py)
+- `GET /git/packages` → list Python modules under a base package for a branch (api/routes_git.py)
+- `POST /graph/diff` → branch diff with node/edge changes (api/routes_git.py)
+- `POST /tasks/graph/diff` → enqueue diff; poll `/tasks/{id}` (api/routes_tasks.py)
+- `GET /tasks/{task_id}` → background task status/result (api/routes_tasks.py)
+- Custom edits: `POST /schema/custom-class`, `POST /schema/custom-quantity`, `DELETE /schema/custom-edits` (api/main.py)
+- `GET /overview` → bird’s-eye list of packages/classes at a branch (api/main.py)
+- `GET /usage` → normalize/helper list for a section class (api/main.py)
+
+### Shared query flags
+- `include_quantities` — include quantity metadata in nodes.
+- `include_subsections` — include composition edges / child sections.
+- `include_inheritance` — include inheritance edges.
+- `allow_cross_module` — allow traversal across modules within the base namespace.
+- `base_namespace` — dotted package root to scope traversal.
+- `root` — limit the graph to a specific section root (class name).
+- `empty` — return an empty shell graph (used for empty-canvas + custom edits replay).
 
 > Quantity docstrings are embedded directly in `/schema`.
 > The builder that does this is `extractor/graph_builder.py`.
+
+---
+
+## Glossary
+- **Base namespace**: dotted package root that scopes traversal (e.g., `nomad_simulations.schema_packages`).
+- **Package**: concrete Python module under the base namespace that you build graphs from (e.g., `nomad_simulations.schema_packages.model_method`).
+- **Root section**: class name to start traversal from; empty means include all sections in the package.
+- **Empty canvas**: graph shell with no nodes/edges; UI replays custom edits on top (use `empty=true`).
+- **Custom edits**: user-added classes/quantities persisted per user/branch/package via the custom edit endpoints.
 
 ---
 
