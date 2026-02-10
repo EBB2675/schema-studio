@@ -189,6 +189,9 @@ async def schema(
         db=db, user_id=user["id"], workspace=workspace, package=pkg, base_namespace=ns
     )
     data, apply_conflicts = _apply_persisted_edits(data, persisted)
+    applied = _applied_edits(persisted, apply_conflicts)
+    if applied:
+        data["applied_edits"] = [_serialize_edit(edit) for edit in applied]
     data["workspace"] = workspace_payload(workspace)
     conflicts = stale_conflicts + apply_conflicts
     if conflicts:
@@ -391,6 +394,35 @@ def _apply_persisted_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dic
         except HTTPException as exc:
             conflicts.append({"edit": _serialize_edit(edit), "reason": "validation_error", "detail": exc.detail})
     return graph, conflicts
+
+
+def _applied_edits(persisted: list[PersistedEdit], apply_conflicts: list[dict]) -> list[PersistedEdit]:
+    """
+    Return only the persisted edits that were successfully applied (i.e., not present in apply_conflicts).
+    Conflicts carry a serialized edit; we compare by edit_id when available, otherwise by a tuple signature.
+    """
+    conflict_keys: set[tuple[str, str, str | None]] = set()
+    for conflict in apply_conflicts or []:
+        edit_obj = conflict.get("edit") if isinstance(conflict, dict) else None
+        if not isinstance(edit_obj, dict):
+            continue
+        edit_id = edit_obj.get("id")
+        if edit_id:
+            conflict_keys.add(("id", edit_id, None))
+            continue
+        signature = (
+            edit_obj.get("edit_type") or "",
+            edit_obj.get("class_name") or "",
+            edit_obj.get("quantity_name") or None,
+        )
+        conflict_keys.add(signature)
+
+    def _key(e: PersistedEdit) -> tuple[str, str, str | None]:
+        if e.edit_id:
+            return ("id", e.edit_id, None)
+        return (e.edit_type, e.class_name, e.quantity_name or None)
+
+    return [e for e in persisted if _key(e) not in conflict_keys]
 
 
 async def _persisted_state(
