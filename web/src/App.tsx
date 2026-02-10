@@ -804,7 +804,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [api, crossModules, enqueueGraphTask, includeQuantities, includeSubsections, includeInheritance, normalizedNamespace, pkg, root, setStartEmpty, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
+  }, [api, archiveAllAuditEntries, crossModules, enqueueGraphTask, includeQuantities, includeSubsections, includeInheritance, normalizedNamespace, pkg, root, setStartEmpty, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
 
   const resetEmptyCanvas = useCallback(async () => {
     if (!token) {

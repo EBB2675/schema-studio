@@ -79,13 +79,21 @@ const ensureAppliedEdit = (value: unknown): AppliedEdit => {
   if (edit_type !== "class" && edit_type !== "quantity") {
     throw new Error(`Unexpected edit_type: ${String(edit_type)}`);
   }
+  const class_name = asString(value.class_name);
+  if (!class_name) {
+    throw new Error("Applied edit missing class_name");
+  }
+  const quantity_name_raw = value.quantity_name;
+  if (edit_type === "quantity" && (typeof quantity_name_raw !== "string" || !quantity_name_raw)) {
+    throw new Error("Applied quantity edit missing quantity_name");
+  }
 
   return {
     id: asString(value.id) || undefined,
     user_id: asString(value.user_id) || undefined,
     branch: asString(value.branch) || undefined,
     package: asString(value.package) || undefined,
-    class_name: asString(value.class_name),
+    class_name,
     quantity_name: typeof value.quantity_name === "string" ? value.quantity_name : null,
     dtype: typeof value.dtype === "string" ? value.dtype : null,
     docstring: typeof value.docstring === "string" ? value.docstring : null,
