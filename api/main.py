@@ -189,6 +189,9 @@ async def schema(
         db=db, user_id=user["id"], workspace=workspace, package=pkg, base_namespace=ns
     )
     data, apply_conflicts = _apply_persisted_edits(data, persisted)
+    # Surface the list of applied persisted edits so the frontend can show them in the audit trail.
+    if persisted:
+        data["applied_edits"] = [_serialize_edit(edit) for edit in persisted]
     data["workspace"] = workspace_payload(workspace)
     conflicts = stale_conflicts + apply_conflicts
     if conflicts:

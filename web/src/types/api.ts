@@ -30,6 +30,7 @@ export type ApiGraph = {
   nodes: ApiNode[];
   edges: ApiEdge[];
   workspace?: WorkspaceState;
+  applied_edits?: AppliedEdit[];
 };
 
 export type BranchGraphPayload = {
@@ -52,6 +53,50 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
 const asString = (v: unknown) => (typeof v === "string" ? v : "");
+
+export type AppliedEdit = {
+  id?: string;
+  user_id?: string;
+  branch?: string;
+  package?: string;
+  class_name: string;
+  quantity_name?: string | null;
+  dtype?: string | null;
+  docstring?: string | null;
+  parent_name?: string | null;
+  parent_relation?: string | null;
+  edit_type: "class" | "quantity";
+  base_sha?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+const ensureAppliedEdit = (value: unknown): AppliedEdit => {
+  if (!isRecord(value)) {
+    throw new Error("Applied edit is not an object");
+  }
+  const edit_type = value.edit_type;
+  if (edit_type !== "class" && edit_type !== "quantity") {
+    throw new Error(`Unexpected edit_type: ${String(edit_type)}`);
+  }
+
+  return {
+    id: asString(value.id) || undefined,
+    user_id: asString(value.user_id) || undefined,
+    branch: asString(value.branch) || undefined,
+    package: asString(value.package) || undefined,
+    class_name: asString(value.class_name),
+    quantity_name: typeof value.quantity_name === "string" ? value.quantity_name : null,
+    dtype: typeof value.dtype === "string" ? value.dtype : null,
+    docstring: typeof value.docstring === "string" ? value.docstring : null,
+    parent_name: typeof value.parent_name === "string" ? value.parent_name : null,
+    parent_relation: typeof value.parent_relation === "string" ? value.parent_relation : null,
+    edit_type,
+    base_sha: typeof value.base_sha === "string" ? value.base_sha : null,
+    created_at: typeof value.created_at === "string" ? value.created_at : null,
+    updated_at: typeof value.updated_at === "string" ? value.updated_at : null,
+  };
+};
 
 const ensureWorkspace = (value: unknown): WorkspaceState | undefined => {
   if (!isRecord(value)) return undefined;
@@ -133,6 +178,9 @@ export const ensureGraphResponse = (payload: unknown): ApiGraph => {
     nodes: nodesRaw.map(ensureNode),
     edges: edgesRaw.map(ensureEdge),
     workspace: ensureWorkspace(payload.workspace),
+    applied_edits: Array.isArray(payload.applied_edits)
+      ? payload.applied_edits.map(ensureAppliedEdit)
+      : undefined,
   };
 };
 

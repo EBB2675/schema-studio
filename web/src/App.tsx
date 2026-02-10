@@ -10,7 +10,15 @@ import CollapsibleSection from "./components/CollapsibleSection";
 import { useSelection } from "./store/selection";
 import { jsPDF } from "jspdf";
 import type { AuditTrailEntry, QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
-import { ensureDiffResponse, ensureGraphResponse, type ApiEdge, type ApiGraph, type ApiNode, type DiffResponse } from "./types/api";
+import {
+  ensureDiffResponse,
+  ensureGraphResponse,
+  type ApiEdge,
+  type ApiGraph,
+  type ApiNode,
+  type AppliedEdit,
+  type DiffResponse
+} from "./types/api";
 import type { WorkspaceState } from "./types/workspace";
 import { API_FEATURE_HEADER, API_VERSION, API_VERSION_HEADER, DEFAULT_FEATURE_FLAGS } from "./constants/api";
 import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_ROOT } from "./constants/defaults";
@@ -783,6 +791,11 @@ export default function App() {
       }
       setGraph(parsed);
       setBaseGraph(parsed);
+      // If the server returned a clean graph without applied persisted edits, archive any local audit history
+      // so “active edits” reflects only new work in this session.
+      if (!parsed.applied_edits || parsed.applied_edits.length === 0) {
+        archiveAllAuditEntries();
+      }
     } catch (e: unknown) {
       const message = formatApiError(e);
       setErr(message || "Failed to load graph");
@@ -996,6 +1009,119 @@ export default function App() {
     };
   }, [toQuantityNode]);
 
+  const changeFromAppliedEdit = useCallback(
+    (edit: AppliedEdit, graph: ApiGraph): AuditTrailEntry["change"] | null => {
+      const normalizedPackage = normalizeModule(edit.package || graph.package) || graph.package;
+
+      if (edit.edit_type === "class") {
+        const sectionNode =
+          graph.nodes.find(
+            (n) =>
+              n.kind === "section" &&
+              (normalizeId(n.id) === normalizeId(`${normalizedPackage}.${edit.class_name}`) ||
+                normalizeLabel(n.label, n.id) === edit.class_name)
+          ) || null;
+
+        const classId = normalizeId(sectionNode?.id || `${normalizedPackage}.${edit.class_name}`);
+        const ownedQuantities = graph.nodes
+          .filter((n) => n.kind === "quantity" && normalizeId(n.owner) === classId)
+          .map(toQuantityNode);
+        const parentEdge = graph.edges.find(
+          (e) =>
+            (e.type === "inherits" || e.type === "hasSubSection") &&
+            normalizeId(e.target) === classId
+        );
+        const parentRelation: "inherits" | "hasSubSection" | null =
+          parentEdge?.type === "inherits"
+            ? "inherits"
+            : parentEdge?.type === "hasSubSection"
+              ? "hasSubSection"
+              : null;
+
+        const cls: UmlClassNode = {
+          id: classId,
+          name: normalizeLabel(sectionNode?.label ?? edit.class_name ?? classId, classId),
+          doc: sectionNode?.doc ?? edit.docstring ?? null,
+          module: sectionNode?.module ?? normalizedPackage,
+          path: sectionNode?.path ?? null,
+          line: typeof sectionNode?.line === "number" ? sectionNode.line : null,
+          quantities: ownedQuantities,
+          parentId: parentEdge ? normalizeId(parentEdge.source) : null,
+          parentRelation,
+        };
+        return { type: "add-class", cls };
+      }
+
+      // quantity edit
+      const classId = normalizeId(`${normalizedPackage}.${edit.class_name}`);
+      const quantityNode =
+        graph.nodes.find(
+          (n) =>
+            n.kind === "quantity" &&
+            normalizeId(n.owner) === classId &&
+            (normalizeId(n.id) === normalizeId(`${classId}.${edit.quantity_name || ""}`) ||
+              normalizeLabel(n.label, n.id) === edit.quantity_name)
+        ) || null;
+
+      const quantity: QuantityNode = quantityNode
+        ? toQuantityNode(quantityNode)
+        : {
+            id: normalizeId(`${classId}.${edit.quantity_name || "quantity"}`),
+            name: edit.quantity_name || "quantity",
+            dtype: edit.dtype ?? undefined,
+            doc: edit.docstring ?? null,
+            shape: null,
+            card: null,
+            path: null,
+            line: null,
+            ownerId: classId,
+          };
+
+      return { type: "add-quantity", classId, quantity };
+    },
+    [normalizeModule, normalizeId, normalizeLabel, toQuantityNode]
+  );
+
+  const seedAuditFromAppliedEdits = useCallback(
+    (graphWithEdits: ApiGraph | null) => {
+      const applied = graphWithEdits?.applied_edits;
+      if (!graphWithEdits || !applied || !applied.length) return;
+
+      const pkgForEntries = normalizePackageName(graphWithEdits.package);
+      setAuditTrail((prev) => {
+        const existingIds = new Set(prev.map((e) => e.id));
+        const next: AuditTrailEntry[] = [];
+
+        applied.forEach((edit) => {
+          const editId = edit.id || `${edit.edit_type}-${edit.class_name}-${edit.quantity_name || ""}`;
+          const auditId = `persisted-${pkgForEntries}-${editId}`;
+          if (existingIds.has(auditId)) return;
+
+          const change = changeFromAppliedEdit(edit, graphWithEdits);
+          if (!change) return;
+
+          const description =
+            edit.edit_type === "quantity"
+              ? `Persisted quantity ${edit.quantity_name || ""} on ${edit.class_name}`
+              : `Persisted class ${edit.class_name}`;
+
+          next.push({
+            id: auditId,
+            timestamp: edit.updated_at || edit.created_at || new Date().toISOString(),
+            description,
+            change,
+            package: edit.package || graphWithEdits.package,
+            replayable: false,
+          });
+        });
+
+        if (!next.length) return prev;
+        return [...prev, ...next];
+      });
+    },
+    [changeFromAppliedEdit, normalizePackageName, setAuditTrail]
+  );
+
   const toggleEmptyMode = useCallback(async () => {
     const nextShouldBeEmpty = !emptyCanvasActive;
     setStartEmpty(nextShouldBeEmpty);
@@ -1038,10 +1164,65 @@ export default function App() {
   }, [buildUmlState, graph]);
 
   useEffect(() => {
+    seedAuditFromAppliedEdits(graph);
+  }, [graph, seedAuditFromAppliedEdits]);
+
+  useEffect(() => {
     if (!auditTrail.length && graph) {
       setBaseGraph(graph);
     }
   }, [auditTrail.length, graph]);
+
+  const archiveStaleAuditEntries = useCallback(
+    (g: ApiGraph | null) => {
+      if (!g) return;
+      const classIds = new Set(
+        g.nodes.filter((n) => n.kind === "section").map((n) => normalizeId(n.id))
+      );
+      const quantityIds = new Set(
+        g.nodes.filter((n) => n.kind === "quantity").map((n) => normalizeId(n.id))
+      );
+
+      setAuditTrail((prev) => {
+        let mutated = false;
+        const next = prev.map((entry) => {
+          if (entry.replayable === false) return entry;
+          const change = entry.change;
+          const exists = (() => {
+            switch (change.type) {
+              case "add-class":
+                return classIds.has(normalizeId(change.cls.id));
+              case "remove-class":
+                return !classIds.has(normalizeId(change.cls.id));
+              case "add-quantity":
+                return quantityIds.has(normalizeId(change.quantity.id));
+              case "remove-quantity":
+                return !quantityIds.has(normalizeId(change.quantity.id));
+              case "edit-quantity":
+                return quantityIds.has(normalizeId(change.after.id));
+              default:
+                return false;
+            }
+          })();
+          if (exists) return entry;
+          mutated = true;
+          return { ...entry, replayable: false };
+        });
+        return mutated ? next : prev;
+      });
+    },
+    [setAuditTrail]
+  );
+
+  const archiveAllAuditEntries = useCallback(() => {
+    setAuditTrail((prev) =>
+      prev.length ? prev.map((entry) => ({ ...entry, replayable: false })) : prev
+    );
+  }, [setAuditTrail]);
+
+  useEffect(() => {
+    archiveStaleAuditEntries(graph);
+  }, [archiveStaleAuditEntries, graph]);
 
   useEffect(() => {
     if (!umlState) {
