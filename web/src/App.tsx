@@ -21,7 +21,7 @@ import {
 } from "./types/api";
 import type { WorkspaceState } from "./types/workspace";
 import { API_FEATURE_HEADER, API_VERSION, API_VERSION_HEADER, DEFAULT_FEATURE_FLAGS } from "./constants/api";
-import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_ROOT } from "./constants/defaults";
+import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_ROOT, DEFAULT_PACKAGE, LIGHT_MODE } from "./constants/defaults";
 import { useWorkspaceStore } from "./store/workspace";
 import { fqidFromParts, normalizeId, normalizeLabel, normalizeModule } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
@@ -59,15 +59,21 @@ type TaskEnqueueResponse = WorkspaceEnvelope & {
 export default function App() {
   const apiBase = DEFAULT_API;
   const [token, setToken] = useState<string>(() => {
+    if (LIGHT_MODE) return "light";
     if (typeof window === "undefined") return "";
     return window.localStorage.getItem("schema-uml-token") || "";
   });
   const [userName, setUserName] = useState<string | null>(() => {
+    if (LIGHT_MODE) return "local";
     if (typeof window === "undefined") return null;
     return window.localStorage.getItem("schema-uml-username");
   });
-  const [sessionChecked, setSessionChecked] = useState<boolean>(false);
-  const [workspace, setWorkspace] = useState<WorkspaceState | null>(null);
+  const [sessionChecked, setSessionChecked] = useState<boolean>(LIGHT_MODE);
+  const [workspace, setWorkspace] = useState<WorkspaceState | null>(() =>
+    LIGHT_MODE
+      ? { branch: DEFAULT_BRANCH, package: DEFAULT_PACKAGE, base_namespace: DEFAULT_NAMESPACE }
+      : null
+  );
   const [authError, setAuthError] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [loginUsername, setLoginUsername] = useState<string>("admin");
@@ -126,6 +132,13 @@ export default function App() {
   });
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [canvasStatus, setCanvasStatus] = useState<string | null>(null);
+  const [sendNote, setSendNote] = useState<string>("");
+  const [sendStatus, setSendStatus] = useState<string | null>(null);
+  const [sending, setSending] = useState<boolean>(false);
+  const [schemaVersion, setSchemaVersion] = useState<string | null>(null);
+  const [schemaSource, setSchemaSource] = useState<string | null>(null);
+  const [schemaUpdateStatus, setSchemaUpdateStatus] = useState<string | null>(null);
+  const [schemaUpdating, setSchemaUpdating] = useState<boolean>(false);
 
   // branch diff state
   const [branches, setBranches] = useState<string[]>([]);
@@ -256,6 +269,7 @@ export default function App() {
   const emptyCanvasActive = startEmpty && graph?.package === scratchPackage && graph?.root === "";
 
   const preferTaskApi = useMemo(() => {
+    if (LIGHT_MODE) return false;
     const raw = import.meta.env.VITE_USE_TASK_API;
     if (typeof raw === "string" && raw.toLowerCase() === "false") return false;
     return true;
@@ -468,6 +482,17 @@ export default function App() {
     }
   }, [token]);
 
+  const loadSchemaVersion = useCallback(async () => {
+    try {
+      const res = await api.get("/schema/version");
+      setSchemaVersion(res.data?.version || null);
+      setSchemaSource(res.data?.source || null);
+    } catch (error) {
+      // surface softly
+      setSchemaUpdateStatus(`Schema version unavailable: ${formatApiError(error)}`);
+    }
+  }, [api]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (userName) {
@@ -478,6 +503,12 @@ export default function App() {
   }, [userName]);
 
   useEffect(() => {
+    if (LIGHT_MODE) {
+      setSessionChecked(true);
+      applyWorkspace({ branch: DEFAULT_BRANCH, package: DEFAULT_PACKAGE, base_namespace: DEFAULT_NAMESPACE });
+      loadSchemaVersion();
+      return;
+    }
     let cancelled = false;
     const timeoutId = window.setTimeout(() => {
       if (!cancelled) setSessionChecked(true);
@@ -512,6 +543,11 @@ export default function App() {
       window.clearTimeout(timeoutId);
     };
   }, [api, applyWorkspace, logout, token]);
+
+  useEffect(() => {
+    if (!sessionChecked) return;
+    loadSchemaVersion();
+  }, [loadSchemaVersion, sessionChecked]);
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
   const clampDocWidth = useCallback((value: number) => {
@@ -742,7 +778,21 @@ export default function App() {
         setBaseGraph(parsed);
         return;
       }
-      if (branchToUse) {
+      if (LIGHT_MODE) {
+        const r = await api.get("/schema", {
+          params: {
+            package: pkgToUse,
+            root: rootToUse,
+            include_quantities: includeQuantities,
+            include_subsections: includeSubsections,
+            include_inheritance: includeInheritance,
+            allow_cross_module: crossModules,
+            base_namespace: namespaceToUse || undefined,
+          },
+        });
+        parsed = ensureGraphResponse(r.data);
+        syncWorkspaceFromResponse(r.data);
+      } else if (branchToUse) {
         const asyncResult = await enqueueGraphTask(
           { branch: branchToUse, package: pkgToUse },
           {
@@ -2087,6 +2137,45 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const sendDesign = async () => {
+    if (!graph && !baseGraph) {
+      setSendStatus("Nothing to send yet — build a graph first.");
+      return;
+    }
+    setSending(true);
+    setSendStatus(null);
+    try {
+      const payload = {
+        schema: graph ?? baseGraph,
+        note: sendNote || undefined,
+        timestamp: new Date().toISOString(),
+      };
+      const res = await api.post("/send-design", payload);
+      const id = (res.data && (res.data.submission_id as string)) || undefined;
+      setSendStatus(id ? `Results sent. Reference: ${id}` : "Results sent.");
+    } catch (error: unknown) {
+      setSendStatus(`Send failed: ${formatApiError(error)}`);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const updateSchema = async () => {
+    setSchemaUpdating(true);
+    setSchemaUpdateStatus(null);
+    try {
+      const res = await api.post("/schema/update");
+      const version = res.data?.version as string | undefined;
+      setSchemaVersion(version || null);
+      setSchemaSource(res.data?.source || null);
+      setSchemaUpdateStatus(version ? `Schema updated to ${version}` : "Schema updated.");
+    } catch (error) {
+      setSchemaUpdateStatus(`Update failed: ${formatApiError(error)}`);
+    } finally {
+      setSchemaUpdating(false);
+    }
+  };
+
   const restoring = token && !sessionChecked;
 
   if (!token || !sessionChecked || !userName) {
@@ -2154,10 +2243,18 @@ export default function App() {
             SchemaStudio
           </h3>
           <p className="subdued">
-            Craft diagrams, compare branches, and edit schemas. Currently defaults to nomad-simulations.
+            {LIGHT_MODE
+              ? "Running in Light Mode (local, single-user, non-production)."
+              : "Craft diagrams, compare branches, and edit schemas. Currently defaults to nomad-simulations."}
           </p>
-          <div className="row" style={{ marginTop: 10 }}>
+          <div className="row" style={{ marginTop: 10, flexWrap: "wrap", gap: 8 }}>
             <span className="tag">{loading || diffLoading ? "Working…" : "Ready"}</span>
+            {LIGHT_MODE ? <span className="tag muted">Offline-first</span> : null}
+            {schemaVersion ? (
+              <span className="tag">Schema {schemaVersion.slice(0, 9)}{schemaSource ? ` (${schemaSource})` : ""}</span>
+            ) : (
+              <span className="tag muted">Schema version…</span>
+            )}
             {selectedClassName ? <span className="tag">Selected: {selectedClassName}</span> : null}
           </div>
           <div style={{ marginTop: 12 }}>
@@ -2179,9 +2276,21 @@ export default function App() {
               </button>
             </div>
           </div>
+          {LIGHT_MODE ? (
+            <div className="row" style={{ marginTop: 12, gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <button className="btn secondary" type="button" onClick={updateSchema} disabled={schemaUpdating}>
+                {schemaUpdating ? "Updating schema…" : "Update schema"}
+              </button>
+              {schemaUpdateStatus ? (
+                <div className="small" style={{ color: schemaUpdateStatus.startsWith("Update failed") ? "#fca5a5" : "var(--muted)" }}>
+                  {schemaUpdateStatus}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
-        {token && userName ? (
+        {!LIGHT_MODE && token && userName ? (
           <div className="brand-card">
             <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
               <div>
@@ -2339,6 +2448,29 @@ export default function App() {
               {importStatus ? (
                 <div className="small" style={{ color: importStatus.startsWith("Import failed") ? "#fca5a5" : "var(--muted)", textAlign: "right" }}>
                   {importStatus}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="card" style={{ marginTop: 12, padding: 12, border: "1px solid var(--border)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+              <div className="row" style={{ alignItems: "center", gap: 8 }}>
+                <strong>Send Design</strong>
+                <span className="tag muted">Share JSON snapshot</span>
+              </div>
+              <textarea
+                className="input"
+                rows={3}
+                placeholder="Optional note for the team"
+                value={sendNote}
+                onChange={(e) => setSendNote(e.target.value)}
+                style={{ resize: "vertical" }}
+              />
+              <button className="btn secondary" type="button" onClick={sendDesign} disabled={sending}>
+                {sending ? "Sending…" : "Send design"}
+              </button>
+              {sendStatus ? (
+                <div className="small" style={{ color: sendStatus.startsWith("Send failed") ? "#fca5a5" : "var(--muted)" }}>
+                  {sendStatus}
                 </div>
               ) : null}
             </div>

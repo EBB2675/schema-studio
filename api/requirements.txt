@@ -7,6 +7,7 @@ orjson
 httpx
 PyJWT
 motor>=3.3.1
+platformdirs
 pytest>=7
 nomad-lab[infrastructure]==1.4.0
 matid==2.1.3

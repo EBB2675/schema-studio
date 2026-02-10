@@ -1,0 +1,3 @@
+include pyproject.toml
+recursive-include web/dist *
+recursive-include api/_data/nomad-simulations.bare *

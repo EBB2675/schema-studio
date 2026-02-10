@@ -5,6 +5,7 @@ export const DEFAULT_NAMESPACE =
   "nomad_simulations.schema_packages";
 export const DEFAULT_ROOT = import.meta.env.VITE_DEFAULT_ROOT ?? "ModelMethod";
 export const DEFAULT_BRANCH = import.meta.env.VITE_DEFAULT_BRANCH ?? "develop";
+export const LIGHT_MODE = (import.meta.env.VITE_LIGHT_MODE ?? "false").toLowerCase() === "true";
 
 export const WORKSPACE_PRESETS = [
   {

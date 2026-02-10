@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "schema-studio"
+version = "0.1.0"
+description = "Schema Studio Light Mode"
+authors = [{name = "Schema Studio Team"}]
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.23",
+  "pydantic>=2,<3",
+  "networkx",
+  "gitpython",
+  "orjson",
+  "httpx",
+  "platformdirs",
+]
+
+[project.optional-dependencies]
+full = [
+  "motor>=3.3.1",
+  "PyJWT",
+  "celery[redis]>=5.3,<6",
+  "redis>=5,<6",
+  "nomad-lab[infrastructure]==1.4.0",
+  "matid==2.1.3",
+]
+
+[project.scripts]
+schema-studio = "api.light_mode.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["api", "api.*", "extractor", "extractor.*"]
+
+[tool.setuptools.package-data]
+"api" = ["light_mode/static/**", "../web/dist/**"]
+"api._data" = ["nomad-simulations.bare/**"]
