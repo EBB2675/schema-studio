@@ -1773,7 +1773,7 @@ export default function App() {
       });
       return changed ? next : prev;
     });
-  }, [auditTrail.length, currentPackageForAudit, normalizePackageName]);
+  }, [auditTrail, currentPackageForAudit, normalizePackageName]);
 
   const restoreArchivedEntry = (id: string) => {
     const updated = auditTrail.map((entry) =>
