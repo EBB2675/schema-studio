@@ -1085,7 +1085,7 @@ export default function App() {
 
       return { type: "add-quantity", classId, quantity };
     },
-    [normalizeModule, normalizeId, normalizeLabel, toQuantityNode]
+    [toQuantityNode]
   );
 
   const seedAuditFromAppliedEdits = useCallback(
@@ -1225,7 +1225,6 @@ export default function App() {
             mutated = true;
             return { ...entry, replayable: false };
           }
-          mutated = true;
           return entry;
         });
         return mutated ? next : prev;
