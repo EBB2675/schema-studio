@@ -1166,14 +1166,18 @@ export default function App() {
     }
   }, [auditTrail.length, graph]);
 
+  // Archive audit entries that are already reflected in the server-provided baseline graph
+  // (so the "active" list only shows changes not yet persisted). We purposely compare against
+  // the baseline graph, not the current in-memory graph, otherwise freshly applied edits would
+  // be mis-flagged as archived immediately after the user makes them.
   const archiveStaleAuditEntries = useCallback(
-    (g: ApiGraph | null) => {
-      if (!g) return;
+    (baseline: ApiGraph | null) => {
+      if (!baseline) return;
       const classIds = new Set(
-        g.nodes.filter((n) => n.kind === "section").map((n) => normalizeId(n.id))
+        baseline.nodes.filter((n) => n.kind === "section").map((n) => normalizeId(n.id))
       );
       const quantityIds = new Set(
-        g.nodes.filter((n) => n.kind === "quantity").map((n) => normalizeId(n.id))
+        baseline.nodes.filter((n) => n.kind === "quantity").map((n) => normalizeId(n.id))
       );
 
       setAuditTrail((prev) => {
@@ -1195,8 +1199,9 @@ export default function App() {
                 // Reflected if quantity is present.
                 return quantityIds.has(normalizeId(change.quantity.id));
               case "remove-quantity":
-                // Reflected if quantity is gone.
-                return !quantityIds.has(normalizeId(change.quantity.id));
+                // Do not auto-archive removals; keep them active so users can undo
+                // even when the baseline graph is missing that quantity (e.g., filtered loads).
+                return false;
               case "edit-quantity":
                 // Reflected if the updated quantity exists.
                 return quantityIds.has(normalizeId(change.after.id));
@@ -1218,8 +1223,8 @@ export default function App() {
   );
 
   useEffect(() => {
-    archiveStaleAuditEntries(graph);
-  }, [archiveStaleAuditEntries, graph]);
+    archiveStaleAuditEntries(baseGraph);
+  }, [archiveStaleAuditEntries, baseGraph]);
 
   useEffect(() => {
     if (!umlState) {
@@ -1793,6 +1798,28 @@ export default function App() {
   );
   const activeAuditCount = activeAuditEntries.length;
   const archivedAuditCount = auditEntriesForCurrentPackage.length - activeAuditCount;
+
+  // Safety net: re-activate remove-quantity entries that were incorrectly archived
+  // by earlier logic, as long as they belong to the current package.
+  useEffect(() => {
+    if (!auditTrail.length) return;
+    setAuditTrail((prev) => {
+      let changed = false;
+      const normalizedPkg = currentPackageForAudit;
+      const next = prev.map((entry) => {
+        if (
+          entry.replayable === false &&
+          entry.change?.type === "remove-quantity" &&
+          (!entry.package || normalizePackageName(entry.package) === normalizedPkg)
+        ) {
+          changed = true;
+          return { ...entry, replayable: true };
+        }
+        return entry;
+      });
+      return changed ? next : prev;
+    });
+  }, [auditTrail, currentPackageForAudit, normalizePackageName]);
 
   const restoreArchivedEntry = (id: string) => {
     const updated = auditTrail.map((entry) =>

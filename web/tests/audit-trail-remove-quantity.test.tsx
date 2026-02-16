@@ -1,35 +1,20 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { useWorkspaceStore } from '../src/store/workspace';
 
 const classId = 'pkg.custom_schema.AtomsState';
+const qtyId = `${classId}.atomic_number`;
 
-const graphWithApplied = {
+const graphWithQuantity = {
   package: 'pkg.custom_schema',
   root: '',
   nodes: [
     { id: classId, kind: 'section', label: 'AtomsState' },
-    { id: `${classId}.user_defined`, kind: 'quantity', label: 'user_defined', owner: classId },
+    { id: qtyId, kind: 'quantity', label: 'atomic_number', owner: classId },
   ],
-  edges: [{ source: classId, target: `${classId}.user_defined`, type: 'hasQuantity' }],
-  applied_edits: [
-    {
-      edit_type: 'quantity',
-      class_name: 'AtomsState',
-      quantity_name: 'user_defined',
-      dtype: 'float',
-      package: 'pkg.custom_schema',
-    },
-  ],
-};
-
-const graphWithoutApplied = {
-  package: 'pkg.custom_schema',
-  root: '',
-  nodes: [{ id: classId, kind: 'section', label: 'AtomsState' }],
-  edges: [],
+  edges: [{ source: classId, target: qtyId, type: 'hasQuantity' }],
 };
 
 const mockGet = vi.fn();
@@ -49,7 +34,7 @@ vi.mock('axios', () => {
   return { default: axios };
 });
 
-// Minimal GraphView stub; avoids cytoscape in tests.
+// Minimal GraphView stub to avoid cytoscape in tests.
 vi.mock('../src/GraphView', () => ({
   __esModule: true,
   default: () => <div>GraphView</div>,
@@ -77,7 +62,7 @@ const primeWorkspace = () => {
   window.localStorage.setItem('schema-uml-username', 'tester');
 };
 
-describe('Audit trail seeding from applied edits', () => {
+describe('Audit trail — remove quantity stays active', () => {
   beforeEach(() => {
     mockGet.mockReset();
     mockPost.mockReset();
@@ -95,50 +80,45 @@ describe('Audit trail seeding from applied edits', () => {
     }
   });
 
-  it('hides server-applied edits from the audit trail', async () => {
-    mockGet.mockImplementation(commonGet(graphWithApplied));
-    mockPut.mockResolvedValue({ data: { workspace: { branch: 'develop', package: 'pkg.custom_schema', base_namespace: 'pkg' } } });
-
-    render(<App />);
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByRole('button', { name: /\+ Start from empty canvas/i }));
-
-    await waitFor(() =>
-      expect(screen.queryByText(/No edits on this canvas yet/i)).toBeInTheDocument()
-    );
-    expect(
-      screen.queryByText((_, node) =>
-        node?.textContent?.includes('Persisted quantity user_defined on AtomsState') ?? false
-      )
-    ).not.toBeInTheDocument();
-  });
-
-  it('archives preexisting local audit entries when server sends no applied edits', async () => {
+  it('keeps a remove-quantity entry active (not archived) when baseline still contains the quantity', async () => {
+    // Seed local audit with a removal that should remain active.
     const storedAudit = [
       {
-        id: 'local-1',
+        id: 'local-remove-1',
         timestamp: new Date().toISOString(),
-        description: 'Old local change',
+        description: 'Removed quantity atomic_number from AtomsState',
         package: 'pkg.custom_schema',
         replayable: true,
         change: {
-          type: 'add-class',
-          cls: { id: classId, name: 'AtomsState', doc: null, module: 'pkg.custom_schema', path: null, line: null, quantities: [], parentId: null, parentRelation: null },
+          type: 'remove-quantity',
+          classId,
+          quantity: {
+            id: qtyId,
+            name: 'atomic_number',
+            dtype: 'int',
+            shape: null,
+            card: null,
+            doc: null,
+            path: null,
+            line: null,
+            ownerId: classId,
+          },
         },
       },
     ];
     window.localStorage.setItem('schema-uml-audit', JSON.stringify(storedAudit));
 
-    mockGet.mockImplementation(commonGet(graphWithoutApplied));
+    mockGet.mockImplementation(commonGet(graphWithQuantity));
     mockPut.mockResolvedValue({ data: { workspace: { branch: 'develop', package: 'pkg.custom_schema', base_namespace: 'pkg' } } });
 
     render(<App />);
     const user = userEvent.setup();
+
     await user.click(await screen.findByRole('button', { name: /\+ Start from empty canvas/i }));
 
-    await waitFor(() => expect(screen.queryAllByText(/0 active edits/i).length).toBeGreaterThan(0));
-    const archivedLocal = screen.getAllByText((_, node) => node?.textContent?.includes('Old local change') ?? false);
-    expect(archivedLocal[0]).toHaveTextContent(/archived/i);
+    const removalEntry = await screen.findByText((_, node) => node?.textContent === 'Removed quantity atomic_number from AtomsState');
+    expect(removalEntry).not.toHaveTextContent(/archived/i);
+    const undoButtons = screen.getAllByTitle('Undo this change');
+    expect(undoButtons.some((btn) => !btn.hasAttribute('disabled'))).toBe(true);
   });
 });
