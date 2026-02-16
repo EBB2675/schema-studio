@@ -7,7 +7,7 @@ name = "schema-studio"
 version = "0.1.0"
 description = "Schema Studio Light Mode"
 authors = [{name = "Schema Studio Team"}]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.110",
   "uvicorn[standard]>=0.23",

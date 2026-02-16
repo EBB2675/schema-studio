@@ -1,16 +1,19 @@
 # Schema Studio
 
-Interactive editor for data models. 
+Interactive editor for data models.
 
-Currently defaults to NOMAD-compatible schemas (`nomad-simulations`) but can point to any schema repo you configure.
+Supports two runtime modes:
+- **Light Mode**: pip-installable, local single-user mode with SQLite persistence and no external services.
+- **Dev Mode**: full multi-user/auth/git-branch mode with Mongo + optional Redis/Celery.
 
 Back end: **FastAPI** · Front end: **React + Cytoscape + ELK**.
 Deployment: **Docker Compose + Caddy** (optional).
+Python: **3.11 recommended/tested** (package requires **>=3.11**).
 
 - Visualizes **sections** as UML cards (attributes = quantities, edges = subsections).
 - Right-hand **Doc Panel** shows the **class docstring** and a **clickable list of quantities**.
 - Right-hand **Under the hood** panel shows **normalization and helper functions** that act on the selected section (based on the repo you configure).
-- **Branch diff** (base → head) highlights **added/changed/removed** nodes/edges, including quantity changes.
+- **Branch diff** (base → head) highlights **added/changed/removed** nodes/edges, including quantity changes (**Dev Mode only**).
 - **Bird's-eye overview**: inspect packages/classes across branches without building a full graph.
 - **Editable mode**: add classes and quantities directly in the UI (server validates supported dtypes; new classes get fully-qualified ids and accept quantities immediately).
 - **Empty canvas**: start from a blank namespace (`<base>.custom_schema`), edit freely, and reset persisted edits with one click.
@@ -34,10 +37,10 @@ Deployment: **Docker Compose + Caddy** (optional).
 - **Doc panel**: Click a class to see its docstring; click a quantity in the panel to see its docstring.
 - **Under-the-hood panel**:
   - Click a class to see which **normalize methods** and **module-level helpers** the viewer can associate with that section.
-  - Information is derived from your configured schema repo via a small introspection/indexing step in the backend (defaults to `nomad-simulations` if you don’t override env vars).
-- **Branch comparison**: Choose two Git branches and render the diff with visual highlights.
+  - Information is derived from schema modules and backend indexing logic.
+- **Branch comparison** (**Dev Mode only**): Choose two Git branches and render the diff with visual highlights.
 - **Namespace filtering**: Limit traversal to a base namespace; optionally include cross-module links.
-- **Bird's-eye overview**: Switch to Overview mode to list packages/classes for any branch.
+- **Bird's-eye overview**: Switch to Overview mode to list packages/classes.
 - **Editable quantities/classes**: Toggle Editable mode to add classes (as inheritance or subsection relationships) and add, rename, or remove quantities from the selected class card (full editor, not just a viewer).
 - **Optional overlays**: Inheritance edges and dtype/shape metadata are toggles (inheritance now on by default so new class relationships are visible).
 - **Export**: Save the current graph as JSON or a PDF (PNG-backed) snapshot.
@@ -47,7 +50,23 @@ Deployment: **Docker Compose + Caddy** (optional).
 
 ## 🚀 Quick Start (pick one)
 
-### Option A — Docker Compose (easiest)
+### Option A — Light Mode (PyPI, no Mongo/Redis)
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install schema-studio
+schema-studio
+```
+This starts a local Light Mode server and opens the browser.
+
+Light Mode defaults:
+- Single-user local app (no login required)
+- No branch switching/diff UI
+- Schema source pinned by policy to `nomad-simulations` `develop` lineage
+- Custom edits persisted in local SQLite
+- Use **Update schema** (or `POST /schema/update`) to pull latest `develop` after install
+
+### Option B — Docker Compose (Dev Mode, easiest full stack)
 ```bash
 git clone https://github.com/EBB2675/schema-studio.git
 cd schema-studio
@@ -58,7 +77,7 @@ docker compose up --build -d
 Then open https://localhost (Caddy handles API + frontend). Redis, Celery worker, Mongo, API, and frontend all start in this one command.
 Default ports (Docker Compose): frontend 5173, API 5179, Redis 6379, Mongo 27017, Caddy 80/443.
 
-### Option B — Local dev (`dev.sh`) with one extra Redis + worker
+### Option C — Local dev (`dev.sh`) with one extra Redis + worker
 1) Create env: `conda create -n schema-studio python=3.11 -y && conda activate schema-studio`
 2) Install deps: `pip install -r api/requirements.txt`
 3) Run Redis (Docker is fine): `docker run --name schema-uml-redis -p 6379:6379 redis:7-alpine`
@@ -79,6 +98,9 @@ Default ports (Docker Compose): frontend 5173, API 5179, Redis 6379, Mongo 27017
 Notes:
 - Mongo: install locally or let `START_MONGO_DOCKER=1 ./dev.sh` spin up a container.
 - If Redis is missing, Celery falls back to eager mode (tasks run inline); background jobs are better.
+- For source-based Light Mode development, build the Light Mode frontend before launching:
+  - `VITE_LIGHT_MODE=true npm --prefix web run build`
+  - then run `schema-studio` (or set `SCHEMA_STUDIO_DIST_DIR` explicitly).
 
 ---
 
@@ -141,7 +163,7 @@ docker compose up --build -d
 4. **Doc panel**: Click a class → see its docstring + list of quantities; click a quantity to view its docstring.
 5. **Under the hood panel**: Click a class → see which normalizers and module-level helpers are associated with that section.
 6. **Editable mode** (Doc panel): Toggle **Editable mode**, then add classes or add/rename/remove quantities on the selected class (supported dtypes are validated server-side; new classes can immediately receive quantities).
-7. **Compare branches**: Choose **Base** and **Head** → **Compare** to see a visual diff.
+7. **Compare branches** (**Dev Mode only**): Choose **Base** and **Head** → **Compare** to see a visual diff.
 8. **Export**: Download the current graph as **JSON** or a **PDF** snapshot from the sidebar.
 
 Legend:
@@ -153,20 +175,22 @@ Legend:
 
 ## ⚙️ Backend Endpoints (summary)
 
-- Shared query flags: see **Shared query flags** below (used by `/schema`, `/graph`, `/graph/diff`, `/tasks/graph`, `/tasks/graph/diff`).
-- Auth/workspace/health: `POST /auth/login`, `POST /auth/register`, `GET /workspace`, `PUT /workspace`, `GET /health`, `GET /` (api/main.py)
-- `GET /roots?package=...` → `{"sections": [...]}` (api/main.py)
-- `GET /schema` → graph from working tree (api/main.py)
-- `POST /graph` → graph from a specific branch/worktree (api/routes_git.py)
-- `POST /tasks/graph` → enqueue graph build; poll `/tasks/{id}` (api/routes_tasks.py)
-- `GET /git/branches` → `{"branches":[...], "active": "...", "head": "SHA"}` (api/routes_git.py)
-- `GET /git/packages` → list Python modules under a base package for a branch (api/routes_git.py)
-- `POST /graph/diff` → branch diff with node/edge changes (api/routes_git.py)
-- `POST /tasks/graph/diff` → enqueue diff; poll `/tasks/{id}` (api/routes_tasks.py)
-- `GET /tasks/{task_id}` → background task status/result (api/routes_tasks.py)
-- Custom edits: `POST /schema/custom-class`, `POST /schema/custom-quantity`, `DELETE /schema/custom-edits` (api/main.py)
-- `GET /overview` → bird’s-eye list of packages/classes at a branch (api/main.py)
-- `GET /usage` → normalize/helper list for a section class (api/main.py)
+- **Dev Mode API** (`api/main.py` + routers):
+  - Auth/workspace/health: `POST /auth/login`, `POST /auth/register`, `GET /workspace`, `PUT /workspace`, `GET /health`, `GET /`
+  - `GET /roots`, `GET /schema`
+  - `POST /graph`, `POST /graph/diff`
+  - `POST /tasks/graph`, `POST /tasks/graph/diff`, `GET /tasks/{task_id}`
+  - `GET /git/branches`, `GET /git/packages`
+  - `POST /schema/custom-class`, `POST /schema/custom-quantity`, `DELETE /schema/custom-edits`
+  - `GET /overview`, `GET /usage`
+- **Light Mode API** (`api/light_mode/app.py`):
+  - `GET /health`, `GET /workspace`, `PUT /workspace`
+  - `GET /roots`, `GET /schema`, `GET /overview`, `GET /usage`
+  - `POST /schema/custom-class`, `POST /schema/custom-quantity`, `DELETE /schema/custom-edits`
+  - `GET /schema/version`, `POST /schema/update`, `POST /send-design`
+  - `GET /git/packages` (fixed `develop` behavior), `GET /git/branches` returns `410` (disabled by policy)
+
+- Shared query flags: see **Shared query flags** below (used by `/schema`, `/graph`, `/graph/diff`, `/tasks/graph`, `/tasks/graph/diff` where applicable).
 
 ### Shared query flags
 - `include_quantities` — include quantity metadata in nodes.
@@ -209,9 +233,16 @@ Legend:
 
 ## 🔧 Troubleshooting
 
+- **Light Mode shows `405 Method Not Allowed` when building graph**
+  - You are likely serving a Dev Mode frontend build against the Light Mode backend.
+  - Rebuild UI with `VITE_LIGHT_MODE=true npm --prefix web run build`.
+  - Restart `schema-studio` and hard-refresh the browser.
 - **Branches list is empty**
+  - Dev Mode only.
   - Ensure `NOMAD_SIM_REPO` (or `GIT_REPO_DIR`) points to a valid Git repo.
   - Check `curl http://127.0.0.1:5179/git/branches`.
+- **`GET /git/branches` returns `410` in Light Mode**
+  - Expected behavior. Branch switching is disabled by Light Mode policy.
 - **Quantities show “No docstring available.”**
   - Ensure `extractor/graph_builder.py` includes `doc=_doc_from(q)` for quantities.
   - Restart backend and reload frontend.
