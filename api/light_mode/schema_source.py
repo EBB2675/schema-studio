@@ -11,7 +11,6 @@ import importlib
 import importlib.metadata
 import importlib.util
 import json
-import pkgutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -143,7 +142,8 @@ def update_schema() -> SchemaInfo:
 
 def list_modules_for_base(base_package: str) -> list[str]:
     """
-    List importable modules under an installed package without filesystem checkout.
+    List module names under an installed package without importing submodules.
+    This avoids side effects from module-level registration code.
     """
     try:
         pkg = importlib.import_module(base_package)
@@ -155,7 +155,19 @@ def list_modules_for_base(base_package: str) -> list[str]:
     if not pkg_paths:
         return sorted(modules)
 
-    prefix = f"{base_package}."
-    for mod in pkgutil.walk_packages(pkg_paths, prefix=prefix):
-        modules.add(mod.name)
+    for raw_root in pkg_paths:
+        root = Path(raw_root)
+        if not root.exists():
+            continue
+        for py_file in root.rglob("*.py"):
+            rel = py_file.relative_to(root)
+            if py_file.name == "__init__.py":
+                if rel.parts[:-1]:
+                    mod_name = ".".join((base_package, *rel.parts[:-1]))
+                else:
+                    mod_name = base_package
+            else:
+                mod_name = ".".join((base_package, *rel.with_suffix("").parts))
+            modules.add(mod_name)
+
     return sorted(modules)

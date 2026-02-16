@@ -36,6 +36,23 @@ DEFAULT_HOST = os.getenv("SCHEMA_STUDIO_HOST", "127.0.0.1")
 DEFAULT_PACKAGE = os.getenv("SCHEMA_STUDIO_DEFAULT_PACKAGE", "nomad_simulations.schema_packages.model_method")
 DEFAULT_BASE_NS = os.getenv("SCHEMA_STUDIO_DEFAULT_NAMESPACE", "nomad_simulations.schema_packages")
 
+# Keep this list in sync with web/src/components/quantityShared.ts.
+SUPPORTED_CUSTOM_DTYPES = {
+    "bool",
+    "str",
+    "datetime",
+    "int",
+    "float",
+    "int32",
+    "int64",
+    "np.int32",
+    "np.int64",
+    "float32",
+    "float64",
+    "np.float32",
+    "np.float64",
+}
+
 # Prepare persistence
 store = LocalStore(
     db_path=config_db_path(),
@@ -97,9 +114,179 @@ def _workspace() -> Workspace:
     return ws
 
 
-def _apply_custom_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dict, list[dict]]:
-    from api.main import _apply_persisted_edits, _applied_edits  # reuse logic
+def _attach_custom_quantity(graph: dict, req) -> dict:
+    if req.dtype not in SUPPORTED_CUSTOM_DTYPES:
+        allowed = ", ".join(sorted(SUPPORTED_CUSTOM_DTYPES))
+        raise HTTPException(status_code=400, detail=f"Unsupported dtype '{req.dtype}'. Supported: {allowed}")
 
+    nodes = graph.get("nodes", [])
+    edges = graph.get("edges", [])
+
+    target_section = None
+    for node in nodes:
+        if node.get("kind") != "section":
+            continue
+        if node.get("label") != req.class_name:
+            continue
+        module = node.get("module") or ""
+        if module.startswith(req.package):
+            target_section = node
+            break
+
+    if target_section is None:
+        if not req.parent_name:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Section '{req.class_name}' not found in package '{req.package}'",
+            )
+
+        new_id = f"{req.package}.{req.class_name}"
+        target_section = {
+            "id": new_id,
+            "kind": "section",
+            "label": req.class_name,
+            "doc": None,
+            "module": req.package,
+        }
+        nodes = nodes + [target_section]
+
+        parent = next(
+            (
+                n
+                for n in nodes
+                if n.get("kind") == "section"
+                and (n.get("id") == req.parent_name or n.get("label") == req.parent_name)
+            ),
+            None,
+        )
+        parent_id = parent.get("id") if parent else req.parent_name
+        relation = req.parent_relation or "inherits"
+        edges = edges + [{"source": parent_id, "target": new_id, "type": relation, "card": None}]
+
+    section_id = target_section["id"]
+    for node in nodes:
+        if node.get("kind") == "quantity" and node.get("owner") == section_id and node.get("label") == req.quantity_name:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Quantity '{req.quantity_name}' already exists on section '{req.class_name}'",
+            )
+
+    qid = f"{section_id}.{req.quantity_name}"
+    new_node = {
+        "id": qid,
+        "kind": "quantity",
+        "label": req.quantity_name,
+        "doc": req.docstring or None,
+        "dtype": req.dtype,
+        "owner": section_id,
+        "module": target_section.get("module"),
+    }
+    graph = dict(graph)
+    graph["nodes"] = nodes + [new_node]
+    graph["edges"] = edges + [{"source": section_id, "target": qid, "type": "hasQuantity", "card": None}]
+    return graph
+
+
+def _attach_custom_class(graph: dict, req) -> dict:
+    nodes = graph.get("nodes", [])
+    edges = graph.get("edges", [])
+
+    for node in nodes:
+        if node.get("kind") != "section":
+            continue
+        if node.get("label") == req.name or node.get("id") == req.name:
+            raise HTTPException(status_code=400, detail=f"Class '{req.name}' already exists")
+
+    new_id = f"{req.package}.{req.name}"
+    new_node = {
+        "id": new_id,
+        "kind": "section",
+        "label": req.name,
+        "doc": req.docstring or None,
+        "module": req.package,
+    }
+    nodes = nodes + [new_node]
+
+    if req.parent:
+        parent = next((n for n in nodes if n.get("id") == req.parent or n.get("label") == req.parent), None)
+        parent_id = parent.get("id") if parent else req.parent
+        relation = req.relation if req.relation in ("inherits", "hasSubSection") else "inherits"
+        edges = edges + [{"source": parent_id, "target": new_id, "type": relation, "card": None}]
+
+    graph = dict(graph)
+    graph["nodes"] = nodes
+    graph["edges"] = edges
+    return graph
+
+
+def _apply_persisted_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dict, list[dict]]:
+    conflicts: list[dict] = []
+    sorted_edits = sorted(edits, key=lambda e: 0 if e.edit_type == "class" else 1)
+    for edit in sorted_edits:
+        try:
+            if edit.edit_type == "class":
+                graph = _attach_custom_class(
+                    graph,
+                    type(
+                        "Obj",
+                        (),
+                        {
+                            "package": edit.package,
+                            "name": edit.class_name,
+                            "parent": edit.parent_name,
+                            "relation": edit.parent_relation or "inherits",
+                            "docstring": edit.docstring,
+                        },
+                    )(),
+                )
+            else:
+                graph = _attach_custom_quantity(
+                    graph,
+                    type(
+                        "Obj",
+                        (),
+                        {
+                            "package": edit.package,
+                            "class_name": edit.class_name,
+                            "quantity_name": edit.quantity_name or "",
+                            "dtype": edit.dtype or "str",
+                            "docstring": edit.docstring,
+                            "parent_name": edit.parent_name,
+                            "parent_relation": edit.parent_relation,
+                        },
+                    )(),
+                )
+        except HTTPException as exc:
+            conflicts.append({"edit": _serialize_edit(edit), "reason": "validation_error", "detail": exc.detail})
+    return graph, conflicts
+
+
+def _applied_edits(persisted: list[PersistedEdit], apply_conflicts: list[dict]) -> list[PersistedEdit]:
+    conflict_keys: set[tuple[str, str, str | None]] = set()
+    for conflict in apply_conflicts or []:
+        edit_obj = conflict.get("edit") if isinstance(conflict, dict) else None
+        if not isinstance(edit_obj, dict):
+            continue
+        edit_id = edit_obj.get("id")
+        if edit_id:
+            conflict_keys.add(("id", str(edit_id), None))
+            continue
+        signature = (
+            edit_obj.get("edit_type") or "",
+            edit_obj.get("class_name") or "",
+            edit_obj.get("quantity_name") or None,
+        )
+        conflict_keys.add(signature)
+
+    def _key(e: PersistedEdit) -> tuple[str, str, str | None]:
+        if e.edit_id is not None:
+            return ("id", str(e.edit_id), None)
+        return (e.edit_type or "", e.class_name or "", e.quantity_name or None)
+
+    return [edit for edit in persisted if _key(edit) not in conflict_keys]
+
+
+def _apply_custom_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dict, list[dict]]:
     graph_with_edits, conflicts = _apply_persisted_edits(graph, edits)
     applied = _applied_edits(edits, conflicts)
     if applied:
@@ -211,8 +398,6 @@ async def add_custom_class(
     base_namespace: str | None = Query(None),
     empty: bool = Query(False),
 ):
-    from api.main import _attach_custom_class
-
     _ = current_schema_info()
     ws = store.update_workspace(
         branch=LIGHT_MODE_BRANCH,
@@ -271,7 +456,6 @@ async def add_custom_quantity(
     base_namespace: str | None = Query(None),
     empty: bool = Query(False),
 ):
-    from api.main import _attach_custom_quantity
     _ = current_schema_info()
     ws = store.update_workspace(
         branch=LIGHT_MODE_BRANCH,

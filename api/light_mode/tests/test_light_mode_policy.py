@@ -154,3 +154,33 @@ async def test_usage_endpoint_returns_under_the_hood_entries(
             "doc": "Normalize docs",
         }
     ]
+
+
+@pytest.mark.anyio
+async def test_custom_edit_endpoints_do_not_require_api_main(client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    # Guard against accidental reintroduction of `from api.main import ...` in light mode paths.
+    monkeypatch.setitem(sys.modules, "api.main", None)
+
+    add_class = await client.post(
+        "/schema/custom-class",
+        params={
+            "package": "pkg.default",
+            "name": "LocalClass",
+            "relation": "inherits",
+        },
+    )
+    assert add_class.status_code == 200
+    assert add_class.json()["persisted_edit"]["edit_type"] == "class"
+
+    add_quantity = await client.post(
+        "/schema/custom-quantity",
+        params={
+            "package": "pkg.default",
+            "class_name": "LocalClass",
+            "quantity_name": "my_q",
+            "dtype": "str",
+        },
+    )
+    assert add_quantity.status_code == 200
+    q_labels = [n.get("label") for n in add_quantity.json()["nodes"] if n.get("kind") == "quantity"]
+    assert "my_q" in q_labels
