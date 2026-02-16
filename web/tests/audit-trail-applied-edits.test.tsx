@@ -95,7 +95,7 @@ describe('Audit trail seeding from applied edits', () => {
     }
   });
 
-  it('shows applied edits as archived and reports 0 active edits', async () => {
+  it('hides server-applied edits from the audit trail', async () => {
     mockGet.mockImplementation(commonGet(graphWithApplied));
     mockPut.mockResolvedValue({ data: { workspace: { branch: 'develop', package: 'pkg.custom_schema', base_namespace: 'pkg' } } });
 
@@ -104,9 +104,14 @@ describe('Audit trail seeding from applied edits', () => {
 
     await user.click(await screen.findByRole('button', { name: /\+ Start from empty canvas/i }));
 
-    await waitFor(() => expect(screen.queryAllByText(/0 active edits/i).length).toBeGreaterThan(0));
-    const persisted = screen.getAllByText((_, node) => node?.textContent?.includes('Persisted quantity user_defined on AtomsState') ?? false);
-    expect(persisted[0]).toHaveTextContent(/archived/i);
+    await waitFor(() =>
+      expect(screen.queryByText(/No edits on this canvas yet/i)).toBeInTheDocument()
+    );
+    expect(
+      screen.queryByText((_, node) =>
+        node?.textContent?.includes('Persisted quantity user_defined on AtomsState') ?? false
+      )
+    ).not.toBeInTheDocument();
   });
 
   it('archives preexisting local audit entries when server sends no applied edits', async () => {

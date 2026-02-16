@@ -33,8 +33,30 @@ from fastapi.testclient import TestClient  # noqa: E402
 import pytest  # noqa: E402
 
 
+def _mongo_client() -> pymongo.MongoClient:
+    # Keep timeouts low so missing local Mongo fails fast during tests.
+    return pymongo.MongoClient(
+        os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017"),
+        serverSelectionTimeoutMS=2000,
+        connectTimeoutMS=2000,
+        socketTimeoutMS=2000,
+    )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def require_mongo():
+    uri = os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017")
+    client = _mongo_client()
+    try:
+        client.admin.command("ping")
+    except Exception as exc:
+        pytest.skip(f"MongoDB is not reachable at {uri}: {exc}")
+    finally:
+        client.close()
+
+
 def _reset_dbs_sync():
-    client = pymongo.MongoClient(os.getenv("SCHEMA_UML_MONGO_URI", "mongodb://localhost:27017"))
+    client = _mongo_client()
     db = client[os.getenv("SCHEMA_UML_MONGO_DB", "schema_uml_test")]
     db.drop_collection(auth.USERS_COLLECTION)
     db.drop_collection(auth.WORKSPACES_COLLECTION)
