@@ -2,3 +2,4 @@ __pycache__/
 api/_data/
 .env
 .venv/
+dist/
