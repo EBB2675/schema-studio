@@ -629,10 +629,10 @@ export default function App() {
   useEffect(() => {
     if (!workspace || !token) return;
     const updates: Partial<WorkspaceState> = {};
-    const desiredBranch = packageBranch || workspace.branch;
+    const desiredBranch = LIGHT_MODE ? workspace.branch : (packageBranch || workspace.branch);
     if (workspace.package !== pkg) updates.package = pkg;
     if (workspace.base_namespace !== normalizedNamespace) updates.base_namespace = normalizedNamespace;
-    if (workspace.branch !== desiredBranch) updates.branch = desiredBranch;
+    if (!LIGHT_MODE && workspace.branch !== desiredBranch) updates.branch = desiredBranch;
     if (Object.keys(updates).length > 0) updateWorkspaceOnServer(updates);
   }, [normalizedNamespace, packageBranch, pkg, token, updateWorkspaceOnServer, workspace]);
 
@@ -656,14 +656,17 @@ export default function App() {
   };
 
   const helpSummary = useMemo(
-    () => [
-      "Workspace (left): pick branch, package, root, toggles; then Build graph.",
-      "Graph canvas (center): pan/zoom, select classes, toggle UML/Edit.",
-      "Documentation (right): class and quantity docs; edit quantities in Edit mode.",
-      "Audit trail (right bottom): log of edits; export/reset.",
-      "Compare branches (left): diff two git branches.",
-      "Empty canvas: start custom schema without loading existing graph.",
-    ],
+    () => {
+      const lines = [
+        "Workspace (left): pick package, root, toggles; then Build graph.",
+        "Graph canvas (center): pan/zoom, select classes, toggle UML/Edit.",
+        "Documentation (right): class and quantity docs; edit quantities in Edit mode.",
+        "Audit trail (right bottom): log of edits; export/reset.",
+      ];
+      if (!LIGHT_MODE) lines.push("Compare branches (left): diff two git branches.");
+      lines.push("Empty canvas: start custom schema without loading existing graph.");
+      return lines;
+    },
     []
   );
 
@@ -894,6 +897,13 @@ export default function App() {
   // fetch git branches
   const loadBranches = useCallback(async () => {
     if (!token) return;
+    if (LIGHT_MODE) {
+      const fixedBranch = workspaceBranch || DEFAULT_BRANCH;
+      setBranches([fixedBranch]);
+      setBaseBranch(fixedBranch);
+      setHeadBranch(fixedBranch);
+      return;
+    }
     try {
       const r = await api.get("/git/branches", { params: { base_package: normalizedNamespace } });
       setBranches(r.data.branches || []);
@@ -902,7 +912,7 @@ export default function App() {
       // keep silent in UI; dropdown will just be empty
       console.error("Failed to load branches", e);
     }
-  }, [api, normalizedNamespace, syncWorkspaceFromResponse, token]);
+  }, [api, normalizedNamespace, syncWorkspaceFromResponse, token, workspaceBranch]);
 
   // fetch available schema packages from develop branch
   const loadPackages = useCallback(async () => {
@@ -911,7 +921,7 @@ export default function App() {
     try {
       const r = await api.get("/git/packages", {
         params: {
-          branch: packageBranch,
+          branch: LIGHT_MODE ? undefined : packageBranch,
           base_package: normalizedNamespace,
         },
       });
@@ -952,6 +962,10 @@ export default function App() {
   const compareBranches = async () => {
     if (!token) {
       setErr("Login required");
+      return;
+    }
+    if (LIGHT_MODE) {
+      setErr("Branch comparison is disabled in Light Mode.");
       return;
     }
     if (!baseBranch || !headBranch) return;
@@ -1820,6 +1834,7 @@ export default function App() {
   };
 
   const handleBranchSelect = (value: string) => {
+    if (LIGHT_MODE) return;
     setPackageBranch(value);
     setOverviewBranch(value);
     setBaseBranch((prev) => prev || value);
@@ -2249,7 +2264,7 @@ export default function App() {
           </p>
           <div className="row" style={{ marginTop: 10, flexWrap: "wrap", gap: 8 }}>
             <span className="tag">{loading || diffLoading ? "Working…" : "Ready"}</span>
-            {LIGHT_MODE ? <span className="tag muted">Offline-first</span> : null}
+            {LIGHT_MODE ? <span className="tag muted">Single-user</span> : null}
             {schemaVersion ? (
               <span className="tag">Schema {schemaVersion.slice(0, 9)}{schemaSource ? ` (${schemaSource})` : ""}</span>
             ) : (
@@ -2323,18 +2338,27 @@ export default function App() {
             </div>
             <div className="row" style={{ gap: 10, alignItems: "flex-end" }}>
               <div style={{ flex: 1 }}>
-                <label className="label">Choose from branch</label>
-                <select
-                  className="select"
-                  value={packageBranch}
-                  onChange={(e) => handleBranchSelect(e.target.value)}
-                >
-                  {[packageBranch || DEFAULT_BRANCH, ...branches.filter((b) => b !== packageBranch)].map((b) => (
-                    <option key={b} value={b}>
-                      {b}
-                    </option>
-                  ))}
-                </select>
+                {LIGHT_MODE ? (
+                  <>
+                    <label className="label">Schema branch</label>
+                    <div className="small">{DEFAULT_BRANCH} (fixed in Light Mode)</div>
+                  </>
+                ) : (
+                  <>
+                    <label className="label">Choose from branch</label>
+                    <select
+                      className="select"
+                      value={packageBranch}
+                      onChange={(e) => handleBranchSelect(e.target.value)}
+                    >
+                      {[packageBranch || DEFAULT_BRANCH, ...branches.filter((b) => b !== packageBranch)].map((b) => (
+                        <option key={b} value={b}>
+                          {b}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
               </div>
               <button className="btn secondary" onClick={loadPackages} style={{ whiteSpace: "nowrap" }}>
                 Refresh packages
@@ -2342,7 +2366,7 @@ export default function App() {
             </div>
 
             <div>
-              <label className="label">Choose from {packageBranch || DEFAULT_BRANCH}</label>
+              <label className="label">{LIGHT_MODE ? "Choose package" : `Choose from ${packageBranch || DEFAULT_BRANCH}`}</label>
               <select
                 className="select"
                 value={availablePkgs.includes(pkg) ? pkg : ""}
@@ -2491,55 +2515,57 @@ export default function App() {
           <UnderTheHoodPanel apiBase={apiBase} token={token} />
         </CollapsibleSection>
 
-        <CollapsibleSection
-          title="Compare branches"
-          hint="Diff diagrams across git"
-          id="section-compare"
-          open={openCompare}
-          onToggle={setOpenCompare}
-        >
-          <div className="action-stack">
-            <div>
-              <label className="label">Base branch</label>
-              <select
-                className="select"
-                value={baseBranch}
-                onChange={(e) => setBaseBranch(e.target.value)}
-              >
-                <option value="">-</option>
-                {branches.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </select>
-            </div>
+        {!LIGHT_MODE ? (
+          <CollapsibleSection
+            title="Compare branches"
+            hint="Diff diagrams across git"
+            id="section-compare"
+            open={openCompare}
+            onToggle={setOpenCompare}
+          >
+            <div className="action-stack">
+              <div>
+                <label className="label">Base branch</label>
+                <select
+                  className="select"
+                  value={baseBranch}
+                  onChange={(e) => setBaseBranch(e.target.value)}
+                >
+                  <option value="">-</option>
+                  {branches.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="label">Head branch</label>
-              <select
-                className="select"
-                value={headBranch}
-                onChange={(e) => setHeadBranch(e.target.value)}
-              >
-                <option value="">-</option>
-                {branches.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
-                ))}
-              </select>
-            </div>
+              <div>
+                <label className="label">Head branch</label>
+                <select
+                  className="select"
+                  value={headBranch}
+                  onChange={(e) => setHeadBranch(e.target.value)}
+                >
+                  <option value="">-</option>
+                  {branches.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <button
-              className="btn"
-              onClick={compareBranches}
-              disabled={!baseBranch || !headBranch || diffLoading}
-            >
-              {diffLoading ? "Comparing…" : "Compare"}
-            </button>
-          </div>
-        </CollapsibleSection>
+              <button
+                className="btn"
+                onClick={compareBranches}
+                disabled={!baseBranch || !headBranch || diffLoading}
+              >
+                {diffLoading ? "Comparing…" : "Compare"}
+              </button>
+            </div>
+          </CollapsibleSection>
+        ) : null}
       </aside>
       <div
         className="resizer"
@@ -2582,7 +2608,9 @@ export default function App() {
                 <button className="link-button" type="button" onClick={() => focusAndOpen("workspace")}>Workspace</button>
                 <button className="link-button" type="button" onClick={() => focusAndOpen("documentation")}>Documentation</button>
                 <button className="link-button" type="button" onClick={() => focusAndOpen("audit")}>Audit trail</button>
-                <button className="link-button" type="button" onClick={() => focusAndOpen("compare")}>Compare branches</button>
+                {!LIGHT_MODE ? (
+                  <button className="link-button" type="button" onClick={() => focusAndOpen("compare")}>Compare branches</button>
+                ) : null}
                 <button className="link-button" type="button" onClick={() => setMode("overview")}>Overview</button>
               </div>
             </div>
@@ -2726,11 +2754,13 @@ export default function App() {
                 <div>
                   4) Prefer to sketch your own? Turn on “Start from empty canvas” to drop in custom classes/quantities without loading existing schema.
                 </div>
+                {!LIGHT_MODE ? (
+                  <div>
+                    5) <button className="link-button" type="button" onClick={() => focusAndOpen("compare")}>Compare branches 👈</button> to see how two git branches differ in structure.
+                  </div>
+                ) : null}
                 <div>
-                  5) <button className="link-button" type="button" onClick={() => focusAndOpen("compare")}>Compare branches 👈</button> to see how two git branches differ in structure.
-                </div>
-                <div>
-                  6) Communicate your edits via <button className="link-button" type="button" onClick={() => focusAndOpen("audit")}>Audit trail 👉</button> - export or clear the log anytime.
+                  {LIGHT_MODE ? "5)" : "6)"} Communicate your edits via <button className="link-button" type="button" onClick={() => focusAndOpen("audit")}>Audit trail 👉</button> - export or clear the log anytime.
                 </div>
               </div>
               <div style={{ marginTop: 14 }}>

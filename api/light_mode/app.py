@@ -7,12 +7,9 @@
 """
 from __future__ import annotations
 
-import asyncio
-import json
 import os
-from dataclasses import asdict
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query
@@ -21,8 +18,14 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from extractor.graph_builder import _root_namespace, build_graph, list_sections
-from api.repo_utils import list_modules_under, python_root
-from .schema_source import current_schema_info, ensure_schema_ready, update_schema, SchemaUnavailable
+from extractor.usage_index import get_usage_for_section
+from .schema_source import (
+    DEFAULT_BRANCH as LIGHT_MODE_BRANCH,
+    SchemaUnavailable,
+    current_schema_info,
+    list_modules_for_base,
+    update_schema,
+)
 from .store import LocalStore, Workspace, PersistedEdit, config_db_path
 
 LIGHT_MODE_USER = "local"
@@ -32,15 +35,11 @@ DEFAULT_PORT = int(os.getenv("SCHEMA_STUDIO_PORT", "5179"))
 DEFAULT_HOST = os.getenv("SCHEMA_STUDIO_HOST", "127.0.0.1")
 DEFAULT_PACKAGE = os.getenv("SCHEMA_STUDIO_DEFAULT_PACKAGE", "nomad_simulations.schema_packages.model_method")
 DEFAULT_BASE_NS = os.getenv("SCHEMA_STUDIO_DEFAULT_NAMESPACE", "nomad_simulations.schema_packages")
-DEFAULT_BRANCH = os.getenv("SCHEMA_STUDIO_DEFAULT_BRANCH", "develop")
-
-# Prepare schema baseline once (no automatic updates beyond bundled ref)
-schema_info = ensure_schema_ready()
 
 # Prepare persistence
 store = LocalStore(
     db_path=config_db_path(),
-    defaults=Workspace(branch=DEFAULT_BRANCH, package=DEFAULT_PACKAGE, base_namespace=DEFAULT_BASE_NS),
+    defaults=Workspace(branch=LIGHT_MODE_BRANCH, package=DEFAULT_PACKAGE, base_namespace=DEFAULT_BASE_NS),
 )
 
 app = FastAPI(title="Schema Studio – Light Mode", default_response_class=JSONResponse)
@@ -82,6 +81,22 @@ def _workspace_payload(ws: Workspace) -> dict:
     }
 
 
+def _enforce_light_branch(branch: str | None) -> str:
+    if branch and branch != LIGHT_MODE_BRANCH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Branch switching is disabled in Light Mode; only '{LIGHT_MODE_BRANCH}' is allowed.",
+        )
+    return LIGHT_MODE_BRANCH
+
+
+def _workspace() -> Workspace:
+    ws = store.get_workspace()
+    if ws.branch != LIGHT_MODE_BRANCH:
+        ws = store.update_workspace(branch=LIGHT_MODE_BRANCH)
+    return ws
+
+
 def _apply_custom_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dict, list[dict]]:
     from api.main import _apply_persisted_edits, _applied_edits  # reuse logic
 
@@ -114,26 +129,32 @@ async def schema_update():
 @app.get("/health")
 async def health():
     info = current_schema_info()
-    return {"ok": True, "mode": "light", "workspace": _workspace_payload(store.get_workspace()), "schema_version": info.version, "schema_source": info.source}
+    return {"ok": True, "mode": "light", "workspace": _workspace_payload(_workspace()), "schema_version": info.version, "schema_source": info.source}
 
 
 @app.get("/workspace")
 async def get_workspace():
     info = current_schema_info()
-    return {"workspace": _workspace_payload(store.get_workspace()), "user": {"username": LIGHT_MODE_USER}, "schema_version": info.version}
+    return {"workspace": _workspace_payload(_workspace()), "user": {"username": LIGHT_MODE_USER}, "schema_version": info.version}
 
 
 @app.put("/workspace")
 async def update_workspace(branch: str | None = None, package: str | None = None, base_namespace: str | None = None):
-    ws = store.update_workspace(branch=branch, package=package, base_namespace=base_namespace)
+    _enforce_light_branch(branch)
+    ws = store.update_workspace(
+        branch=LIGHT_MODE_BRANCH,
+        package=package,
+        base_namespace=base_namespace,
+    )
     return {"workspace": _workspace_payload(ws), "user": {"username": LIGHT_MODE_USER}}
 
 
 @app.get("/roots")
 async def roots(package: str | None = Query(None)):
-    pkg = package or store.get_workspace().package
+    ws = _workspace()
+    pkg = package or ws.package
     try:
-        return {"package": pkg, "sections": sorted(list_sections(pkg)), "workspace": _workspace_payload(store.get_workspace())}
+        return {"package": pkg, "sections": sorted(list_sections(pkg)), "workspace": _workspace_payload(ws)}
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=400, detail=f"{type(exc).__name__}: {exc}")
 
@@ -149,12 +170,12 @@ async def schema(
     base_namespace: str | None = Query(None),
     empty: bool = Query(False),
 ):
-    info = current_schema_info()  # ensures local worktree + sys.path are ready
-    ws = store.get_workspace()
+    _ = current_schema_info()  # ensures package import path is ready
+    ws = _workspace()
     pkg = package or ws.package
     ns = base_namespace or ws.base_namespace or _root_namespace(pkg)
     if package or base_namespace:
-        ws = store.update_workspace(package=pkg, base_namespace=ns)
+        ws = store.update_workspace(branch=LIGHT_MODE_BRANCH, package=pkg, base_namespace=ns)
     if empty:
         graph = {"package": pkg, "root": root, "nodes": [], "edges": []}
         return graph | {"workspace": _workspace_payload(ws)}
@@ -192,8 +213,12 @@ async def add_custom_class(
 ):
     from api.main import _attach_custom_class
 
-    info = current_schema_info()
-    ws = store.update_workspace(package=package, base_namespace=base_namespace or _root_namespace(package))
+    _ = current_schema_info()
+    ws = store.update_workspace(
+        branch=LIGHT_MODE_BRANCH,
+        package=package,
+        base_namespace=base_namespace or _root_namespace(package),
+    )
     if empty:
         graph = {"package": package, "root": root, "nodes": [], "edges": []}
     else:
@@ -247,8 +272,12 @@ async def add_custom_quantity(
     empty: bool = Query(False),
 ):
     from api.main import _attach_custom_quantity
-    info = current_schema_info()
-    ws = store.update_workspace(package=package, base_namespace=base_namespace or _root_namespace(package))
+    _ = current_schema_info()
+    ws = store.update_workspace(
+        branch=LIGHT_MODE_BRANCH,
+        package=package,
+        base_namespace=base_namespace or _root_namespace(package),
+    )
     if empty:
         graph = {"package": package, "root": root, "nodes": [], "edges": []}
     else:
@@ -304,31 +333,30 @@ async def add_custom_quantity(
 
 @app.delete("/schema/custom-edits")
 async def clear_custom_edits(package: str | None = Query(None), branch: str | None = Query(None)):
-    ws = store.get_workspace()
+    _enforce_light_branch(branch)
+    ws = _workspace()
     pkg = package or ws.package
-    br = branch or ws.branch
-    deleted = store.delete_edits(user_id=LIGHT_MODE_USER, branch=br, package=pkg)
+    deleted = store.delete_edits(user_id=LIGHT_MODE_USER, branch=LIGHT_MODE_BRANCH, package=pkg)
     return {"deleted": deleted, "workspace": _workspace_payload(ws)}
 
 
 @app.get("/git/branches")
 async def git_branches():
-    ws = store.get_workspace()
-    return {"branches": [ws.branch], "active": ws.branch, "head": None, "workspace": _workspace_payload(ws)}
+    raise HTTPException(status_code=410, detail="Branch switching is disabled in Light Mode.")
 
 
 @app.get("/git/packages")
 async def git_packages(base_package: str | None = Query(None), branch: str | None = Query(None)):
-    ws = store.get_workspace()
+    _enforce_light_branch(branch)
+    ws = _workspace()
     base = base_package or ws.base_namespace
-    info = current_schema_info()
-    py_root = python_root(Path(info.worktree))
-    modules = list_modules_under(py_root, base)
+    _ = current_schema_info()
+    modules = list_modules_for_base(base)
     packages = sorted(modules) if modules else [ws.package]
     return {
         "packages": packages,
         "base_package": base,
-        "branch": branch or ws.branch,
+        "branch": LIGHT_MODE_BRANCH,
         "workspace": _workspace_payload(ws),
     }
 
@@ -339,16 +367,16 @@ async def overview(branch: str | None = Query(None), base: str | None = Query(No
     Bird's-eye overview: list packages under `base` with their top-level classes.
     Light Mode version: uses the local worktree only (no git checkout per branch).
     """
-    ws = store.get_workspace()
+    _enforce_light_branch(branch)
+    ws = _workspace()
     base_to_use = base or ws.base_namespace or DEFAULT_BASE_NS
-    branch_to_use = branch or ws.branch or DEFAULT_BRANCH
-    info = current_schema_info()
-    py_root = python_root(Path(info.worktree))
+    branch_to_use = LIGHT_MODE_BRANCH
+    _ = current_schema_info()
 
     bases = [b.strip() for b in base_to_use.split(",") if b.strip()]
     items: list[dict] = []
     for base_pkg in bases:
-        modules = list_modules_under(py_root, base_pkg)
+        modules = list_modules_for_base(base_pkg)
         for mod in modules:
             try:
                 classes = list_sections(mod)
@@ -359,6 +387,23 @@ async def overview(branch: str | None = Query(None), base: str | None = Query(No
             items.append({"package": mod, "classes": sorted(classes)})
 
     return {"branch": branch_to_use, "base": base_to_use, "items": items, "workspace": _workspace_payload(ws)}
+
+
+@app.get("/usage")
+async def usage(section_id: str = Query(..., description="Fully qualified section class name")):
+    ws = _workspace()
+    entries = get_usage_for_section(section_id)
+    payload = [
+        {
+            "kind": e.kind,
+            "qualname": e.qualname,
+            "module": e.module,
+            "short_name": e.short_name,
+            "doc": e.doc,
+        }
+        for e in entries
+    ]
+    return {"usage": payload, "workspace": _workspace_payload(ws)}
 
 
 @app.post("/send-design")
