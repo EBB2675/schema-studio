@@ -7,8 +7,10 @@
 """
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
+from threading import Lock
 from typing import Literal
 
 import httpx
@@ -16,6 +18,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from extractor.graph_builder import _root_namespace, build_graph, list_sections
 from extractor.usage_index import get_usage_for_section
@@ -35,6 +38,9 @@ DEFAULT_PORT = int(os.getenv("SCHEMA_STUDIO_PORT", "5179"))
 DEFAULT_HOST = os.getenv("SCHEMA_STUDIO_HOST", "127.0.0.1")
 DEFAULT_PACKAGE = os.getenv("SCHEMA_STUDIO_DEFAULT_PACKAGE", "nomad_simulations.schema_packages.model_method")
 DEFAULT_BASE_NS = os.getenv("SCHEMA_STUDIO_DEFAULT_NAMESPACE", "nomad_simulations.schema_packages")
+AUTO_BOOTSTRAP_SCHEMA = os.getenv("SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA", "1").lower() not in {"0", "false", "no"}
+
+logger = logging.getLogger(__name__)
 
 # Keep this list in sync with web/src/components/quantityShared.ts.
 SUPPORTED_CUSTOM_DTYPES = {
@@ -53,6 +59,25 @@ SUPPORTED_CUSTOM_DTYPES = {
     "np.float64",
 }
 
+
+class CustomClassRequest(BaseModel):
+    package: str
+    name: str
+    parent: str | None = None
+    relation: Literal["inherits", "hasSubSection"] = "inherits"
+    docstring: str | None = None
+
+
+class CustomQuantityRequest(BaseModel):
+    package: str
+    class_name: str
+    quantity_name: str
+    dtype: str = "str"
+    docstring: str | None = None
+    parent_name: str | None = None
+    parent_relation: str | None = None
+
+
 # Prepare persistence
 store = LocalStore(
     db_path=config_db_path(),
@@ -66,6 +91,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_bootstrap_lock = Lock()
+_bootstrap_attempted = False
 
 
 # ---------- helpers ----------
@@ -112,6 +140,90 @@ def _workspace() -> Workspace:
     if ws.branch != LIGHT_MODE_BRANCH:
         ws = store.update_workspace(branch=LIGHT_MODE_BRANCH)
     return ws
+
+
+def _schema_info(*, auto_bootstrap: bool = True):
+    """
+    Return schema metadata, optionally attempting a one-time automatic bootstrap.
+    Bootstrap is used to avoid first-run empty package lists when the schema package
+    is not yet installed or violates Light Mode policy.
+    """
+    global _bootstrap_attempted
+    try:
+        return current_schema_info()
+    except SchemaUnavailable as exc:
+        if not auto_bootstrap:
+            raise
+        with _bootstrap_lock:
+            try:
+                # Another request may have fixed this while we were waiting.
+                return current_schema_info()
+            except SchemaUnavailable:
+                if _bootstrap_attempted:
+                    raise exc
+                _bootstrap_attempted = True
+                logger.info("Light Mode schema not ready; attempting one-time bootstrap via update_schema()")
+                try:
+                    info = update_schema()
+                    logger.info("Light Mode schema bootstrap completed (%s)", info.version)
+                    return info
+                except SchemaUnavailable:
+                    raise exc
+
+
+def _schema_info_or_503(*, auto_bootstrap: bool = True):
+    try:
+        return _schema_info(auto_bootstrap=auto_bootstrap)
+    except SchemaUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+
+def _resolve_custom_class_request(
+    req: CustomClassRequest | None,
+    *,
+    package: str | None,
+    name: str | None,
+    parent: str | None,
+    relation: Literal["inherits", "hasSubSection"] | None,
+    docstring: str | None,
+) -> CustomClassRequest:
+    if req is not None:
+        return req
+    if not package or not name:
+        raise HTTPException(status_code=422, detail="Missing required fields: package, name")
+    return CustomClassRequest(
+        package=package,
+        name=name,
+        parent=parent,
+        relation=relation or "inherits",
+        docstring=docstring,
+    )
+
+
+def _resolve_custom_quantity_request(
+    req: CustomQuantityRequest | None,
+    *,
+    package: str | None,
+    class_name: str | None,
+    quantity_name: str | None,
+    dtype: str | None,
+    docstring: str | None,
+    parent_name: str | None,
+    parent_relation: str | None,
+) -> CustomQuantityRequest:
+    if req is not None:
+        return req
+    if not package or not class_name or not quantity_name:
+        raise HTTPException(status_code=422, detail="Missing required fields: package, class_name, quantity_name")
+    return CustomQuantityRequest(
+        package=package,
+        class_name=class_name,
+        quantity_name=quantity_name,
+        dtype=dtype or "str",
+        docstring=docstring,
+        parent_name=parent_name,
+        parent_relation=parent_relation,
+    )
 
 
 def _attach_custom_quantity(graph: dict, req) -> dict:
@@ -298,10 +410,21 @@ def _apply_custom_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dict, 
 # ---------- routes ----------
 
 
+@app.on_event("startup")
+async def _bootstrap_schema_on_startup():
+    if not AUTO_BOOTSTRAP_SCHEMA:
+        return
+    try:
+        _schema_info(auto_bootstrap=True)
+    except SchemaUnavailable as exc:
+        # Keep server up; user can still call /schema/update manually.
+        logger.warning("Light Mode schema bootstrap failed on startup: %s", exc)
+
+
 @app.get("/schema/version")
 async def schema_version():
-    info = current_schema_info()
-    return {"version": info.version, "source": info.source}
+    info = _schema_info_or_503(auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA)
+    return {"version": info.version, "source": info.source, "send_design_enabled": bool(SEND_ENDPOINT)}
 
 
 @app.post("/schema/update")
@@ -315,13 +438,20 @@ async def schema_update():
 
 @app.get("/health")
 async def health():
-    info = current_schema_info()
-    return {"ok": True, "mode": "light", "workspace": _workspace_payload(_workspace()), "schema_version": info.version, "schema_source": info.source}
+    info = _schema_info_or_503(auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA)
+    return {
+        "ok": True,
+        "mode": "light",
+        "workspace": _workspace_payload(_workspace()),
+        "schema_version": info.version,
+        "schema_source": info.source,
+        "send_design_enabled": bool(SEND_ENDPOINT),
+    }
 
 
 @app.get("/workspace")
 async def get_workspace():
-    info = current_schema_info()
+    info = _schema_info_or_503(auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA)
     return {"workspace": _workspace_payload(_workspace()), "user": {"username": LIGHT_MODE_USER}, "schema_version": info.version}
 
 
@@ -357,7 +487,7 @@ async def schema(
     base_namespace: str | None = Query(None),
     empty: bool = Query(False),
 ):
-    _ = current_schema_info()  # ensures package import path is ready
+    _ = _schema_info_or_503(auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA)  # ensures package import path is ready
     ws = _workspace()
     pkg = package or ws.package
     ns = base_namespace or ws.base_namespace or _root_namespace(pkg)
@@ -385,11 +515,12 @@ async def schema(
 
 @app.post("/schema/custom-class")
 async def add_custom_class(
-    package: str,
-    name: str,
-    parent: str | None = None,
-    relation: Literal["inherits", "hasSubSection"] = "inherits",
-    docstring: str | None = None,
+    req: CustomClassRequest | None = None,
+    package: str | None = Query(None),
+    name: str | None = Query(None),
+    parent: str | None = Query(None),
+    relation: Literal["inherits", "hasSubSection"] | None = Query(None),
+    docstring: str | None = Query(None),
     root: str | None = Query(None),
     include_quantities: bool = Query(True),
     include_subsections: bool = Query(True),
@@ -398,17 +529,25 @@ async def add_custom_class(
     base_namespace: str | None = Query(None),
     empty: bool = Query(False),
 ):
-    _ = current_schema_info()
+    req = _resolve_custom_class_request(
+        req,
+        package=package,
+        name=name,
+        parent=parent,
+        relation=relation,
+        docstring=docstring,
+    )
+    _ = _schema_info_or_503(auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA)
     ws = store.update_workspace(
         branch=LIGHT_MODE_BRANCH,
-        package=package,
-        base_namespace=base_namespace or _root_namespace(package),
+        package=req.package,
+        base_namespace=base_namespace or _root_namespace(req.package),
     )
     if empty:
-        graph = {"package": package, "root": root, "nodes": [], "edges": []}
+        graph = {"package": req.package, "root": root, "nodes": [], "edges": []}
     else:
         graph = build_graph(
-            package=package,
+            package=req.package,
             root=root,
             include_quantities=include_quantities,
             include_subsections=include_subsections,
@@ -416,19 +555,32 @@ async def add_custom_class(
             allow_cross_module=allow_cross_module,
             base_namespace=ws.base_namespace,
         )
-    edits_before = store.list_edits(user_id=LIGHT_MODE_USER, branch=ws.branch, package=package)
+    edits_before = store.list_edits(user_id=LIGHT_MODE_USER, branch=ws.branch, package=req.package)
     graph, conflicts = _apply_custom_edits(graph, edits_before)
-    graph = _attach_custom_class(graph, type("Obj", (), {"package": package, "name": name, "parent": parent, "relation": relation, "docstring": docstring})())
+    graph = _attach_custom_class(
+        graph,
+        type(
+            "Obj",
+            (),
+            {
+                "package": req.package,
+                "name": req.name,
+                "parent": req.parent,
+                "relation": req.relation,
+                "docstring": req.docstring,
+            },
+        )(),
+    )
     saved = store.save_edit(
         edit=PersistedEdit(
             edit_id=None,
             user_id=LIGHT_MODE_USER,
             branch=ws.branch,
-            package=package,
-            class_name=name,
-            parent_name=parent,
-            parent_relation=relation,
-            docstring=docstring,
+            package=req.package,
+            class_name=req.name,
+            parent_name=req.parent,
+            parent_relation=req.relation,
+            docstring=req.docstring,
             edit_type="class",
         ),
         current_sha=None,
@@ -442,13 +594,14 @@ async def add_custom_class(
 
 @app.post("/schema/custom-quantity")
 async def add_custom_quantity(
-    package: str,
-    class_name: str,
-    quantity_name: str,
-    dtype: str = "str",
-    docstring: str | None = None,
-    parent_name: str | None = None,
-    parent_relation: str | None = None,
+    req: CustomQuantityRequest | None = None,
+    package: str | None = Query(None),
+    class_name: str | None = Query(None),
+    quantity_name: str | None = Query(None),
+    dtype: str | None = Query(None),
+    docstring: str | None = Query(None),
+    parent_name: str | None = Query(None),
+    parent_relation: str | None = Query(None),
     root: str | None = Query(None),
     include_subsections: bool = Query(True),
     include_inheritance: bool = Query(True),
@@ -456,17 +609,27 @@ async def add_custom_quantity(
     base_namespace: str | None = Query(None),
     empty: bool = Query(False),
 ):
-    _ = current_schema_info()
+    req = _resolve_custom_quantity_request(
+        req,
+        package=package,
+        class_name=class_name,
+        quantity_name=quantity_name,
+        dtype=dtype,
+        docstring=docstring,
+        parent_name=parent_name,
+        parent_relation=parent_relation,
+    )
+    _ = _schema_info_or_503(auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA)
     ws = store.update_workspace(
         branch=LIGHT_MODE_BRANCH,
-        package=package,
-        base_namespace=base_namespace or _root_namespace(package),
+        package=req.package,
+        base_namespace=base_namespace or _root_namespace(req.package),
     )
     if empty:
-        graph = {"package": package, "root": root, "nodes": [], "edges": []}
+        graph = {"package": req.package, "root": root, "nodes": [], "edges": []}
     else:
         graph = build_graph(
-            package=package,
+            package=req.package,
             root=root,
             include_quantities=True,
             include_subsections=include_subsections,
@@ -474,7 +637,7 @@ async def add_custom_quantity(
             allow_cross_module=allow_cross_module,
             base_namespace=ws.base_namespace,
         )
-    edits_before = store.list_edits(user_id=LIGHT_MODE_USER, branch=ws.branch, package=package)
+    edits_before = store.list_edits(user_id=LIGHT_MODE_USER, branch=ws.branch, package=req.package)
     graph, conflicts = _apply_custom_edits(graph, edits_before)
     graph = _attach_custom_quantity(
         graph,
@@ -482,13 +645,13 @@ async def add_custom_quantity(
             "Obj",
             (),
             {
-                "package": package,
-                "class_name": class_name,
-                "quantity_name": quantity_name,
-                "dtype": dtype,
-                "docstring": docstring,
-                "parent_name": parent_name,
-                "parent_relation": parent_relation,
+                "package": req.package,
+                "class_name": req.class_name,
+                "quantity_name": req.quantity_name,
+                "dtype": req.dtype,
+                "docstring": req.docstring,
+                "parent_name": req.parent_name,
+                "parent_relation": req.parent_relation,
             },
         )(),
     )
@@ -497,13 +660,13 @@ async def add_custom_quantity(
             edit_id=None,
             user_id=LIGHT_MODE_USER,
             branch=ws.branch,
-            package=package,
-            class_name=class_name,
-            quantity_name=quantity_name,
-            dtype=dtype,
-            docstring=docstring,
-            parent_name=parent_name,
-            parent_relation=parent_relation,
+            package=req.package,
+            class_name=req.class_name,
+            quantity_name=req.quantity_name,
+            dtype=req.dtype,
+            docstring=req.docstring,
+            parent_name=req.parent_name,
+            parent_relation=req.parent_relation,
             edit_type="quantity",
         ),
         current_sha=None,
@@ -516,11 +679,35 @@ async def add_custom_quantity(
 
 
 @app.delete("/schema/custom-edits")
-async def clear_custom_edits(package: str | None = Query(None), branch: str | None = Query(None)):
+async def clear_custom_edits(
+    package: str | None = Query(None),
+    branch: str | None = Query(None),
+    all_packages: bool = Query(False),
+):
     _enforce_light_branch(branch)
     ws = _workspace()
-    pkg = package or ws.package
-    deleted = store.delete_edits(user_id=LIGHT_MODE_USER, branch=LIGHT_MODE_BRANCH, package=pkg)
+    target_package = None if all_packages else (package or ws.package)
+    deleted = store.delete_edits(user_id=LIGHT_MODE_USER, branch=LIGHT_MODE_BRANCH, package=target_package)
+    return {"deleted": deleted, "workspace": _workspace_payload(ws)}
+
+
+@app.delete("/schema/custom-edit")
+async def delete_custom_edit(
+    package: str | None = Query(None),
+    class_name: str = Query(...),
+    quantity_name: str | None = Query(None),
+    branch: str | None = Query(None),
+):
+    _enforce_light_branch(branch)
+    ws = _workspace()
+    target_package = package or ws.package
+    deleted = store.delete_edit(
+        user_id=LIGHT_MODE_USER,
+        branch=LIGHT_MODE_BRANCH,
+        package=target_package,
+        class_name=class_name,
+        quantity_name=quantity_name,
+    )
     return {"deleted": deleted, "workspace": _workspace_payload(ws)}
 
 
@@ -534,7 +721,7 @@ async def git_packages(base_package: str | None = Query(None), branch: str | Non
     _enforce_light_branch(branch)
     ws = _workspace()
     base = base_package or ws.base_namespace
-    _ = current_schema_info()
+    _ = _schema_info_or_503(auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA)
     modules = list_modules_for_base(base)
     packages = sorted(modules) if modules else [ws.package]
     return {
@@ -555,7 +742,7 @@ async def overview(branch: str | None = Query(None), base: str | None = Query(No
     ws = _workspace()
     base_to_use = base or ws.base_namespace or DEFAULT_BASE_NS
     branch_to_use = LIGHT_MODE_BRANCH
-    _ = current_schema_info()
+    _ = _schema_info_or_503(auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA)
 
     bases = [b.strip() for b in base_to_use.split(",") if b.strip()]
     items: list[dict] = []
@@ -596,7 +783,7 @@ async def send_design(payload: dict):
     if not SEND_ENDPOINT:
         raise HTTPException(status_code=503, detail="SEND_ENDPOINT_NOT_CONFIGURED")
 
-    info = current_schema_info()
+    info = _schema_info_or_503(auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA)
     envelope = {
         "schema": payload.get("schema"),
         "app_version": APP_VERSION,
@@ -630,26 +817,42 @@ def _dist_path() -> Path:
     env_dist = os.getenv("SCHEMA_STUDIO_DIST_DIR")
     if env_dist:
         cand = Path(env_dist)
-        if cand.exists():
+        if (cand / "index.html").exists():
             return cand
     here = Path(__file__).resolve().parent
-    packaged = here / "static"
-    if packaged.exists():
-        return packaged
+    # In editable/source installs, prefer freshly built repo dist over packaged static.
     repo_dist = here.parent.parent / "web" / "dist"
-    return repo_dist
+    if (repo_dist / "index.html").exists():
+        return repo_dist
+    packaged = here / "static"
+    if (packaged / "index.html").exists():
+        return packaged
+    return repo_dist if repo_dist.exists() else packaged
 
 
 dist_dir = _dist_path()
+logger.info("Serving frontend assets from: %s", dist_dir)
 if dist_dir.exists():
     app.mount("/assets", StaticFiles(directory=dist_dir / "assets"), name="assets")
+
+
+def _index_file_response(index: Path) -> FileResponse:
+    # Ensure SPA shell is always revalidated so UI updates are visible immediately.
+    return FileResponse(
+        index,
+        headers={
+            "Cache-Control": "no-store, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 @app.get("/")
 async def root_index():
     index = dist_dir / "index.html"
     if index.exists():
-        return FileResponse(index)
+        return _index_file_response(index)
     return {"message": "Schema Studio Light Mode", "mode": "light"}
 
 
@@ -658,5 +861,5 @@ async def catch_all(full_path: str):
     # Serve SPA index for any unknown path so React Router works.
     index = dist_dir / "index.html"
     if index.exists():
-        return FileResponse(index)
+        return _index_file_response(index)
     raise HTTPException(status_code=404, detail="Not found")

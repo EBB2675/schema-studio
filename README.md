@@ -50,11 +50,11 @@ Python: **3.11 recommended/tested** (package requires **>=3.11**).
 
 ## 🚀 Quick Start (pick one)
 
-### Option A — Light Mode (PyPI, no Mongo/Redis)
+### Option A — Light Mode (local editable install, no Mongo/Redis)
 ```bash
-python -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
-pip install schema-studio
+pip install -e .
 schema-studio
 ```
 This starts a local Light Mode server and opens the browser.
@@ -64,6 +64,8 @@ Light Mode defaults:
 - No branch switching/diff UI
 - Schema source pinned by policy to `nomad-simulations` `develop` lineage
 - Custom edits persisted in local SQLite
+- First run auto-attempts schema bootstrap if schema package is unavailable
+- Send Design appears only when `SCHEMA_STUDIO_SEND_ENDPOINT` is configured
 - Use **Update schema** (or `POST /schema/update`) to pull latest `develop` after install
 
 ### Option B — Docker Compose (Dev Mode, easiest full stack)
@@ -79,7 +81,7 @@ Default ports (Docker Compose): frontend 5173, API 5179, Redis 6379, Mongo 27017
 
 ### Option C — Local dev (`dev.sh`) with one extra Redis + worker
 1) Create env: `conda create -n schema-studio python=3.11 -y && conda activate schema-studio`
-2) Install deps: `pip install -r api/requirements.txt`
+2) Install deps: `python3.11 -m pip install -r api/requirements.txt`
 3) Run Redis (Docker is fine): `docker run --name schema-uml-redis -p 6379:6379 redis:7-alpine`
 4) Start Celery worker (new terminal):
    ```bash

@@ -153,11 +153,47 @@ class LocalStore:
             ).fetchall()
         return [self._row_to_edit(r) for r in rows]
 
-    def delete_edits(self, *, user_id: str, branch: str, package: str) -> int:
+    def delete_edits(self, *, user_id: str, branch: str, package: str | None = None) -> int:
+        with self._conn() as conn:
+            if package is None:
+                cur = conn.execute(
+                    "DELETE FROM custom_edits WHERE user_id = ? AND branch = ?",
+                    (user_id, branch),
+                )
+            else:
+                cur = conn.execute(
+                    "DELETE FROM custom_edits WHERE user_id = ? AND branch = ? AND package = ?",
+                    (user_id, branch, package),
+                )
+            conn.commit()
+            return int(cur.rowcount or 0)
+
+    def delete_edit(
+        self,
+        *,
+        user_id: str,
+        branch: str,
+        package: str,
+        class_name: str,
+        quantity_name: str | None = None,
+    ) -> int:
+        class_candidates = [class_name]
+        short_name = class_name.rsplit(".", 1)[-1]
+        if short_name and short_name not in class_candidates:
+            class_candidates.append(short_name)
+        placeholders = ",".join("?" for _ in class_candidates)
+        qname = quantity_name or ""
         with self._conn() as conn:
             cur = conn.execute(
-                "DELETE FROM custom_edits WHERE user_id = ? AND branch = ? AND package = ?",
-                (user_id, branch, package),
+                f"""
+                DELETE FROM custom_edits
+                WHERE user_id = ?
+                  AND branch = ?
+                  AND package = ?
+                  AND class_name IN ({placeholders})
+                  AND quantity_name = ?
+                """,
+                (user_id, branch, package, *class_candidates, qname),
             )
             conn.commit()
             return int(cur.rowcount or 0)

@@ -16,7 +16,6 @@ import {
   type ApiEdge,
   type ApiGraph,
   type ApiNode,
-  type AppliedEdit,
   type DiffResponse
 } from "./types/api";
 import type { WorkspaceState } from "./types/workspace";
@@ -58,19 +57,21 @@ type TaskEnqueueResponse = WorkspaceEnvelope & {
 
 export default function App() {
   const apiBase = DEFAULT_API;
+  const [runtimeLightMode, setRuntimeLightMode] = useState<boolean>(LIGHT_MODE);
+  const isLightMode = runtimeLightMode;
   const [token, setToken] = useState<string>(() => {
-    if (LIGHT_MODE) return "light";
+    if (runtimeLightMode) return "light";
     if (typeof window === "undefined") return "";
     return window.localStorage.getItem("schema-uml-token") || "";
   });
   const [userName, setUserName] = useState<string | null>(() => {
-    if (LIGHT_MODE) return "local";
+    if (runtimeLightMode) return "local";
     if (typeof window === "undefined") return null;
     return window.localStorage.getItem("schema-uml-username");
   });
-  const [sessionChecked, setSessionChecked] = useState<boolean>(LIGHT_MODE);
+  const [sessionChecked, setSessionChecked] = useState<boolean>(runtimeLightMode);
   const [workspace, setWorkspace] = useState<WorkspaceState | null>(() =>
-    LIGHT_MODE
+    runtimeLightMode
       ? { branch: DEFAULT_BRANCH, package: DEFAULT_PACKAGE, base_namespace: DEFAULT_NAMESPACE }
       : null
   );
@@ -135,6 +136,7 @@ export default function App() {
   const [sendNote, setSendNote] = useState<string>("");
   const [sendStatus, setSendStatus] = useState<string | null>(null);
   const [sending, setSending] = useState<boolean>(false);
+  const [sendDesignEnabled, setSendDesignEnabled] = useState<boolean>(false);
   const [schemaVersion, setSchemaVersion] = useState<string | null>(null);
   const [schemaSource, setSchemaSource] = useState<string | null>(null);
   const [schemaUpdateStatus, setSchemaUpdateStatus] = useState<string | null>(null);
@@ -184,7 +186,10 @@ export default function App() {
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
-      return parsed.map(parseAuditEntry).filter((e): e is AuditTrailEntry => Boolean(e));
+      return parsed
+        .map(parseAuditEntry)
+        .filter((e): e is AuditTrailEntry => Boolean(e))
+        .filter((e) => !(typeof e.id === "string" && e.id.startsWith("persisted-")));
     } catch {
       return [];
     }
@@ -269,11 +274,11 @@ export default function App() {
   const emptyCanvasActive = startEmpty && graph?.package === scratchPackage && graph?.root === "";
 
   const preferTaskApi = useMemo(() => {
-    if (LIGHT_MODE) return false;
+    if (isLightMode) return false;
     const raw = import.meta.env.VITE_USE_TASK_API;
     if (typeof raw === "string" && raw.toLowerCase() === "false") return false;
     return true;
-  }, []);
+  }, [isLightMode]);
 
   const taskPollInterval = useMemo(() => {
     const raw = Number.parseInt(import.meta.env.VITE_TASK_POLL_MS ?? "1000", 10);
@@ -482,16 +487,30 @@ export default function App() {
     }
   }, [token]);
 
-  const loadSchemaVersion = useCallback(async () => {
+  const loadSchemaVersion = useCallback(async (
+    opts?: { silent?: boolean; promoteLight?: boolean }
+  ): Promise<boolean> => {
     try {
       const res = await api.get("/schema/version");
       setSchemaVersion(res.data?.version || null);
       setSchemaSource(res.data?.source || null);
+      setSendDesignEnabled(Boolean(res.data?.send_design_enabled));
+      if (opts?.promoteLight && !isLightMode) {
+        setRuntimeLightMode(true);
+        setToken("light");
+        setUserName("local");
+        setSessionChecked(true);
+        applyWorkspace({ branch: DEFAULT_BRANCH, package: DEFAULT_PACKAGE, base_namespace: DEFAULT_NAMESPACE });
+      }
+      return true;
     } catch (error) {
-      // surface softly
-      setSchemaUpdateStatus(`Schema version unavailable: ${formatApiError(error)}`);
+      setSendDesignEnabled(false);
+      if (!opts?.silent) {
+        setSchemaUpdateStatus(`Schema version unavailable: ${formatApiError(error)}`);
+      }
+      return false;
     }
-  }, [api]);
+  }, [api, applyWorkspace, isLightMode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -503,10 +522,10 @@ export default function App() {
   }, [userName]);
 
   useEffect(() => {
-    if (LIGHT_MODE) {
+    if (isLightMode) {
       setSessionChecked(true);
       applyWorkspace({ branch: DEFAULT_BRANCH, package: DEFAULT_PACKAGE, base_namespace: DEFAULT_NAMESPACE });
-      loadSchemaVersion();
+      loadSchemaVersion({ promoteLight: true });
       return;
     }
     let cancelled = false;
@@ -515,6 +534,8 @@ export default function App() {
     }, 5000);
 
     const run = async () => {
+      const detectedLight = await loadSchemaVersion({ silent: true, promoteLight: true });
+      if (cancelled || detectedLight) return;
       if (!token) {
         setWorkspace(null);
         workspaceStateRef.current = null;
@@ -542,12 +563,12 @@ export default function App() {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [api, applyWorkspace, logout, token]);
+  }, [api, applyWorkspace, isLightMode, loadSchemaVersion, logout, token]);
 
   useEffect(() => {
     if (!sessionChecked) return;
-    loadSchemaVersion();
-  }, [loadSchemaVersion, sessionChecked]);
+    loadSchemaVersion({ silent: !isLightMode, promoteLight: true });
+  }, [isLightMode, loadSchemaVersion, sessionChecked]);
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
   const clampDocWidth = useCallback((value: number) => {
@@ -629,12 +650,12 @@ export default function App() {
   useEffect(() => {
     if (!workspace || !token) return;
     const updates: Partial<WorkspaceState> = {};
-    const desiredBranch = LIGHT_MODE ? workspace.branch : (packageBranch || workspace.branch);
+    const desiredBranch = isLightMode ? workspace.branch : (packageBranch || workspace.branch);
     if (workspace.package !== pkg) updates.package = pkg;
     if (workspace.base_namespace !== normalizedNamespace) updates.base_namespace = normalizedNamespace;
-    if (!LIGHT_MODE && workspace.branch !== desiredBranch) updates.branch = desiredBranch;
+    if (!isLightMode && workspace.branch !== desiredBranch) updates.branch = desiredBranch;
     if (Object.keys(updates).length > 0) updateWorkspaceOnServer(updates);
-  }, [normalizedNamespace, packageBranch, pkg, token, updateWorkspaceOnServer, workspace]);
+  }, [isLightMode, normalizedNamespace, packageBranch, pkg, token, updateWorkspaceOnServer, workspace]);
 
   const startSidebarResize = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -663,11 +684,11 @@ export default function App() {
         "Documentation (right): class and quantity docs; edit quantities in Edit mode.",
         "Audit trail (right bottom): log of edits; export/reset.",
       ];
-      if (!LIGHT_MODE) lines.push("Compare branches (left): diff two git branches.");
+      if (!isLightMode) lines.push("Compare branches (left): diff two git branches.");
       lines.push("Empty canvas: start custom schema without loading existing graph.");
       return lines;
     },
-    []
+    [isLightMode]
   );
 
   const [helpOpen, setHelpOpen] = useState<boolean>(false);
@@ -781,7 +802,7 @@ export default function App() {
         setBaseGraph(parsed);
         return;
       }
-      if (LIGHT_MODE) {
+      if (isLightMode) {
         const r = await api.get("/schema", {
           params: {
             package: pkgToUse,
@@ -863,7 +884,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [api, archiveAllAuditEntries, crossModules, enqueueGraphTask, includeQuantities, includeSubsections, includeInheritance, normalizedNamespace, pkg, root, setStartEmpty, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
+  }, [api, archiveAllAuditEntries, crossModules, enqueueGraphTask, includeQuantities, includeSubsections, includeInheritance, isLightMode, normalizedNamespace, pkg, root, setStartEmpty, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
 
   const resetEmptyCanvas = useCallback(async () => {
     if (!token) {
@@ -897,7 +918,7 @@ export default function App() {
   // fetch git branches
   const loadBranches = useCallback(async () => {
     if (!token) return;
-    if (LIGHT_MODE) {
+    if (isLightMode) {
       const fixedBranch = workspaceBranch || DEFAULT_BRANCH;
       setBranches([fixedBranch]);
       setBaseBranch(fixedBranch);
@@ -912,7 +933,7 @@ export default function App() {
       // keep silent in UI; dropdown will just be empty
       console.error("Failed to load branches", e);
     }
-  }, [api, normalizedNamespace, syncWorkspaceFromResponse, token, workspaceBranch]);
+  }, [api, isLightMode, normalizedNamespace, syncWorkspaceFromResponse, token, workspaceBranch]);
 
   // fetch available schema packages from develop branch
   const loadPackages = useCallback(async () => {
@@ -921,7 +942,7 @@ export default function App() {
     try {
       const r = await api.get("/git/packages", {
         params: {
-          branch: LIGHT_MODE ? undefined : packageBranch,
+          branch: isLightMode ? undefined : packageBranch,
           base_package: normalizedNamespace,
         },
       });
@@ -949,7 +970,7 @@ export default function App() {
       // surface the error so users know why the dropdown is empty
       setErr(formatApiError(e));
     }
-  }, [api, normalizedNamespace, packageBranch, pkg, scratchPackage, setPkg, startEmpty, syncWorkspaceFromResponse, token]);
+  }, [api, isLightMode, normalizedNamespace, packageBranch, pkg, scratchPackage, setPkg, startEmpty, syncWorkspaceFromResponse, token]);
 
   useEffect(() => {
     if (!workspace || !token) return;
@@ -964,7 +985,7 @@ export default function App() {
       setErr("Login required");
       return;
     }
-    if (LIGHT_MODE) {
+    if (isLightMode) {
       setErr("Branch comparison is disabled in Light Mode.");
       return;
     }
@@ -1079,117 +1100,19 @@ export default function App() {
     };
   }, [toQuantityNode]);
 
-  const changeFromAppliedEdit = useCallback(
-    (edit: AppliedEdit, graph: ApiGraph): AuditTrailEntry["change"] | null => {
-      const normalizedPackage = normalizeModule(edit.package || graph.package) || graph.package;
-
-      if (edit.edit_type === "class") {
-        const sectionNode =
-          graph.nodes.find(
-            (n) =>
-              n.kind === "section" &&
-              (normalizeId(n.id) === normalizeId(`${normalizedPackage}.${edit.class_name}`) ||
-                normalizeLabel(n.label, n.id) === edit.class_name)
-          ) || null;
-
-        const classId = normalizeId(sectionNode?.id || `${normalizedPackage}.${edit.class_name}`);
-        const ownedQuantities = graph.nodes
-          .filter((n) => n.kind === "quantity" && normalizeId(n.owner) === classId)
-          .map(toQuantityNode);
-        const parentEdge = graph.edges.find(
-          (e) =>
-            (e.type === "inherits" || e.type === "hasSubSection") &&
-            normalizeId(e.target) === classId
-        );
-        const parentRelation: "inherits" | "hasSubSection" | null =
-          parentEdge?.type === "inherits"
-            ? "inherits"
-            : parentEdge?.type === "hasSubSection"
-              ? "hasSubSection"
-              : null;
-
-        const cls: UmlClassNode = {
-          id: classId,
-          name: normalizeLabel(sectionNode?.label ?? edit.class_name ?? classId, classId),
-          doc: sectionNode?.doc ?? edit.docstring ?? null,
-          module: sectionNode?.module ?? normalizedPackage,
-          path: sectionNode?.path ?? null,
-          line: typeof sectionNode?.line === "number" ? sectionNode.line : null,
-          quantities: ownedQuantities,
-          parentId: parentEdge ? normalizeId(parentEdge.source) : null,
-          parentRelation,
-        };
-        return { type: "add-class", cls };
-      }
-
-      // quantity edit
-      const classId = normalizeId(`${normalizedPackage}.${edit.class_name}`);
-      const quantityNode =
-        graph.nodes.find(
-          (n) =>
-            n.kind === "quantity" &&
-            normalizeId(n.owner) === classId &&
-            (normalizeId(n.id) === normalizeId(`${classId}.${edit.quantity_name || ""}`) ||
-              normalizeLabel(n.label, n.id) === edit.quantity_name)
-        ) || null;
-
-      const quantity: QuantityNode = quantityNode
-        ? toQuantityNode(quantityNode)
-        : {
-            id: normalizeId(`${classId}.${edit.quantity_name || "quantity"}`),
-            name: edit.quantity_name || "quantity",
-            dtype: edit.dtype ?? undefined,
-            doc: edit.docstring ?? null,
-            shape: null,
-            card: null,
-            path: null,
-            line: null,
-            ownerId: classId,
-          };
-
-      return { type: "add-quantity", classId, quantity };
-    },
-    [normalizeModule, normalizeId, normalizeLabel, toQuantityNode]
-  );
-
   const seedAuditFromAppliedEdits = useCallback(
     (graphWithEdits: ApiGraph | null) => {
-      const applied = graphWithEdits?.applied_edits;
-      if (!graphWithEdits || !applied || !applied.length) return;
+      if (!graphWithEdits) return;
 
-      const pkgForEntries = normalizePackageName(graphWithEdits.package);
       setAuditTrail((prev) => {
-        const existingIds = new Set(prev.map((e) => e.id));
-        const next: AuditTrailEntry[] = [];
-
-        applied.forEach((edit) => {
-          const editId = edit.id || `${edit.edit_type}-${edit.class_name}-${edit.quantity_name || ""}`;
-          const auditId = `persisted-${pkgForEntries}-${editId}`;
-          if (existingIds.has(auditId)) return;
-
-          const change = changeFromAppliedEdit(edit, graphWithEdits);
-          if (!change) return;
-
-          const description =
-            edit.edit_type === "quantity"
-              ? `Persisted quantity ${edit.quantity_name || ""} on ${edit.class_name}`
-              : `Persisted class ${edit.class_name}`;
-
-          next.push({
-            id: auditId,
-            timestamp: edit.updated_at || edit.created_at || new Date().toISOString(),
-            description,
-            change,
-            package: edit.package || graphWithEdits.package,
-            replayable: false,
-          });
-        });
-
-        if (!next.length) return prev;
-        return [...prev, ...next];
+        // Never keep server-seeded persisted entries in the client audit panel.
+        const pruned = prev.filter(
+          (entry) => !(typeof entry.id === "string" && entry.id.startsWith("persisted-"))
+        );
+        return pruned.length === prev.length ? prev : pruned;
       });
     },
-    [changeFromAppliedEdit, normalizePackageName, setAuditTrail]
+    [setAuditTrail]
   );
 
   const toggleEmptyMode = useCallback(async () => {
@@ -1257,6 +1180,8 @@ export default function App() {
         let mutated = false;
         const next = prev.map((entry) => {
           if (entry.replayable === false) return entry;
+          const isServerSeeded = typeof entry.id === "string" && entry.id.startsWith("persisted-");
+          if (!isServerSeeded) return entry;
           const change = entry.change;
           const applied = (() => {
             switch (change.type) {
@@ -1284,7 +1209,6 @@ export default function App() {
             mutated = true;
             return { ...entry, replayable: false };
           }
-          mutated = true;
           return entry;
         });
         return mutated ? next : prev;
@@ -1744,18 +1668,66 @@ export default function App() {
     [applyForwardChange, baseGraph, buildUmlState, filterActiveAuditForPackage, graph, normalizePackageName, pkg]
   );
 
-  const undoAuditEntry = (id: string) => {
-    const remaining = auditTrail.filter((a) => a.id !== id && a.change);
+  const deletePersistedEntryForAudit = useCallback(
+    async (entry: AuditTrailEntry) => {
+      if (!isLightMode) return;
+      const scopedPackage = normalizePackageName(entry.package) || normalizePackageName(pkg) || pkg;
+      if (entry.change.type === "add-class") {
+        const className =
+          entry.change.cls.name || entry.change.cls.id.split(".").pop() || entry.change.cls.id;
+        await api.delete("/schema/custom-edit", {
+          params: {
+            package: scopedPackage,
+            class_name: className,
+            branch: workspaceBranch || undefined,
+          },
+        });
+      } else if (entry.change.type === "add-quantity") {
+        const className =
+          entry.change.classId.split(".").pop() ||
+          entry.change.classId ||
+          entry.change.quantity.ownerId.split(".").pop() ||
+          entry.change.quantity.ownerId;
+        const quantityName =
+          entry.change.quantity.name || entry.change.quantity.id.split(".").pop() || entry.change.quantity.id;
+        await api.delete("/schema/custom-edit", {
+          params: {
+            package: scopedPackage,
+            class_name: className,
+            quantity_name: quantityName,
+            branch: workspaceBranch || undefined,
+          },
+        });
+      }
+    },
+    [api, isLightMode, normalizePackageName, pkg, workspaceBranch]
+  );
+
+  const undoAuditEntry = async (id: string) => {
     const entry = auditTrail.find((a) => a.id === id);
     if (!entry || !entry.change) return;
+    const remaining = auditTrail.filter((a) => a.id !== id && a.change);
 
-    rebuildGraphWithAudit(remaining as AuditTrailEntry[]);
     setAuditTrail(remaining as AuditTrailEntry[]);
     setQuantityActionErr(null);
+
+    if (isLightMode && (entry.change.type === "add-class" || entry.change.type === "add-quantity")) {
+      try {
+        await deletePersistedEntryForAudit(entry);
+      } catch (e: unknown) {
+        setQuantityActionErr(`Undo failed: ${formatApiError(e)}`);
+      }
+      await loadGraph();
+      return;
+    }
+
+    rebuildGraphWithAudit(remaining as AuditTrailEntry[]);
   };
 
   const clearAuditTrail = async () => {
-    if (auditTrail.length === 0) return;
+    const hasLocalAudit = auditTrail.length > 0;
+    const hasPersistedEdits = (graph?.applied_edits?.length ?? 0) > 0;
+    if (!hasLocalAudit && !hasPersistedEdits) return;
     const baseline = baseGraph ?? graph;
     if (baseline) {
       setGraph(baseline);
@@ -1766,13 +1738,16 @@ export default function App() {
     try {
       await api.delete("/schema/custom-edits", {
         params: {
-          package: pkg,
+          package: isLightMode ? undefined : pkg,
           branch: workspaceBranch || undefined,
+          all_packages: isLightMode ? true : undefined,
         },
       });
     } catch (e) {
       console.warn("Failed to clear persisted edits", e);
+      return;
     }
+    await loadGraph();
   };
 
   useEffect(() => {
@@ -1805,12 +1780,19 @@ export default function App() {
 
   const currentGraph = diffData ? diffData.head?.graph ?? null : graph;
   const currentPackageForAudit = normalizePackageName(currentGraph?.package || pkg);
+  const auditEntriesForCurrentPackage = useMemo(
+    () =>
+      auditTrail.filter(
+        (entry) => entry?.change && (!entry.package || normalizePackageName(entry.package) === currentPackageForAudit)
+      ),
+    [auditTrail, currentPackageForAudit, normalizePackageName]
+  );
   const activeAuditEntries = useMemo(
-    () => filterActiveAuditForPackage(auditTrail, currentPackageForAudit),
-    [auditTrail, currentPackageForAudit, filterActiveAuditForPackage]
+    () => filterActiveAuditForPackage(auditEntriesForCurrentPackage, currentPackageForAudit),
+    [auditEntriesForCurrentPackage, currentPackageForAudit, filterActiveAuditForPackage]
   );
   const activeAuditCount = activeAuditEntries.length;
-  const archivedAuditCount = auditTrail.length - activeAuditCount;
+  const archivedAuditCount = auditEntriesForCurrentPackage.length - activeAuditCount;
 
   const restoreArchivedEntry = (id: string) => {
     const updated = auditTrail.map((entry) =>
@@ -1824,17 +1806,21 @@ export default function App() {
 
   const restoreAllArchivedToCurrent = () => {
     if (!auditTrail.length) return;
-    const updated = auditTrail.map((entry) => ({
-      ...entry,
-      replayable: true,
-      package: entry.package || currentPackageForAudit,
-    }));
+    const updated = auditTrail.map((entry) => {
+      const onCurrentCanvas = !entry.package || normalizePackageName(entry.package) === currentPackageForAudit;
+      if (!onCurrentCanvas || entry.replayable !== false) return entry;
+      return {
+        ...entry,
+        replayable: true,
+        package: currentPackageForAudit,
+      };
+    });
     setAuditTrail(updated);
     rebuildGraphWithAudit(updated);
   };
 
   const handleBranchSelect = (value: string) => {
-    if (LIGHT_MODE) return;
+    if (isLightMode) return;
     setPackageBranch(value);
     setOverviewBranch(value);
     setBaseBranch((prev) => prev || value);
@@ -2074,17 +2060,44 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    type ImportGraphShape = {
+      package?: unknown;
+      root?: unknown;
+      nodes: unknown[];
+      edges: unknown[];
+    };
+
+    const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
+      typeof value === "object" && value !== null && !Array.isArray(value);
+
+    const hasGraphShape = (value: unknown): value is ImportGraphShape =>
+      isObjectRecord(value) && Array.isArray(value.nodes) && Array.isArray(value.edges);
+
+    const extractGraphCandidate = (raw: unknown): Record<string, unknown> => {
+      if (Array.isArray(raw)) {
+        const looksLikeAuditLog = raw.every(
+          (entry) => isObjectRecord(entry) && "change" in entry && "timestamp" in entry
+        );
+        if (looksLikeAuditLog) {
+          throw new Error("This file is an audit log. Import expects a graph export JSON.");
+        }
+        throw new Error("Expected a graph object, received a JSON array.");
+      }
+      if (!isObjectRecord(raw)) {
+        throw new Error("File is empty or invalid JSON.");
+      }
+      if (hasGraphShape(raw)) return raw;
+      if (hasGraphShape(raw.schema)) return raw.schema;
+      if (hasGraphShape(raw.graph)) return raw.graph;
+      if (isObjectRecord(raw.head) && hasGraphShape(raw.head.graph)) return raw.head.graph;
+      throw new Error("Expected nodes[] and edges[] in the workspace file.");
+    };
+
     const reader = new FileReader();
     reader.onload = () => {
       try {
         const raw = JSON.parse(String(reader.result ?? "{}"));
-        if (!raw || typeof raw !== "object") {
-          throw new Error("File is empty or invalid JSON.");
-        }
-        const candidate = raw as Record<string, unknown>;
-        if (!Array.isArray(candidate.nodes) || !Array.isArray(candidate.edges)) {
-          throw new Error("Expected nodes[] and edges[] in the workspace file.");
-        }
+        const candidate = extractGraphCandidate(raw);
         const nextGraph: ApiGraph = {
           package: typeof candidate.package === "string" ? candidate.package : pkg,
           root: typeof candidate.root === "string" || candidate.root === null ? (candidate.root as string | null) : null,
@@ -2153,6 +2166,10 @@ export default function App() {
   };
 
   const sendDesign = async () => {
+    if (!sendDesignEnabled) {
+      setSendStatus("Send design is disabled. Set SCHEMA_STUDIO_SEND_ENDPOINT to enable it.");
+      return;
+    }
     if (!graph && !baseGraph) {
       setSendStatus("Nothing to send yet — build a graph first.");
       return;
@@ -2258,13 +2275,13 @@ export default function App() {
             SchemaStudio
           </h3>
           <p className="subdued">
-            {LIGHT_MODE
+            {isLightMode
               ? "Running in Light Mode (local, single-user, non-production)."
               : "Craft diagrams, compare branches, and edit schemas. Currently defaults to nomad-simulations."}
           </p>
           <div className="row" style={{ marginTop: 10, flexWrap: "wrap", gap: 8 }}>
             <span className="tag">{loading || diffLoading ? "Working…" : "Ready"}</span>
-            {LIGHT_MODE ? <span className="tag muted">Single-user</span> : null}
+            {isLightMode ? <span className="tag muted">Single-user</span> : null}
             {schemaVersion ? (
               <span className="tag">Schema {schemaVersion.slice(0, 9)}{schemaSource ? ` (${schemaSource})` : ""}</span>
             ) : (
@@ -2291,7 +2308,7 @@ export default function App() {
               </button>
             </div>
           </div>
-          {LIGHT_MODE ? (
+          {isLightMode ? (
             <div className="row" style={{ marginTop: 12, gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <button className="btn secondary" type="button" onClick={updateSchema} disabled={schemaUpdating}>
                 {schemaUpdating ? "Updating schema…" : "Update schema"}
@@ -2305,7 +2322,7 @@ export default function App() {
           ) : null}
         </div>
 
-        {!LIGHT_MODE && token && userName ? (
+        {!isLightMode && token && userName ? (
           <div className="brand-card">
             <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
               <div>
@@ -2321,7 +2338,7 @@ export default function App() {
 
         <CollapsibleSection
           title="Workspace"
-          hint="Pick a backend package and fine-tune the graph"
+          hint="Explore the data model"
           id="section-workspace"
           open={openWorkspace}
           onToggle={setOpenWorkspace}
@@ -2338,7 +2355,7 @@ export default function App() {
             </div>
             <div className="row" style={{ gap: 10, alignItems: "flex-end" }}>
               <div style={{ flex: 1 }}>
-                {LIGHT_MODE ? (
+                {isLightMode ? (
                   <>
                     <label className="label">Schema branch</label>
                     <div className="small">{DEFAULT_BRANCH} (fixed in Light Mode)</div>
@@ -2366,7 +2383,7 @@ export default function App() {
             </div>
 
             <div>
-              <label className="label">{LIGHT_MODE ? "Choose package" : `Choose from ${packageBranch || DEFAULT_BRANCH}`}</label>
+              <label className="label">{isLightMode ? "Choose package" : `Choose from ${packageBranch || DEFAULT_BRANCH}`}</label>
               <select
                 className="select"
                 value={availablePkgs.includes(pkg) ? pkg : ""}
@@ -2476,28 +2493,30 @@ export default function App() {
               ) : null}
             </div>
 
-            <div className="card" style={{ marginTop: 12, padding: 12, border: "1px solid var(--border)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 8 }}>
-              <div className="row" style={{ alignItems: "center", gap: 8 }}>
-                <strong>Send Design</strong>
-                <span className="tag muted">Share JSON snapshot</span>
-              </div>
-              <textarea
-                className="input"
-                rows={3}
-                placeholder="Optional note for the team"
-                value={sendNote}
-                onChange={(e) => setSendNote(e.target.value)}
-                style={{ resize: "vertical" }}
-              />
-              <button className="btn secondary" type="button" onClick={sendDesign} disabled={sending}>
-                {sending ? "Sending…" : "Send design"}
-              </button>
-              {sendStatus ? (
-                <div className="small" style={{ color: sendStatus.startsWith("Send failed") ? "#fca5a5" : "var(--muted)" }}>
-                  {sendStatus}
+            {isLightMode && sendDesignEnabled ? (
+              <div className="card" style={{ marginTop: 12, padding: 12, border: "1px solid var(--border)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                <div className="row" style={{ alignItems: "center", gap: 8 }}>
+                  <strong>Send Design</strong>
+                  <span className="tag muted">Share JSON snapshot</span>
                 </div>
-              ) : null}
-            </div>
+                <textarea
+                  className="input"
+                  rows={3}
+                  placeholder="Optional note for the team"
+                  value={sendNote}
+                  onChange={(e) => setSendNote(e.target.value)}
+                  style={{ resize: "vertical" }}
+                />
+                <button className="btn secondary" type="button" onClick={sendDesign} disabled={sending}>
+                  {sending ? "Sending…" : "Send design"}
+                </button>
+                {sendStatus ? (
+                  <div className="small" style={{ color: sendStatus.startsWith("Send failed") ? "#fca5a5" : "var(--muted)" }}>
+                    {sendStatus}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             {err ? (
               <p style={{ color: "#fca5a5", marginTop: 10, whiteSpace: "pre-wrap" }}>{err}</p>
@@ -2515,7 +2534,7 @@ export default function App() {
           <UnderTheHoodPanel apiBase={apiBase} token={token} />
         </CollapsibleSection>
 
-        {!LIGHT_MODE ? (
+        {!isLightMode ? (
           <CollapsibleSection
             title="Compare branches"
             hint="Diff diagrams across git"
@@ -2608,7 +2627,7 @@ export default function App() {
                 <button className="link-button" type="button" onClick={() => focusAndOpen("workspace")}>Workspace</button>
                 <button className="link-button" type="button" onClick={() => focusAndOpen("documentation")}>Documentation</button>
                 <button className="link-button" type="button" onClick={() => focusAndOpen("audit")}>Audit trail</button>
-                {!LIGHT_MODE ? (
+                {!isLightMode ? (
                   <button className="link-button" type="button" onClick={() => focusAndOpen("compare")}>Compare branches</button>
                 ) : null}
                 <button className="link-button" type="button" onClick={() => setMode("overview")}>Overview</button>
@@ -2754,13 +2773,13 @@ export default function App() {
                 <div>
                   4) Prefer to sketch your own? Turn on “Start from empty canvas” to drop in custom classes/quantities without loading existing schema.
                 </div>
-                {!LIGHT_MODE ? (
+                {!isLightMode ? (
                   <div>
                     5) <button className="link-button" type="button" onClick={() => focusAndOpen("compare")}>Compare branches 👈</button> to see how two git branches differ in structure.
                   </div>
                 ) : null}
                 <div>
-                  {LIGHT_MODE ? "5)" : "6)"} Communicate your edits via <button className="link-button" type="button" onClick={() => focusAndOpen("audit")}>Audit trail 👉</button> - export or clear the log anytime.
+                  {isLightMode ? "5)" : "6)"} Communicate your edits via <button className="link-button" type="button" onClick={() => focusAndOpen("audit")}>Audit trail 👉</button> - export or clear the log anytime.
                 </div>
               </div>
               <div style={{ marginTop: 14 }}>
@@ -2837,15 +2856,17 @@ export default function App() {
             >
               <div className="action-stack" style={{ gap: 10 }}>
                 <div className="row" style={{ gap: 8 }}>
-                  <button
-                    className="btn secondary"
-                    type="button"
-                    onClick={exportAuditLog}
-                    disabled={!auditTrail.length}
-                    title={auditTrail.length ? "Download audit log as JSON" : "No edits recorded yet"}
-                  >
-                    Export JSON
-                  </button>
+                  {!isLightMode ? (
+                    <button
+                      className="btn secondary"
+                      type="button"
+                      onClick={exportAuditLog}
+                      disabled={!auditTrail.length}
+                      title={auditTrail.length ? "Download audit log as JSON" : "No edits recorded yet"}
+                    >
+                      Export audit JSON
+                    </button>
+                  ) : null}
                   <button
                     className="btn secondary"
                     type="button"
@@ -2859,15 +2880,15 @@ export default function App() {
                     className="btn secondary"
                     type="button"
                     onClick={clearAuditTrail}
-                    disabled={!auditTrail.length}
+                    disabled={!auditTrail.length && !(graph?.applied_edits?.length)}
                   >
                     Clear
                   </button>
                 </div>
                 <div className="small" style={{ color: "var(--muted)" }}>
-                  {auditTrail.length
+                  {auditEntriesForCurrentPackage.length
                     ? `${activeAuditCount} active edits${archivedAuditCount > 0 ? ` (${archivedAuditCount} archived)` : ""}`
-                    : "No edits yet"}
+                    : "No edits on this canvas yet"}
                 </div>
                 <div
                   style={{
@@ -2880,7 +2901,7 @@ export default function App() {
                     fontSize: 12
                   }}
                 >
-                  {[...auditTrail].reverse().filter((e) => e?.change).map((entry) => {
+                  {[...auditEntriesForCurrentPackage].reverse().map((entry) => {
                     const archived = Boolean(
                       entry.replayable === false ||
                       (entry.package ? normalizePackageName(entry.package) !== currentPackageForAudit : false)

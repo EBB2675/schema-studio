@@ -13,7 +13,7 @@ from .app import app, DEFAULT_HOST, DEFAULT_PORT
 BANNER = "Running in Light Mode (local, single-user, non-production; schema pinned to nomad-simulations/develop)"
 
 
-def _open_browser_when_ready(url: str, timeout_seconds: float = 20.0) -> None:
+def _open_browser_when_ready(url: str, timeout_seconds: float = 120.0) -> None:
     """
     Wait for the app to be reachable before opening a browser tab.
     This avoids the initial "page not found" race on startup.

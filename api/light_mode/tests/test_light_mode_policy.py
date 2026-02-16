@@ -184,3 +184,142 @@ async def test_custom_edit_endpoints_do_not_require_api_main(client: httpx.Async
     assert add_quantity.status_code == 200
     q_labels = [n.get("label") for n in add_quantity.json()["nodes"] if n.get("kind") == "quantity"]
     assert "my_q" in q_labels
+
+
+@pytest.mark.anyio
+async def test_custom_edit_endpoints_accept_json_body(client: httpx.AsyncClient):
+    add_class = await client.post(
+        "/schema/custom-class",
+        json={
+            "package": "pkg.default",
+            "name": "BodyClass",
+            "relation": "inherits",
+        },
+    )
+    assert add_class.status_code == 200
+    assert add_class.json()["persisted_edit"]["edit_type"] == "class"
+
+    add_quantity = await client.post(
+        "/schema/custom-quantity",
+        json={
+            "package": "pkg.default",
+            "class_name": "BodyClass",
+            "quantity_name": "body_q",
+            "dtype": "str",
+        },
+    )
+    assert add_quantity.status_code == 200
+    q_labels = [n.get("label") for n in add_quantity.json()["nodes"] if n.get("kind") == "quantity"]
+    assert "body_q" in q_labels
+
+
+@pytest.mark.anyio
+async def test_clear_custom_edits_all_packages_flag(client: httpx.AsyncClient):
+    add_pkg_a = await client.post(
+        "/schema/custom-class",
+        json={"package": "pkg.alpha", "name": "ClassA", "relation": "inherits"},
+    )
+    assert add_pkg_a.status_code == 200
+
+    add_pkg_b = await client.post(
+        "/schema/custom-class",
+        json={"package": "pkg.beta", "name": "ClassB", "relation": "inherits"},
+    )
+    assert add_pkg_b.status_code == 200
+
+    cleared = await client.delete("/schema/custom-edits", params={"all_packages": "true"})
+    assert cleared.status_code == 200
+    assert cleared.json()["deleted"] >= 2
+
+
+@pytest.mark.anyio
+async def test_delete_custom_edit_endpoint_removes_single_persisted_edit(client: httpx.AsyncClient):
+    add_class = await client.post(
+        "/schema/custom-class",
+        json={"package": "pkg.alpha", "name": "OnlyThisOne", "relation": "inherits"},
+    )
+    assert add_class.status_code == 200
+
+    add_quantity = await client.post(
+        "/schema/custom-quantity",
+        json={
+            "package": "pkg.alpha",
+            "class_name": "OnlyThisOne",
+            "quantity_name": "to_drop",
+            "dtype": "str",
+        },
+    )
+    assert add_quantity.status_code == 200
+
+    delete_quantity = await client.delete(
+        "/schema/custom-edit",
+        params={
+            "package": "pkg.alpha",
+            "class_name": "pkg.alpha.OnlyThisOne",
+            "quantity_name": "to_drop",
+        },
+    )
+    assert delete_quantity.status_code == 200
+    assert delete_quantity.json()["deleted"] == 1
+
+    delete_class = await client.delete(
+        "/schema/custom-edit",
+        params={"package": "pkg.alpha", "class_name": "OnlyThisOne"},
+    )
+    assert delete_class.status_code == 200
+    assert delete_class.json()["deleted"] == 1
+
+@pytest.mark.anyio
+async def test_git_packages_auto_bootstraps_schema_when_unavailable_once(
+    client: httpx.AsyncClient,
+    light_mode_module,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    info = SimpleNamespace(package_root=Path("."), version="feedbeef", source="remote-develop")
+    calls = {"current": 0, "update": 0}
+
+    def flaky_current():
+        calls["current"] += 1
+        if calls["update"] == 0:
+            raise light_mode_module.SchemaUnavailable("schema missing before bootstrap")
+        return info
+
+    def one_update():
+        calls["update"] += 1
+        return info
+
+    monkeypatch.setattr(light_mode_module, "current_schema_info", flaky_current)
+    monkeypatch.setattr(light_mode_module, "update_schema", one_update)
+    monkeypatch.setattr(light_mode_module, "_bootstrap_attempted", False)
+
+    first = await client.get("/git/packages", params={"base_package": "pkg.base"})
+    assert first.status_code == 200
+    assert first.json()["packages"] == ["pkg.base.alpha", "pkg.base.beta"]
+    assert calls["update"] == 1
+
+    second = await client.get("/git/packages", params={"base_package": "pkg.base"})
+    assert second.status_code == 200
+    assert calls["update"] == 1
+
+
+@pytest.mark.anyio
+async def test_git_packages_returns_503_when_schema_still_unavailable_after_bootstrap(
+    client: httpx.AsyncClient,
+    light_mode_module,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        light_mode_module,
+        "current_schema_info",
+        lambda: (_ for _ in ()).throw(light_mode_module.SchemaUnavailable("schema unavailable")),
+    )
+    monkeypatch.setattr(
+        light_mode_module,
+        "update_schema",
+        lambda: (_ for _ in ()).throw(light_mode_module.SchemaUnavailable("bootstrap failed")),
+    )
+    monkeypatch.setattr(light_mode_module, "_bootstrap_attempted", False)
+
+    resp = await client.get("/git/packages", params={"base_package": "pkg.base"})
+    assert resp.status_code == 503
+    assert "schema unavailable" in resp.json()["detail"]

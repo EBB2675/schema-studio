@@ -64,10 +64,13 @@ Default namespace scope targets `nomad_simulations.schema_packages`. For other p
 export SCHEMA_STUDIO_SEND_ENDPOINT=https://your-endpoint.example/api
 # optional frontend override
 export SCHEMA_STUDIO_DIST_DIR=/abs/path/to/web/dist
+# optional: disable first-run auto bootstrap (default enabled)
+export SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA=0
 ~~~
+`Send Design` UI is shown only when `SCHEMA_STUDIO_SEND_ENDPOINT` is set.
 
 **Start it quickly:**
-- Light Mode: `pip install schema-studio && schema-studio`
+- Light Mode: `pip install -e . && schema-studio`
 - Docker Compose (Dev Mode one shot): set `.env` with `SCHEMA_UML_REPO_HOST`, secrets, then `docker compose up --build`.
 - Local dev (Dev Mode): `./dev.sh` (API + web). For real async tasks, also run Redis and a Celery worker with the broker/backends above; otherwise Celery runs eagerly in-process. Override ports via `API_PORT` / `WEB_PORT`.
 
@@ -535,6 +538,7 @@ $SCHEMA_STUDIO_HOME/light_mode.sqlite3
 
 **Light Mode schema updates**
 
+- On startup, Light Mode attempts a one-time automatic bootstrap when schema metadata is unavailable.
 - Runtime update path is `POST /schema/update` (or UI "Update schema").
 - PyPI dependencies stay index-only; latest `develop` is pulled on demand at runtime.
 
