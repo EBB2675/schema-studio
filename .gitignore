@@ -3,3 +3,4 @@ api/_data/
 .env
 .venv/
 dist/
+schema_studio.egg*
