@@ -1,6 +1,6 @@
 # Schema Studio
 
-Interactive schema explorer and editor for NOMAD-style data models.
+Interactive schema explorer and editor for data models.
 
 `schema-studio` (the package entrypoint) launches **Light Mode** by default:
 - Local single-user app (no auth)
