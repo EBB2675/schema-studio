@@ -32,7 +32,7 @@ Both modes support schema graphing, docs/usage inspection, custom class/quantity
   - Shared: `GET /roots`, `GET /schema`, `GET /overview`, `GET /usage`, custom edit endpoints
 - Light Mode:
   - Core: `GET /health`, `GET /workspace`, `PUT /workspace`, `GET /roots`, `GET /schema`, `GET /overview`, `GET /usage`
-  - Custom edits: `POST /schema/custom-class`, `POST /schema/custom-quantity`, `DELETE /schema/custom-edits`
+  - Custom edits: `POST /schema/custom-class`, `POST /schema/custom-quantity`, `DELETE /schema/custom-edits`, `DELETE /schema/custom-edit`
   - Schema versioning/update: `GET /schema/version`, `POST /schema/update`
   - Submission: `POST /send-design`
   - `GET /git/packages` works with fixed branch policy; `GET /git/branches` returns `410` (disabled).
@@ -135,7 +135,6 @@ schema-studio/
 ├─ extractor/
 │  ├─ graph_builder.py          # build_graph(package, **opts); embeds docstrings
 │  ├─ usage_index.py            # get_usage_for_section(section_qualname) for /usage
-│  └─ __init__.py
 │
 ├─ web/                         # React frontend (Vite)
 │  ├─ src/
@@ -147,7 +146,7 @@ schema-studio/
 │  │  │  └─ UnderTheHoodPanel.tsx # Shows normalize methods/helpers for selected section
 │  │  ├─ store/
 │  │  │  └─ selection.ts        # Zustand store for selected item (class or quantity)
-│  │  └─ styles.css
+│  │  └─ index.css
 │  ├─ index.html
 │  └─ package.json
 │
@@ -174,9 +173,7 @@ Example (shortened):
       "label": "ModelMethod",
       "module": "nomad_simulations.schema_packages.model_method",
       "doc": "Section docstring here...",
-      "methods": ["normalize", "validate"],
-      "path": "nomad_simulations/schema_packages/model_method.py",
-      "line": 42
+      "methods": ["normalize", "validate"]
     },
     {
       "id": "nomad_simulations.schema_packages.model_method.ModelMethod.determinant",
@@ -186,9 +183,7 @@ Example (shortened):
       "dtype": "Enum(restricted, unrestricted, restricted-open-shell)",
       "shape": null,
       "card": null,
-      "doc": "The spin-coupling form of the determinant used for ...",
-      "path": "nomad_simulations/schema_packages/model_method.py",
-      "line": 73
+      "doc": "The spin-coupling form of the determinant used for ..."
     }
   ],
   "edges": [
@@ -205,7 +200,7 @@ Example (shortened):
 **Notes**
 
 - `kind ∈ {"section","quantity"}`.  
-- Quantities include `doc`, `path`, and `line` (backend embeds docstrings + source location; frontend shows them in the Doc Panel).  
+- Quantities include `doc`; optional source metadata (`path`, `line`) may be present and is shown by the frontend when available.  
 - The frontend does not render quantity nodes on the canvas; it folds them into each section’s card and into the Doc Panel.  
 - Section `id` is always a fully qualified class name, e.g. `nomad_simulations.schema_packages.model_method.DFT`.
 
@@ -239,22 +234,29 @@ Example (shortened):
 ### 2.3 Usage JSON (`GET /usage` → used by Under-the-hood panel)
 
 ~~~json
-[
-  {
-    "kind": "normalize_method",
-    "qualname": "nomad.datamodel.data.Section.normalize",
-    "module": "nomad.datamodel.data",
-    "short_name": "normalize",
-    "doc": "Is called during entry normalization. If you overwrite this with custom normalization code, make sure to call `super(...).normalize(archive, logger)` so all base-class normalize functions are executed."
-  },
-  {
-    "kind": "normalize_function",
-    "qualname": "nomad_simulations.schema_packages.model_method.normalize_dft",
-    "module": "nomad_simulations.schema_packages.model_method",
-    "short_name": "normalize_dft",
-    "doc": "Normalize DFT-related fields for the DFT section (fill defaults, validate enums, etc.)."
+{
+  "usage": [
+    {
+      "kind": "normalize_method",
+      "qualname": "nomad.datamodel.data.Section.normalize",
+      "module": "nomad.datamodel.data",
+      "short_name": "normalize",
+      "doc": "Is called during entry normalization."
+    },
+    {
+      "kind": "normalize_function",
+      "qualname": "nomad_simulations.schema_packages.model_method.normalize_dft",
+      "module": "nomad_simulations.schema_packages.model_method",
+      "short_name": "normalize_dft",
+      "doc": "Normalize DFT-related fields for the DFT section."
+    }
+  ],
+  "workspace": {
+    "branch": "develop",
+    "package": "nomad_simulations.schema_packages.model_method",
+    "base_namespace": "nomad_simulations.schema_packages"
   }
-]
+}
 ~~~
 
 **Notes**
@@ -262,7 +264,7 @@ Example (shortened):
 - Request: `GET /usage?section_id=<fully-qualified-section-class-name>`
   Example: `section_id=nomad_simulations.schema_packages.model_method.DFT`
 - Response elements:
-  - `kind`: `"normalize_method"` or `"normalize_function"` (later also `"utility_function"`).  
+  - `kind`: `"normalize_method"`, `"normalize_function"`, or `"utility_function"`.  
   - `qualname`: fully-qualified Python name of the callable.  
   - `module`: module where the callable is defined.  
   - `short_name`: simple function/method name, e.g. `normalize_dft`.  
@@ -340,7 +342,7 @@ The frontend shows these entries as a list under **Under the hood** for the curr
    - Builds graph from installed package modules.
    - Replays persisted local edits from SQLite.
 
-4. **Custom edits (`POST /schema/custom-class`, `POST /schema/custom-quantity`, `DELETE /schema/custom-edits`)**
+4. **Custom edits (`POST /schema/custom-class`, `POST /schema/custom-quantity`, `DELETE /schema/custom-edits`, `DELETE /schema/custom-edit`)**
    - Same edit semantics as Dev Mode; persisted locally.
 
 5. **`GET /overview`, `GET /usage`**
@@ -364,7 +366,7 @@ The frontend shows these entries as a list under **Under the hood** for the curr
   - `api/light_mode/app.py` — Light Mode API, fixed branch policy, send-design endpoint.
   - `api/light_mode/schema_source.py` — installed package policy + update behavior.
   - `api/light_mode/store.py` — SQLite workspace/custom edit persistence.
-- `extractor/graph_builder.py` — embeds docstrings and source info for sections and quantities.
+- `extractor/graph_builder.py` — embeds graph structure + docstrings for sections and quantities.
 - `extractor/usage_index.py` — introspects normalize methods and helpers; exposes `get_usage_for_section`.
 
 ---
@@ -382,8 +384,10 @@ The frontend shows these entries as a list under **Under the hood** for the curr
   - Right column:
     - Top: `DocPanel` (schema docs + quantities, includes inline edit/remove hooks).
     - Bottom: `UnderTheHoodPanel` (normalize/helpers list; needs `apiBase`).
-  - **Editable mode:** toggles whether quantity add/edit/remove actions are enabled; uses `/schema/custom-quantity` for adds and client-side updates for rename/delete.
-  - Compile-time switch: `VITE_LIGHT_MODE=true` disables branch diff UI paths and task API usage.
+  - **Editable mode:** toggles whether class/quantity mutation actions are enabled; uses `/schema/custom-class` and `/schema/custom-quantity` for persisted additions, and client-side updates for rename/delete.
+  - Mode selection:
+    - Compile-time: `VITE_LIGHT_MODE=true` disables branch-diff/task paths.
+    - Runtime: frontend also detects Light Mode when `/schema/version` is available and switches behavior accordingly.
 
 - **`GraphView.tsx`**
   - Renders sections as UML cards using Cytoscape + ELK.
@@ -449,13 +453,13 @@ The frontend shows these entries as a list under **Under the hood** for the curr
       root: str | None = None,
       include_quantities: bool = True,
       include_subsections: bool = True,
+      include_inheritance: bool = True,
       allow_cross_module: bool = True,
       base_namespace: str | None = None,
   ) -> dict:
       ...
   ~~~  
-
-- Ensure quantities include `doc`, `path`, and `line`.
+- Ensure quantities include `doc` (and any optional metadata expected by frontend contracts).
 
 **Extend usage / normalization discovery**
 
@@ -532,15 +536,15 @@ api/_data/
 ~~~text
 $SCHEMA_STUDIO_HOME/light_mode.sqlite3
 # default fallback (if SCHEMA_STUDIO_HOME unset):
-#   ~/.config/schema_studio_light/light_mode.sqlite3
-#   or <cwd>/.schema_studio_light/light_mode.sqlite3 (fallback when config dir not writable)
+#   <platform user config dir>/.../light_mode.sqlite3
+#   or <cwd>/.schema_studio_light/light_mode.sqlite3 (when config dir not writable)
 ~~~
 
 **Light Mode schema updates**
 
 - On startup, Light Mode attempts a one-time automatic bootstrap when schema metadata is unavailable.
 - Runtime update path is `POST /schema/update` (or UI "Update schema").
-- PyPI dependencies stay index-only; latest `develop` is pulled on demand at runtime.
+- Update implementation runs `python -m pip install --upgrade git+https://github.com/nomad-coe/nomad-simulations.git@develop`, then invalidates import caches.
 
 ---
 
