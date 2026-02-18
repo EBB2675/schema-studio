@@ -62,7 +62,7 @@ This starts the local server on `http://127.0.0.1:5179` and opens your browser a
 
 ## Optional Configuration
 
-Set env vars before running `schema-studio`.
+Make sure to set the environment variables before running `schema-studio`.
 
 | Variable | Default | Purpose |
 |---|---|---|
