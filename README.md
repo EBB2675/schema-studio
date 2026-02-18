@@ -19,10 +19,28 @@ Python: **3.11+**
 > PyPI release is not live yet.
 
 ### 1) Install
+
+Clone and enter in the project folder:
+
 ```bash
 git clone https://github.com/EBB2675/schema-studio.git
 cd schema-studio
-python -m pip install -e .
+```
+
+Create a virtual environment (either with `venv` or with `conda`) and activate it:
+```bash
+python -m venv .venv
+source .venv/bin/activate  # In Linux-based OS
+```
+
+Install the dependencies of the project:
+```bash
+pip install -e .
+```
+
+**Note**: we recommend using [`uv`](https://docs.astral.sh/uv/) for a faster installation of the dependencies:
+```bash
+uv sync
 ```
 
 ### 2) Run
