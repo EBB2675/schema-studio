@@ -12,6 +12,7 @@ import uvicorn
 
 
 def _strip_wrapping_quotes(value: str) -> str:
+    """Remove one matching pair of leading/trailing quotes from an env value."""
     value = value.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
         return value[1:-1]
@@ -39,6 +40,7 @@ def _load_env_fallback(path: Path) -> bool:
 
 
 def _load_env_file(path: Path) -> bool:
+    """Load a dotenv file with python-dotenv when available, else use fallback parser."""
     try:
         from dotenv import load_dotenv  # type: ignore
     except Exception:
@@ -47,6 +49,7 @@ def _load_env_file(path: Path) -> bool:
 
 
 def _candidate_env_files() -> list[Path]:
+    """Return candidate `.env` files in precedence order, de-duplicated."""
     candidates: list[Path] = []
 
     explicit = os.getenv("SCHEMA_STUDIO_ENV_FILE")
@@ -68,6 +71,7 @@ def _candidate_env_files() -> list[Path]:
 
 
 def _load_first_available_env() -> Path | None:
+    """Load the first existing env file that sets at least one variable."""
     for env_path in _candidate_env_files():
         if not env_path.is_file():
             continue
@@ -77,6 +81,7 @@ def _load_first_available_env() -> Path | None:
 
 
 def _banner(profile_key: str, branch: str) -> str:
+    """Build a startup banner describing active light-mode schema profile settings."""
     return (
         "Running in Light Mode (local, single-user, non-production; "
         f"schema profile={profile_key}, branch={branch})"
@@ -101,6 +106,7 @@ def _open_browser_when_ready(url: str, timeout_seconds: float = 120.0) -> None:
 
 
 def main() -> None:
+    """Run the light-mode API server and open the UI once healthcheck responds."""
     loaded_env = _load_first_available_env()
 
     # Import after loading .env so app defaults resolve from environment when present.

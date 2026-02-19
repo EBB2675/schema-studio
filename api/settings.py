@@ -95,6 +95,7 @@ def _parse_repo_map(raw: str | None) -> list[tuple[str, str]]:
         repo = repo.strip()
         if prefix and repo:
             pairs.append((prefix, repo))
+    # Longest-prefix first so specific namespaces override broader ones.
     pairs.sort(key=lambda p: len(p[0]), reverse=True)
     return pairs
 

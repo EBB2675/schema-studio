@@ -11,6 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 def _reload_settings(monkeypatch, **env):
+    """Reload `api.settings` with a clean, test-specific environment."""
     keys = {
         "SCHEMA_UML_REPO",
         "NOMAD_SIM_REPO",
@@ -34,6 +35,7 @@ def _reload_settings(monkeypatch, **env):
 
 
 def test_bam_repo_is_selected_by_namespace(monkeypatch, tmp_path: Path):
+    """BAM namespaces should resolve to BAM repo when configured."""
     default_repo = tmp_path / "default"
     bam_repo = tmp_path / "bam"
 
@@ -49,6 +51,7 @@ def test_bam_repo_is_selected_by_namespace(monkeypatch, tmp_path: Path):
 
 
 def test_repo_map_overrides_default_namespace_mapping(monkeypatch, tmp_path: Path):
+    """Explicit namespace mappings should override built-in repo defaults."""
     default_repo = tmp_path / "default"
     bam_repo = tmp_path / "bam"
     mapped_repo = tmp_path / "mapped"
@@ -65,6 +68,7 @@ def test_repo_map_overrides_default_namespace_mapping(monkeypatch, tmp_path: Pat
 
 
 def test_default_package_for_bam_namespace(monkeypatch, tmp_path: Path):
+    """BAM base namespace should default to the object types module."""
     default_repo = tmp_path / "default"
 
     mod = _reload_settings(

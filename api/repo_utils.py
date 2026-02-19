@@ -47,6 +47,7 @@ def parse_base_packages(raw: str) -> list[str]:
 
 
 def bases_by_repo(base_packages: list[str]) -> dict[str, list[str]]:
+    """Group base namespaces by owning repository path/URL."""
     mapping: dict[str, list[str]] = {}
     for base in base_packages:
         repo = repo_for_base_namespace(base)
