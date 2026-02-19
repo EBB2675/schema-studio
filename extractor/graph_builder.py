@@ -6,6 +6,7 @@ import inspect
 
 @dataclass
 class Node:
+    """Serializable graph node representation for sections and quantities."""
     id: str
     kind: str                  # "section" | "quantity"
     label: str
@@ -20,6 +21,7 @@ class Node:
 
 @dataclass
 class Edge:
+    """Serializable directed relation between two graph nodes."""
     source: str
     target: str
     type: str                  # "hasQuantity" | "hasSubSection" | "inherits"
@@ -66,6 +68,7 @@ def _doc_from(obj: Any) -> Optional[str]:
 # -------- main API --------
 
 def list_sections(package: str) -> List[str]:
+    """List discoverable section-like classes defined in the given module."""
     mod = importlib.import_module(package)
     base_ns = _root_namespace(package)
     return sorted(
@@ -219,14 +222,17 @@ def build_graph(
 # -------- introspection helpers --------
 
 def _is_section(obj: Any) -> bool:
+    """Return True for classes that behave like NOMAD sections or BAM entities."""
     return inspect.isclass(obj) and (_is_nomad_section(obj) or _is_bam_entity_class(obj))
 
 
 def _is_nomad_section(obj: Any) -> bool:
+    """Detect NOMAD section classes via common metainfo attributes."""
     return hasattr(obj, "m_def") or hasattr(obj, "quantities") or hasattr(obj, "sub_sections")
 
 
 def _is_bam_entity_class(obj: Any) -> bool:
+    """Detect BAM datamodel classes derived from ObjectType or VocabularyType."""
     for base in getattr(obj, "__mro__", []):
         mod = getattr(base, "__module__", "")
         if mod != "bam_masterdata.metadata.entities":
@@ -237,6 +243,7 @@ def _is_bam_entity_class(obj: Any) -> bool:
 
 
 def _is_bam_object_type_class(obj: Any) -> bool:
+    """Detect BAM object type classes derived from `ObjectType`."""
     for base in getattr(obj, "__mro__", []):
         mod = getattr(base, "__module__", "")
         if mod != "bam_masterdata.metadata.entities":
@@ -247,6 +254,7 @@ def _is_bam_object_type_class(obj: Any) -> bool:
 
 
 def _is_bam_vocabulary_type_class(obj: Any) -> bool:
+    """Detect BAM vocabulary classes derived from `VocabularyType`."""
     for base in getattr(obj, "__mro__", []):
         mod = getattr(base, "__module__", "")
         if mod != "bam_masterdata.metadata.entities":
@@ -257,14 +265,17 @@ def _is_bam_vocabulary_type_class(obj: Any) -> bool:
 
 
 def _is_bam_property_assignment(obj: Any) -> bool:
+    """Identify BAM property assignment descriptor instances."""
     return obj.__class__.__name__ == "PropertyTypeAssignment" and obj.__class__.__module__ == "bam_masterdata.metadata.definitions"
 
 
 def _is_bam_vocabulary_term(obj: Any) -> bool:
+    """Identify BAM controlled vocabulary term descriptor instances."""
     return obj.__class__.__name__ == "VocabularyTerm" and obj.__class__.__module__ == "bam_masterdata.metadata.definitions"
 
 
 def _items_from_mapping_or_list(x) -> Iterable[Tuple[str, Any]]:
+    """Normalize dict/list descriptor containers to `(name, object)` pairs."""
     if x is None:
         return []
     if isinstance(x, dict):
@@ -280,6 +291,7 @@ def _items_from_mapping_or_list(x) -> Iterable[Tuple[str, Any]]:
 
 
 def _cardinality_from(obj) -> Optional[str]:
+    """Best-effort conversion of source cardinality fields to UML-style ranges."""
     if hasattr(obj, "repeats"):
         try:
             return "0..*" if bool(getattr(obj, "repeats")) else "0..1"
@@ -305,6 +317,7 @@ def _ref_target_name(dtype_obj) -> Optional[str]:
     """Best-effort human-friendly target for Reference-like dtypes."""
 
     def _name_from_target(target: Any) -> Optional[str]:
+        """Resolve a readable section name from a referenced target object."""
         cls = _resolve_section_class(target)
         if cls is None:
             cls = target if inspect.isclass(target) else getattr(target, "__class__", None)
@@ -337,6 +350,7 @@ def _ref_target_name(dtype_obj) -> Optional[str]:
 
 
 def _enumish_value(value: Any) -> str:
+    """Convert enum-like values into a stable scalar string."""
     enum_value = getattr(value, "value", None)
     if isinstance(enum_value, str) and enum_value:
         return enum_value
@@ -347,6 +361,7 @@ def _enumish_value(value: Any) -> str:
 
 
 def _dtype_from(q) -> Optional[str]:
+    """Extract a display dtype from NOMAD/BAM quantity-like objects."""
     if _is_bam_vocabulary_term(q):  # Vocabulary terms are similar to enums, but we want to preserve the link to the vocabulary
         return "VOCAB_TERM"
 
@@ -378,6 +393,7 @@ def _dtype_from(q) -> Optional[str]:
 
 
 def _shape_from(q) -> Optional[str]:
+    """Extract quantity shape metadata when available."""
     if hasattr(q, "shape"):
         try:
             return str(getattr(q, "shape"))
@@ -387,9 +403,11 @@ def _shape_from(q) -> Optional[str]:
 
 
 def _get_bam_quantities(sec_obj: Any) -> Iterable[Tuple[str, Any]]:
+    """Collect BAM properties/terms from class dictionaries across inheritance."""
     collected: Dict[str, Any] = {}
 
     if _is_bam_object_type_class(sec_obj):
+        # Traverse MRO from base to derived so child classes can override inherited fields.
         for base in reversed(getattr(sec_obj, "__mro__", [])):
             for attr_name, attr_value in getattr(base, "__dict__", {}).items():
                 if _is_bam_property_assignment(attr_value):
@@ -407,6 +425,7 @@ def _get_bam_quantities(sec_obj: Any) -> Iterable[Tuple[str, Any]]:
 
 
 def _get_quantities(sec_obj) -> Iterable[Tuple[str, Any]]:
+    """Return normalized quantity pairs from NOMAD or BAM section definitions."""
     qmap = getattr(sec_obj, "quantities", None)
     if qmap:
         return _items_from_mapping_or_list(qmap)
@@ -426,6 +445,7 @@ def _get_quantities(sec_obj) -> Iterable[Tuple[str, Any]]:
 
 
 def _get_subsections(sec_obj) -> Iterable[Tuple[str, Any]]:
+    """Return normalized subsection pairs from NOMAD-style section definitions."""
     smap = getattr(sec_obj, "sub_sections", None)
     if smap:
         return _items_from_mapping_or_list(smap)
@@ -481,6 +501,7 @@ def _resolve_section_class(target) -> Optional[type]:
 
 
 def _root_namespace(package: str) -> str:
+    """Derive a stable namespace prefix used for module filtering."""
     parts = package.split(".")
     if len(parts) >= 3:
         return ".".join(parts[:3])
@@ -490,6 +511,7 @@ def _root_namespace(package: str) -> str:
 
 
 def _module_allowed(module: str, base_namespace: str, exclude_prefixes: Tuple[str, ...], allow_cross_module: bool) -> bool:
+    """Decide whether a module should be traversed during graph expansion."""
     if any(module.startswith(p) for p in exclude_prefixes):
         return False
     if allow_cross_module:
@@ -498,6 +520,7 @@ def _module_allowed(module: str, base_namespace: str, exclude_prefixes: Tuple[st
 
 
 def _module_in_namespace(obj, package_namespace: str) -> bool:
+    """Check whether the object's module belongs to the target namespace."""
     mod = getattr(obj, "__module__", "")
     return mod.startswith(package_namespace)
 

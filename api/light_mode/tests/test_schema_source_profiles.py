@@ -11,6 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 def _reload_schema_source(monkeypatch, *, profile: str | None = None, package_hint: str | None = None):
+    """Reload schema-source module with controlled profile env vars."""
     monkeypatch.delenv("SCHEMA_STUDIO_LIGHT_SCHEMA_PROFILE", raising=False)
     monkeypatch.delenv("SCHEMA_STUDIO_DEFAULT_PACKAGE", raising=False)
 
@@ -26,6 +27,7 @@ def _reload_schema_source(monkeypatch, *, profile: str | None = None, package_hi
 
 
 def test_default_profile_is_nomad(monkeypatch):
+    """Without overrides, light mode should select NOMAD defaults."""
     mod = _reload_schema_source(monkeypatch)
 
     assert mod.LIGHT_PROFILE_KEY == "nomad"
@@ -35,6 +37,7 @@ def test_default_profile_is_nomad(monkeypatch):
 
 
 def test_explicit_bam_profile(monkeypatch):
+    """Explicit BAM profile should switch branch/package defaults."""
     mod = _reload_schema_source(monkeypatch, profile="bam")
 
     assert mod.LIGHT_PROFILE_KEY == "bam"
@@ -45,6 +48,7 @@ def test_explicit_bam_profile(monkeypatch):
 
 
 def test_package_hint_selects_bam_profile(monkeypatch):
+    """A BAM package hint should auto-select BAM profile when key is unset."""
     mod = _reload_schema_source(monkeypatch, package_hint="bam_masterdata.datamodel.vocabulary_types")
 
     assert mod.LIGHT_PROFILE_KEY == "bam"

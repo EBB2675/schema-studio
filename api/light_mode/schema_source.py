@@ -20,6 +20,8 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class SchemaProfile:
+    """Profile configuration describing one supported schema source package."""
+
     key: str
     package_import: str
     package_dist: str
@@ -52,11 +54,13 @@ SCHEMA_PROFILES: dict[str, SchemaProfile] = {
 
 
 def _select_profile() -> SchemaProfile:
+    """Select active schema profile from env override, then package hint, then default."""
     requested = os.getenv("SCHEMA_STUDIO_LIGHT_SCHEMA_PROFILE", "").strip().lower()
     if requested in SCHEMA_PROFILES:
         return SCHEMA_PROFILES[requested]
 
     if requested:
+        # Allow values like "bam_masterdata" or "bam-masterdata" besides short keys.
         for profile in SCHEMA_PROFILES.values():
             if requested in {profile.package_import, profile.package_dist}:
                 return profile
@@ -81,16 +85,21 @@ UPGRADE_TARGET = f"git+{DEFAULT_REMOTE_REPO}@{DEFAULT_BRANCH}"
 
 @dataclass
 class SchemaInfo:
+    """Runtime metadata about the installed schema package source/version."""
+
     package_root: Path
     version: str
     source: str  # "installed" | "remote-<branch>" | "bundled"
 
 
 class SchemaUnavailable(RuntimeError):
+    """Raised when active schema profile cannot be validated or updated."""
+
     pass
 
 
 def active_profile() -> SchemaProfile:
+    """Return the resolved schema profile for the current process."""
     return ACTIVE_PROFILE
 
 
@@ -100,6 +109,7 @@ def _is_packaged_backend() -> bool:
 
 
 def _distribution() -> importlib.metadata.Distribution:
+    """Return installed package distribution metadata for the active schema profile."""
     try:
         return importlib.metadata.distribution(PACKAGE_DIST)
     except importlib.metadata.PackageNotFoundError as exc:
@@ -109,6 +119,7 @@ def _distribution() -> importlib.metadata.Distribution:
 
 
 def _package_root() -> Path:
+    """Resolve filesystem location of the installed schema package."""
     spec = importlib.util.find_spec(PACKAGE_IMPORT)
     if spec is None:
         raise SchemaUnavailable(
@@ -123,6 +134,7 @@ def _package_root() -> Path:
 
 
 def _direct_url_payload(dist: importlib.metadata.Distribution) -> dict | None:
+    """Parse PEP 610 `direct_url.json` metadata when available."""
     try:
         raw = dist.read_text("direct_url.json")
     except Exception:
@@ -137,11 +149,13 @@ def _direct_url_payload(dist: importlib.metadata.Distribution) -> dict | None:
 
 
 def _normalize_repo(url: str) -> str:
+    """Normalize git URL for comparisons by trimming trailing slash and `.git` suffix."""
     base = url.rstrip("/")
     return base[:-4] if base.endswith(".git") else base
 
 
 def _schema_info_from_install() -> SchemaInfo:
+    """Validate installed package provenance and return source/version metadata."""
     package_root = _package_root()
     if str(package_root.parent) not in sys.path:
         sys.path.insert(0, str(package_root.parent))
@@ -163,6 +177,7 @@ def _schema_info_from_install() -> SchemaInfo:
     if not direct_url:
         return SchemaInfo(package_root=package_root, version=dist.version, source="installed")
 
+    # Light mode intentionally forbids local editable sources to keep behavior reproducible.
     source_url = direct_url.get("url")
     if not isinstance(source_url, str) or source_url.startswith("file://"):
         raise SchemaUnavailable(f"Light Mode does not support local {PACKAGE_DIST} sources.")
@@ -176,6 +191,7 @@ def _schema_info_from_install() -> SchemaInfo:
     if not isinstance(vcs_info, dict):
         return SchemaInfo(package_root=package_root, version=dist.version, source="installed")
 
+    # If pip recorded a requested branch/tag, enforce the profile's fixed branch.
     requested = vcs_info.get("requested_revision")
     if requested and requested != DEFAULT_BRANCH:
         raise SchemaUnavailable(

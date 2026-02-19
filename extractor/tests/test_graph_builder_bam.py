@@ -13,6 +13,7 @@ from extractor.graph_builder import build_graph, list_sections
 
 
 def _write_fake_bam_package(root: Path) -> None:
+    """Create a minimal BAM-like package tree used for extractor unit tests."""
     files: dict[str, str] = {
         "bam_masterdata/__init__.py": "",
         "bam_masterdata/metadata/__init__.py": "",
@@ -112,6 +113,7 @@ class DeviceStatus(VocabularyType):
 
 
 def test_build_graph_extracts_bam_object_types_and_controlled_vocab(monkeypatch, tmp_path: Path):
+    """BAM object type fields should become quantity nodes with typed cardinalities."""
     _write_fake_bam_package(tmp_path)
     monkeypatch.syspath_prepend(str(tmp_path))
     importlib.invalidate_caches()
@@ -150,6 +152,7 @@ def test_build_graph_extracts_bam_object_types_and_controlled_vocab(monkeypatch,
 
 
 def test_build_graph_extracts_bam_vocabulary_terms(monkeypatch, tmp_path: Path):
+    """BAM vocabulary terms should be extracted as quantity-like term nodes."""
     _write_fake_bam_package(tmp_path)
     monkeypatch.syspath_prepend(str(tmp_path))
     importlib.invalidate_caches()
