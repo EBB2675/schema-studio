@@ -4,6 +4,7 @@ from __future__ import annotations
 import ctypes
 from ctypes import wintypes
 import os
+from pathlib import Path
 import sys
 import threading
 import time
@@ -12,9 +13,77 @@ import webbrowser
 
 import uvicorn
 
-from .app import app, DEFAULT_HOST, DEFAULT_PORT
 
-BANNER = "Running in Light Mode (local, single-user, non-production; schema pinned to nomad-simulations/develop)"
+def _strip_wrapping_quotes(value: str) -> str:
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        return value[1:-1]
+    return value
+
+
+def _load_env_fallback(path: Path) -> bool:
+    """Minimal .env loader used when python-dotenv is unavailable."""
+    loaded_any = False
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):].strip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+        os.environ[key] = _strip_wrapping_quotes(value)
+        loaded_any = True
+    return loaded_any
+
+
+def _load_env_file(path: Path) -> bool:
+    try:
+        from dotenv import load_dotenv  # type: ignore
+    except Exception:
+        return _load_env_fallback(path)
+    return bool(load_dotenv(dotenv_path=path, override=False))
+
+
+def _candidate_env_files() -> list[Path]:
+    candidates: list[Path] = []
+
+    explicit = os.getenv("SCHEMA_STUDIO_ENV_FILE")
+    if explicit:
+        candidates.append(Path(explicit).expanduser())
+
+    candidates.append(Path.cwd() / ".env")
+    candidates.append(Path(__file__).resolve().parents[2] / ".env")
+
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(path)
+    return unique
+
+
+def _load_first_available_env() -> Path | None:
+    for env_path in _candidate_env_files():
+        if not env_path.is_file():
+            continue
+        if _load_env_file(env_path):
+            return env_path
+    return None
+
+
+def _banner(profile_key: str, branch: str) -> str:
+    return (
+        "Running in Light Mode (local, single-user, non-production; "
+        f"schema profile={profile_key}, branch={branch})"
+    )
 
 
 def _open_browser_when_ready(url: str, timeout_seconds: float = 120.0) -> None:
@@ -31,7 +100,6 @@ def _open_browser_when_ready(url: str, timeout_seconds: float = 120.0) -> None:
                     return
         except Exception:
             time.sleep(0.2)
-    # Fallback: open anyway if readiness check timed out.
     webbrowser.open(url)
 
 
@@ -43,11 +111,7 @@ def _env_flag(name: str, default: bool) -> bool:
 
 
 def _watch_parent_process() -> None:
-    """Exit when the desktop parent process disappears.
-
-    This keeps Tauri-launched backends from lingering after abrupt terminal
-    stops or desktop-shell crashes.
-    """
+    """Exit when the desktop parent process disappears."""
     raw_pid = os.getenv("SCHEMA_STUDIO_PARENT_PID", "").strip()
     if not raw_pid:
         return
@@ -61,8 +125,8 @@ def _watch_parent_process() -> None:
         return
 
     def _watch_windows() -> None:
-        SYNCHRONIZE = 0x00100000
-        WAIT_OBJECT_0 = 0x00000000
+        synchronize = 0x00100000
+        wait_object_0 = 0x00000000
 
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
@@ -72,12 +136,12 @@ def _watch_parent_process() -> None:
         kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
         kernel32.CloseHandle.restype = wintypes.BOOL
 
-        handle = kernel32.OpenProcess(SYNCHRONIZE, False, parent_pid)
+        handle = kernel32.OpenProcess(synchronize, False, parent_pid)
         if not handle:
             return
         try:
             result = kernel32.WaitForSingleObject(handle, 0xFFFFFFFF)
-            if result == WAIT_OBJECT_0:
+            if result == wait_object_0:
                 os._exit(0)
         finally:
             kernel32.CloseHandle(handle)
@@ -95,9 +159,20 @@ def _watch_parent_process() -> None:
 
 
 def run_server(*, open_browser: bool | None = None) -> None:
-    """Run the local Light Mode server with desktop-aware defaults."""
+    """Run the local Light Mode server with environment-aware defaults."""
+    loaded_env = _load_first_available_env()
+
+    # Import after loading .env so app defaults resolve from environment when present.
+    from .app import app, DEFAULT_HOST, DEFAULT_PORT
+    from .schema_source import active_profile
+
+    profile = active_profile()
     url = f"http://{DEFAULT_HOST}:{DEFAULT_PORT}"
-    print(BANNER)
+
+    if loaded_env is not None:
+        print(f"Loaded environment from {loaded_env}")
+    print(_banner(profile.key, profile.default_branch))
+
     _watch_parent_process()
     if open_browser is None:
         open_browser = _env_flag("SCHEMA_STUDIO_OPEN_BROWSER", True)

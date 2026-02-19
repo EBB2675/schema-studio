@@ -18,6 +18,7 @@ dependencies = [
   "httpx",
   "platformdirs",
   "nomad-simulations",
+  "bam-masterdata",
 ]
 
 [project.optional-dependencies]
