@@ -1,16 +1,13 @@
 import { useEffect, useState } from "react";
+import { DEFAULT_OVERVIEW_NAMESPACE } from "../constants/defaults";
 
 type OverviewItem = { package: string; classes: string[] };
 type OverviewResp = { branch: string; base: string; items: OverviewItem[] };
 
-const DEFAULT_OVERVIEW_BASE =
-  import.meta.env.VITE_DEFAULT_NAMESPACE ??
-  "nomad_simulations.schema_packages,nomad_measurements";
-
 export default function OverviewList({
   apiBase,
   branch,
-  base = DEFAULT_OVERVIEW_BASE,
+  base = DEFAULT_OVERVIEW_NAMESPACE,
 }: {
   apiBase: string;
   branch: string;
@@ -31,7 +28,6 @@ export default function OverviewList({
     setErr(null);
     setData(null);
 
-    // Use fetch with basic error handling
     fetch(url, { method: "GET" })
       .then(async (r) => {
         if (!r.ok) {
