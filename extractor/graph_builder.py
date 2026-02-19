@@ -38,18 +38,28 @@ def _normalize_doc(s: Any) -> Optional[str]:
 def _doc_from(obj: Any) -> Optional[str]:
     """
     Try to extract a human doc/description from common attributes used by
-    NOMAD-style metainfo (description, m_def.description) and fall back to __doc__.
+    NOMAD-style metainfo and BAM masterdata definitions.
     """
     for attr in ("description", "doc", "desc"):
         v = getattr(obj, attr, None)
         v = _normalize_doc(v)
         if v:
             return v
+
+    # NOMAD sections definitions
     mdef = getattr(obj, "m_def", None)
     if mdef is not None:
         v = _normalize_doc(getattr(mdef, "description", None))
         if v:
             return v
+
+    # openBIS entities definitions
+    defs = getattr(obj, "defs", None)
+    if defs is not None:
+        v = _normalize_doc(getattr(defs, "description", None))
+        if v:
+            return v
+
     return _normalize_doc(getattr(obj, "__doc__", None))
 
 
@@ -59,7 +69,8 @@ def list_sections(package: str) -> List[str]:
     mod = importlib.import_module(package)
     base_ns = _root_namespace(package)
     return sorted(
-        name for name, obj in vars(mod).items()
+        name
+        for name, obj in vars(mod).items()
         if _is_section(obj) and _module_in_namespace(obj, base_ns)
     )
 
@@ -74,11 +85,14 @@ def build_graph(
     base_namespace: Optional[str] = None,
     exclude_prefixes: Tuple[str, ...] = ("nomad.metainfo.",),
     max_nodes: int = 8000,
-    max_depth: int = 20,  # recurse reasonably deep
+    max_depth: int = 20,
 ) -> Dict[str, Any]:
     """
     Build a graph starting at `root` (if given) or all section classes in `package`.
-    Properly resolves SubSection targets that are Section definitions, and recurses.
+
+    Supports:
+    - NOMAD metainfo sections/quantities/subsections.
+    - BAM masterdata object/vocabulary classes and assigned properties/terms.
     """
     mod = importlib.import_module(package)
     if base_namespace is None:
@@ -115,10 +129,7 @@ def build_graph(
         if not _module_allowed(sec_mod, base_namespace, exclude_prefixes, allow_cross_module):
             return
 
-        # collect methods defined in your package
         methods = _public_methods(sec_obj, base_namespace)
-
-        # robust doc extraction
         doc = _doc_from(sec_obj)
 
         nodes[sec_id] = Node(
@@ -127,7 +138,7 @@ def build_graph(
             label=sec_name,
             doc=doc,
             module=sec_mod,
-            methods=methods or None
+            methods=methods or None,
         )
         if len(nodes) > max_nodes:
             return
@@ -140,12 +151,12 @@ def build_graph(
                         id=qid,
                         kind="quantity",
                         label=qname,
-                        doc=_doc_from(q),               # ← include quantity doc
+                        doc=_doc_from(q),
                         dtype=_dtype_from(q),
                         shape=_shape_from(q),
                         card=_cardinality_from(q),
                         owner=sec_id,
-                        module=sec_mod
+                        module=sec_mod,
                     )
                 add_edge(Edge(source=sec_id, target=qid, type="hasQuantity", card=_cardinality_from(q)))
                 if len(nodes) > max_nodes:
@@ -157,6 +168,7 @@ def build_graph(
                     continue
                 if not _is_section(base):
                     continue
+
                 base_mod = getattr(base, "__module__", "")
                 if not _module_allowed(base_mod, base_namespace, exclude_prefixes, allow_cross_module):
                     continue
@@ -167,7 +179,7 @@ def build_graph(
                 add_edge(Edge(source=sec_id, target=base_id, type="inherits"))
 
         if include_subsections:
-            for sname, s in _get_subsections(sec_obj):
+            for _, s in _get_subsections(sec_obj):
                 tgt_cls = _resolve_section_class(_target_section_obj(s))
                 if tgt_cls is None:
                     continue
@@ -177,9 +189,7 @@ def build_graph(
 
                 tgt_name = getattr(tgt_cls, "__name__", str(tgt_cls))
                 tgt_id = f"{tgt_mod}.{tgt_name}"
-                # add child section and quantities recursively
                 add_section(tgt_cls, depth + 1)
-                # add UML composition edge
                 add_edge(Edge(source=sec_id, target=tgt_id, type="hasSubSection", card=_cardinality_from(s)))
                 if len(nodes) > max_nodes:
                     return
@@ -202,15 +212,56 @@ def build_graph(
         "root": root,
         "base_namespace": base_namespace,
         "nodes": [asdict(n) for n in node_list],
-        "edges": [asdict(e) for e in edges]
+        "edges": [asdict(e) for e in edges],
     }
 
 
 # -------- introspection helpers --------
 
-def _is_section(obj) -> bool:
-    # Section classes have m_def; be liberal to support variations
-    return inspect.isclass(obj) and (hasattr(obj, "m_def") or hasattr(obj, "quantities") or hasattr(obj, "sub_sections"))
+def _is_section(obj: Any) -> bool:
+    return inspect.isclass(obj) and (_is_nomad_section(obj) or _is_bam_entity_class(obj))
+
+
+def _is_nomad_section(obj: Any) -> bool:
+    return hasattr(obj, "m_def") or hasattr(obj, "quantities") or hasattr(obj, "sub_sections")
+
+
+def _is_bam_entity_class(obj: Any) -> bool:
+    for base in getattr(obj, "__mro__", []):
+        mod = getattr(base, "__module__", "")
+        if mod != "bam_masterdata.metadata.entities":
+            continue
+        if base.__name__ in {"ObjectType", "VocabularyType"}:
+            return True
+    return False
+
+
+def _is_bam_object_type_class(obj: Any) -> bool:
+    for base in getattr(obj, "__mro__", []):
+        mod = getattr(base, "__module__", "")
+        if mod != "bam_masterdata.metadata.entities":
+            continue
+        if base.__name__ in {"ObjectType"}:
+            return True
+    return False
+
+
+def _is_bam_vocabulary_type_class(obj: Any) -> bool:
+    for base in getattr(obj, "__mro__", []):
+        mod = getattr(base, "__module__", "")
+        if mod != "bam_masterdata.metadata.entities":
+            continue
+        if base.__name__ == "VocabularyType":
+            return True
+    return False
+
+
+def _is_bam_property_assignment(obj: Any) -> bool:
+    return obj.__class__.__name__ == "PropertyTypeAssignment" and obj.__class__.__module__ == "bam_masterdata.metadata.definitions"
+
+
+def _is_bam_vocabulary_term(obj: Any) -> bool:
+    return obj.__class__.__name__ == "VocabularyTerm" and obj.__class__.__module__ == "bam_masterdata.metadata.definitions"
 
 
 def _items_from_mapping_or_list(x) -> Iterable[Tuple[str, Any]]:
@@ -242,6 +293,11 @@ def _cardinality_from(obj) -> Optional[str]:
             return f"{int(low)}..{hi}"
         except Exception:
             return str(c)
+    if hasattr(obj, "mandatory"):
+        try:
+            return "1..1" if bool(getattr(obj, "mandatory")) else "0..1"
+        except Exception:
+            pass
     return None
 
 
@@ -255,7 +311,6 @@ def _ref_target_name(dtype_obj) -> Optional[str]:
         if cls is None:
             return None
 
-        # Prefer the section/class name without a long module prefix
         name = getattr(cls, "__name__", None) or getattr(cls, "name", None)
         if not name:
             return None
@@ -267,7 +322,6 @@ def _ref_target_name(dtype_obj) -> Optional[str]:
                 return f"{mod_short}.{name}"
         return name
 
-    # Common attributes exposed by NOMAD Reference dtypes
     for attr in (
         "target_section_def",
         "target_section_cls",
@@ -282,8 +336,34 @@ def _ref_target_name(dtype_obj) -> Optional[str]:
     return None
 
 
+def _enumish_value(value: Any) -> str:
+    enum_value = getattr(value, "value", None)
+    if isinstance(enum_value, str) and enum_value:
+        return enum_value
+    text = str(value)
+    if text.startswith("DataType."):
+        return text.split(".", 1)[1]
+    return text
+
+
 def _dtype_from(q) -> Optional[str]:
-    for attr in ("dtype", "type"):
+    if _is_bam_vocabulary_term(q):  # Vocabulary terms are similar to enums, but we want to preserve the link to the vocabulary
+        return "VOCAB_TERM"
+
+    if hasattr(q, "data_type"):  # openBIS specific data types
+        try:
+            raw_dtype = _enumish_value(getattr(q, "data_type"))
+            vocabulary_code = getattr(q, "vocabulary_code", None)
+            object_code = getattr(q, "object_code", None)
+            if vocabulary_code:
+                return f"{raw_dtype}[{vocabulary_code}]"
+            if object_code:
+                return f"{raw_dtype}[{object_code}]"
+            return raw_dtype
+        except Exception:
+            pass
+
+    for attr in ("dtype", "type"):  # NOMAD specific data types
         if not hasattr(q, attr):
             continue
         try:
@@ -306,40 +386,64 @@ def _shape_from(q) -> Optional[str]:
     return None
 
 
+def _get_bam_quantities(sec_obj: Any) -> Iterable[Tuple[str, Any]]:
+    collected: Dict[str, Any] = {}
+
+    if _is_bam_object_type_class(sec_obj):
+        for base in reversed(getattr(sec_obj, "__mro__", [])):
+            for attr_name, attr_value in getattr(base, "__dict__", {}).items():
+                if _is_bam_property_assignment(attr_value):
+                    collected[attr_name] = attr_value
+        return collected.items()
+
+    if _is_bam_vocabulary_type_class(sec_obj):
+        for base in reversed(getattr(sec_obj, "__mro__", [])):
+            for attr_name, attr_value in getattr(base, "__dict__", {}).items():
+                if _is_bam_vocabulary_term(attr_value):
+                    collected[attr_name] = attr_value
+        return collected.items()
+
+    return []
+
+
 def _get_quantities(sec_obj) -> Iterable[Tuple[str, Any]]:
-    # Try class-level first
     qmap = getattr(sec_obj, "quantities", None)
     if qmap:
         return _items_from_mapping_or_list(qmap)
-    # Then via m_def reflection
+
     mdef = getattr(sec_obj, "m_def", None)
     if mdef is not None:
         for attr in ("all_quantities", "quantities"):
             qmap = getattr(mdef, attr, None)
             if qmap:
                 return _items_from_mapping_or_list(qmap)
+
+    bam = _get_bam_quantities(sec_obj)
+    if bam:
+        return bam
+
     return []
 
 
 def _get_subsections(sec_obj) -> Iterable[Tuple[str, Any]]:
-    # Try class-level first
     smap = getattr(sec_obj, "sub_sections", None)
     if smap:
         return _items_from_mapping_or_list(smap)
-    # Then via m_def reflection
+
     mdef = getattr(sec_obj, "m_def", None)
     if mdef is not None:
         for attr in ("all_sub_sections", "sub_sections"):
             smap = getattr(mdef, attr, None)
             if smap:
                 return _items_from_mapping_or_list(smap)
+
     return []
 
 
 def _target_section_obj(subsec_obj):
     """
     Return the raw target stored in SubSection definition.
-    It may be a *Section class* or a *Section definition* (metainfo Section).
+    It may be a section class or a section definition (metainfo section).
     """
     for attr in ("section_def", "target", "sub_section", "section"):
         if hasattr(subsec_obj, attr):
@@ -350,19 +454,19 @@ def _target_section_obj(subsec_obj):
 def _resolve_section_class(target) -> Optional[type]:
     """
     If target is already a class, return it.
-    If it's a metainfo Section definition, try common attributes to reach the Python class.
+    If it's a metainfo section definition, try common attributes to reach the Python class.
     """
     if target is None:
         return None
     if inspect.isclass(target):
         return target
-    # NOMAD metainfo Section definitions often expose the class as section_cls / section_class
+
     for attr in ("section_cls", "section_class", "cls", "python_type"):
         if hasattr(target, attr):
             cand = getattr(target, attr)
             if inspect.isclass(cand):
                 return cand
-    # Some definitions keep a 'm_root' or similar to the owning class; try heuristics
+
     mod = getattr(target, "__module__", "")
     name = getattr(target, "__name__", None) or getattr(target, "name", None)
     if mod and name:
@@ -380,6 +484,8 @@ def _root_namespace(package: str) -> str:
     parts = package.split(".")
     if len(parts) >= 3:
         return ".".join(parts[:3])
+    if len(parts) == 2:
+        return ".".join(parts)
     return parts[0]
 
 
@@ -387,8 +493,7 @@ def _module_allowed(module: str, base_namespace: str, exclude_prefixes: Tuple[st
     if any(module.startswith(p) for p in exclude_prefixes):
         return False
     if allow_cross_module:
-        return True
-    # same module only if cross-mod disabled
+        return module.startswith(base_namespace)
     return module.startswith(base_namespace)
 
 
