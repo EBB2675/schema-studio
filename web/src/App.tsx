@@ -114,7 +114,7 @@ export default function App() {
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     if (typeof window === "undefined") return "dark";
     const stored = window.localStorage.getItem("schema-uml-theme");
-    const initial = stored === "light" ? "light" : "dark";
+    const initial = stored === "light" ? "light" : (LIGHT_MODE ? "light" : "dark");
     document.documentElement.setAttribute("data-theme", initial);
     return initial;
   });
@@ -2332,7 +2332,7 @@ export default function App() {
           <p className="subdued">
             {isLightMode
               ? "Running in Light Mode (local, single-user, non-production)."
-              : "Craft diagrams, compare branches, and edit schemas. Currently defaults to nomad-simulations."}
+              : "Craft diagrams, compare branches, and edit schemas across compatible repositories."}
           </p>
           <div className="row" style={{ marginTop: 10, flexWrap: "wrap", gap: 8 }}>
             <span className="tag">{loading || diffLoading ? "Working…" : "Ready"}</span>
@@ -2841,7 +2841,7 @@ export default function App() {
               </div>
               <div style={{ lineHeight: 1.5, display: "grid", gap: 10 }}>
                 <div>
-                  1) Go to <button className="link-button" type="button" onClick={() => focusAndOpen("workspace")}>Workspace 👈</button> and pick a root, then hit “Build graph” to load the nomad-simulations schema.
+                  1) Go to <button className="link-button" type="button" onClick={() => focusAndOpen("workspace")}>Workspace 👈</button> and pick a root, then hit “Build graph” to load your selected schema package.
                 </div>
                 <div>
                   2) See the <button className="link-button" type="button" onClick={() => focusAndOpen("documentation")}>Documentation 👉</button> panel to read class/quantity details as you browse.
