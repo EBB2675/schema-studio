@@ -27,7 +27,10 @@ from ..custom_graph_edits import (
     attach_custom_quantity as _attach_custom_quantity_impl,
 )
 from .schema_source import (
+    DEFAULT_BASE_NAMESPACE as LIGHT_DEFAULT_BASE_NS,
     DEFAULT_BRANCH as LIGHT_MODE_BRANCH,
+    DEFAULT_PACKAGE as LIGHT_DEFAULT_PACKAGE,
+    LIGHT_PROFILE_KEY,
     SchemaUnavailable,
     current_schema_info,
     list_modules_for_base,
@@ -40,8 +43,8 @@ APP_VERSION = os.getenv("SCHEMA_STUDIO_VERSION", "light")
 SEND_ENDPOINT = os.getenv("SCHEMA_STUDIO_SEND_ENDPOINT")
 DEFAULT_PORT = int(os.getenv("SCHEMA_STUDIO_PORT", "5179"))
 DEFAULT_HOST = os.getenv("SCHEMA_STUDIO_HOST", "127.0.0.1")
-DEFAULT_PACKAGE = os.getenv("SCHEMA_STUDIO_DEFAULT_PACKAGE", "nomad_simulations.schema_packages.model_method")
-DEFAULT_BASE_NS = os.getenv("SCHEMA_STUDIO_DEFAULT_NAMESPACE", "nomad_simulations.schema_packages")
+DEFAULT_PACKAGE = os.getenv("SCHEMA_STUDIO_DEFAULT_PACKAGE", LIGHT_DEFAULT_PACKAGE)
+DEFAULT_BASE_NS = os.getenv("SCHEMA_STUDIO_DEFAULT_NAMESPACE", LIGHT_DEFAULT_BASE_NS)
 AUTO_BOOTSTRAP_SCHEMA = os.getenv("SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA", "1").lower() not in {"0", "false", "no"}
 
 logger = logging.getLogger(__name__)
@@ -354,7 +357,7 @@ async def _bootstrap_schema_on_startup():
 @app.get("/schema/version")
 async def schema_version():
     info = _schema_info_or_503(auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA)
-    return {"version": info.version, "source": info.source, "send_design_enabled": bool(SEND_ENDPOINT)}
+    return {"version": info.version, "source": info.source, "schema_profile": LIGHT_PROFILE_KEY, "send_design_enabled": bool(SEND_ENDPOINT)}
 
 
 @app.post("/schema/update")
@@ -375,6 +378,7 @@ async def health():
         "workspace": _workspace_payload(_workspace()),
         "schema_version": info.version,
         "schema_source": info.source,
+        "schema_profile": LIGHT_PROFILE_KEY,
         "send_design_enabled": bool(SEND_ENDPOINT),
     }
 
