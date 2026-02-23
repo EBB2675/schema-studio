@@ -179,3 +179,8 @@ NOMAD Laboratory (FAIRmat), Humboldt-Universitat zu Berlin
 **[Dr. Jose M. Pizarro](https://github.com/JosePizarro3)**  
 Bundesanstalt fur Materialforschung und -prufung (BAM)  
 Original idea and technical guidance.
+
+
+## License
+
+SchemaStudio is licensed under the MIT License. Third-party dependencies are subject to their own respective licenses.
