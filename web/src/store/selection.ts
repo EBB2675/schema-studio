@@ -18,6 +18,10 @@ export type QtyMeta = {
   path?: string;
   line?: number;
   owner: string;
+  inherited?: boolean;
+  inheritedFromId?: string | null;
+  inheritedFromName?: string | null;
+  sourceId?: string | null;
   diff?: { state: 'added' | 'removed' | 'changed'; before?: QtySnapshot; after?: QtySnapshot };
 };
 
@@ -33,6 +37,10 @@ export type Selected = null | {
   shape?: string | null;
   card?: string | null;
   owner?: string;
+  inherited?: boolean;
+  inheritedFromId?: string | null;
+  inheritedFromName?: string | null;
+  sourceId?: string | null;
   fqid?: string;
   diff?: QtyMeta['diff'];
 };

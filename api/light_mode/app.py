@@ -22,6 +22,10 @@ from pydantic import BaseModel
 
 from extractor.graph_builder import _root_namespace, build_graph, list_sections
 from extractor.usage_index import get_usage_for_section
+from ..custom_graph_edits import (
+    attach_custom_class as _attach_custom_class_impl,
+    attach_custom_quantity as _attach_custom_quantity_impl,
+)
 from .schema_source import (
     DEFAULT_BRANCH as LIGHT_MODE_BRANCH,
     SchemaUnavailable,
@@ -227,108 +231,11 @@ def _resolve_custom_quantity_request(
 
 
 def _attach_custom_quantity(graph: dict, req) -> dict:
-    if req.dtype not in SUPPORTED_CUSTOM_DTYPES:
-        allowed = ", ".join(sorted(SUPPORTED_CUSTOM_DTYPES))
-        raise HTTPException(status_code=400, detail=f"Unsupported dtype '{req.dtype}'. Supported: {allowed}")
-
-    nodes = graph.get("nodes", [])
-    edges = graph.get("edges", [])
-
-    target_section = None
-    for node in nodes:
-        if node.get("kind") != "section":
-            continue
-        if node.get("label") != req.class_name:
-            continue
-        module = node.get("module") or ""
-        if module.startswith(req.package):
-            target_section = node
-            break
-
-    if target_section is None:
-        if not req.parent_name:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Section '{req.class_name}' not found in package '{req.package}'",
-            )
-
-        new_id = f"{req.package}.{req.class_name}"
-        target_section = {
-            "id": new_id,
-            "kind": "section",
-            "label": req.class_name,
-            "doc": None,
-            "module": req.package,
-        }
-        nodes = nodes + [target_section]
-
-        parent = next(
-            (
-                n
-                for n in nodes
-                if n.get("kind") == "section"
-                and (n.get("id") == req.parent_name or n.get("label") == req.parent_name)
-            ),
-            None,
-        )
-        parent_id = parent.get("id") if parent else req.parent_name
-        relation = req.parent_relation or "inherits"
-        edges = edges + [{"source": parent_id, "target": new_id, "type": relation, "card": None}]
-
-    section_id = target_section["id"]
-    for node in nodes:
-        if node.get("kind") == "quantity" and node.get("owner") == section_id and node.get("label") == req.quantity_name:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Quantity '{req.quantity_name}' already exists on section '{req.class_name}'",
-            )
-
-    qid = f"{section_id}.{req.quantity_name}"
-    new_node = {
-        "id": qid,
-        "kind": "quantity",
-        "label": req.quantity_name,
-        "doc": req.docstring or None,
-        "dtype": req.dtype,
-        "owner": section_id,
-        "module": target_section.get("module"),
-    }
-    graph = dict(graph)
-    graph["nodes"] = nodes + [new_node]
-    graph["edges"] = edges + [{"source": section_id, "target": qid, "type": "hasQuantity", "card": None}]
-    return graph
+    return _attach_custom_quantity_impl(graph, req, supported_dtypes=SUPPORTED_CUSTOM_DTYPES)
 
 
 def _attach_custom_class(graph: dict, req) -> dict:
-    nodes = graph.get("nodes", [])
-    edges = graph.get("edges", [])
-
-    for node in nodes:
-        if node.get("kind") != "section":
-            continue
-        if node.get("label") == req.name or node.get("id") == req.name:
-            raise HTTPException(status_code=400, detail=f"Class '{req.name}' already exists")
-
-    new_id = f"{req.package}.{req.name}"
-    new_node = {
-        "id": new_id,
-        "kind": "section",
-        "label": req.name,
-        "doc": req.docstring or None,
-        "module": req.package,
-    }
-    nodes = nodes + [new_node]
-
-    if req.parent:
-        parent = next((n for n in nodes if n.get("id") == req.parent or n.get("label") == req.parent), None)
-        parent_id = parent.get("id") if parent else req.parent
-        relation = req.relation if req.relation in ("inherits", "hasSubSection") else "inherits"
-        edges = edges + [{"source": parent_id, "target": new_id, "type": relation, "card": None}]
-
-    graph = dict(graph)
-    graph["nodes"] = nodes
-    graph["edges"] = edges
-    return graph
+    return _attach_custom_class_impl(graph, req)
 
 
 def _apply_persisted_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dict, list[dict]]:
