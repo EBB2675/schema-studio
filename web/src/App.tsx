@@ -261,6 +261,14 @@ export default function App() {
     () => normalizedNamespace.split(",").map((p: string) => p.trim()).filter(Boolean),
     [normalizedNamespace]
   );
+  const pinnedClassIds = useMemo(
+    () =>
+      auditTrail
+        .filter((entry) => entry.replayable !== false && entry.change?.type === "add-class")
+        .map((entry) => (entry.change.type === "add-class" ? entry.change.cls.id : ""))
+        .filter(Boolean),
+    [auditTrail]
+  );
 
   const basePackageForEmpty = useMemo(() => {
     const parts = normalizedNamespace.split(",").map((p: string) => p.trim()).filter(Boolean);
@@ -1453,10 +1461,11 @@ export default function App() {
         }
       );
       const next = ensureGraphResponse(res.data);
+      const expectedClassId = normalizeId(`${pkg}.${name}`);
       const newChange: AuditTrailEntry["change"] = {
         type: "add-class",
         cls: {
-          id: `${pkg}.${name}`,
+          id: expectedClassId,
           name,
           doc: docstring || null,
           module: pkg,
@@ -1473,9 +1482,14 @@ export default function App() {
       setUmlState(nextUml);
       syncWorkspaceFromResponse(mergedGraph);
       const newCls =
-        nextUml?.classes.find((c) => c.name === name || c.id === name || c.id.endsWith(`.${name}`)) ??
+        nextUml?.classes.find((c) => normalizeId(c.id) === expectedClassId) ??
+        nextUml?.classes.find(
+          (c) =>
+            normalizeId(c.name) === normalizeId(name) &&
+            normalizeModule(c.module) === normalizeModule(pkg)
+        ) ??
         ({
-          id: `${pkg}.${name}`,
+          id: expectedClassId,
           name,
           doc: docstring || null,
           module: pkg,
@@ -2727,6 +2741,7 @@ export default function App() {
                 diff={diffData.diff}
                 baseNamespaces={namespaceFilters}
                 showBaseSections={showBaseSections}
+                pinnedClassIds={pinnedClassIds}
                 showQuantityMetadata={showQuantityMetadata}
                 showInheritance={includeInheritance}
                 theme={theme}
@@ -2792,6 +2807,7 @@ export default function App() {
                   umlState={umlState}
                   baseNamespaces={namespaceFilters}
                   showBaseSections={showBaseSections}
+                  pinnedClassIds={pinnedClassIds}
                   selectedClassId={selectedClassId}
                   showQuantityMetadata={showQuantityMetadata}
                   showInheritance={includeInheritance}

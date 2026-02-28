@@ -11,6 +11,9 @@ import { fqidFromParts } from "./utils/identifier";
 
 type QtyDiffState = "added" | "removed" | "changed" | undefined;
 
+// Lower value makes mouse-wheel zoom less aggressive.
+const CANVAS_WHEEL_SENSITIVITY = 0.35;
+
 cytoscapeElk(cytoscape, elk);
 
 type RawNode = ApiNode;
@@ -39,6 +42,7 @@ type Props = {
   umlState?: UmlGraphState | null;
   baseNamespaces?: string[];
   showBaseSections?: boolean;
+  pinnedClassIds?: string[];
   selectedClassId?: string | null;
   onSelectClass?: (cls: UmlClassNode) => void;
   onCreateQuantity?: (classId: string, data: { quantityName: string; dtype: string; docstring: string }) => Promise<void>;
@@ -94,6 +98,7 @@ export default function GraphView({
   umlState,
   baseNamespaces = [],
   showBaseSections = false,
+  pinnedClassIds = [],
   selectedClassId,
   onSelectClass,
   onCreateQuantity,
@@ -144,17 +149,18 @@ export default function GraphView({
     () => baseNamespaces.map((ns) => ns.trim()).filter(Boolean),
     [baseNamespaces]
   );
+  const pinnedClassIdSet = useMemo(() => new Set(pinnedClassIds), [pinnedClassIds]);
   const allClassCards = useMemo(() => umlState?.classes ?? [], [umlState]);
   const classCards = useMemo(() => {
     if (!allClassCards.length) return [];
     if (showBaseSections || !namespaceFilters.length) return allClassCards;
 
     return allClassCards.filter((cls) => {
-      if (selectedClassId && cls.id === selectedClassId) return true;
+      if (pinnedClassIdSet.has(cls.id)) return true;
       const moduleName = cls.module || cls.id;
       return namespaceFilters.some((ns) => moduleName === ns || moduleName.startsWith(`${ns}.`));
     });
-  }, [allClassCards, namespaceFilters, selectedClassId, showBaseSections]);
+  }, [allClassCards, namespaceFilters, pinnedClassIdSet, showBaseSections]);
   const visibleClassIds = useMemo(() => new Set(classCards.map((cls) => cls.id)), [classCards]);
   const editingEnabled = useMemo(() => Boolean(onCreateQuantity && onCreateClass && umlState), [onCreateClass, onCreateQuantity, umlState]);
   const showEditingUi = editingEnabled && editableMode;
@@ -541,7 +547,7 @@ export default function GraphView({
       elements,
       minZoom: 0.2,
       maxZoom: 3.5,
-      wheelSensitivity: 1.05,
+      wheelSensitivity: CANVAS_WHEEL_SENSITIVITY,
       style: [
         {
           selector: "node[kind='uml_class']",
