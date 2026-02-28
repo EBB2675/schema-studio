@@ -9,7 +9,7 @@ A structured overview of the repository for developers to navigate, understand, 
 **Purpose:** Interactive editor for data models with two runtime modes:
 - **Light Mode**: pip-installable local mode (single user, SQLite persistence, no Mongo/Redis required).
 - **Dev Mode**: full branch-aware mode (auth + Mongo + optional Celery/Redis + git worktrees/diff).
-Both modes support schema graphing, docs/usage inspection, custom class/quantity edits, overview mode, and empty-canvas editing.
+Both modes support schema graphing, docs/usage inspection, custom class/quantity edits, inherited member projection for `is_a` relationships, overview mode, and empty-canvas editing.
 
 **Frontend:** React + TypeScript + Cytoscape + ELK  
 **Backend:** FastAPI
@@ -79,8 +79,11 @@ export SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA=0
 - Right **Doc Panel** shows the **class docstring** and a **clickable list of quantities**; clicking a quantity shows its docstring.
 - Right **Under-the-hood Panel** shows **normalization methods and helper functions** that act on the selected section (based on `/usage`).
 - **Editable mode**: add classes (inheritance or subsection links) and add/rename/remove quantities; dtype validated against allowlist; custom classes get fully qualified ids so quantities work immediately.
+- New classes linked with `inherits` (`is_a`) automatically surface inherited quantities/subsections in the UML and doc panels.
+- Inherited quantities are read-only on child classes (edit/remove/redefine is blocked).
 - **Bird’s-eye overview** renders packages/classes without building the full graph.
 - **Overlays**: inheritance defaults on; dtype/shape labels toggleable.
+- Workspace includes **Show base sections** (default off) to hide/show framework/base hierarchy in the canvas.
 - **Exports**: download the current graph JSON or a PDF snapshot.
 - Branch diff highlights (Dev Mode only): 🟩 Added, 🟨 Changed, 🟥 Removed (edges dashed red; quantity deltas are included).
 - **Empty canvas**: start from `<base>.custom_schema`, edit freely, and reset persisted custom edits when needed (UI calls `/schema/custom-edits`).
@@ -98,6 +101,7 @@ export SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA=0
 **Typing/normalization helpers (frontend):**
 - `src/types/api.ts` enforces runtime parsing of graph/diff payloads.
 - `src/utils/identifier.ts` normalizes ids/labels/fqids used across GraphView, DocPanel, and selection store.
+- `src/utils/umlState.ts` builds effective UML state (including inherited quantities/subsections) from backend graph payloads.
 - `src/utils/errors.ts` standardizes API error formatting.
 
 **Workspace state:**
@@ -109,6 +113,7 @@ export SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA=0
 - `npm run test:contracts` runs only the contract/identifier subset.
 - Custom classes: `POST /schema/custom-class` with `relation` (`inherits` | `hasSubSection`), always assigns id `{package}.{name}`; adds parent edge if provided.
 - Custom quantities: `POST /schema/custom-quantity` with `class_name` (label), optional `parent_name`/`parent_relation` to reattach parent edge if the class must be materialized server-side.
+- Custom quantities cannot redefine an inherited ancestor quantity on a child class (server validation).
 - Frontend keeps an audit trail and replays all prior edits onto each fresh server graph so earlier custom edges don’t disappear when adding new ones.
 
 ---
@@ -146,6 +151,8 @@ schema-studio/
 │  │  │  └─ UnderTheHoodPanel.tsx # Shows normalize methods/helpers for selected section
 │  │  ├─ store/
 │  │  │  └─ selection.ts        # Zustand store for selected item (class or quantity)
+│  │  ├─ utils/
+│  │  │  └─ umlState.ts         # Effective UML state with inherited quantities/subsections
 │  │  └─ index.css
 │  ├─ index.html
 │  └─ package.json
@@ -344,6 +351,7 @@ The frontend shows these entries as a list under **Under the hood** for the curr
 
 4. **Custom edits (`POST /schema/custom-class`, `POST /schema/custom-quantity`, `DELETE /schema/custom-edits`, `DELETE /schema/custom-edit`)**
    - Same edit semantics as Dev Mode; persisted locally.
+   - Inherited-quantity redefinition on child classes is rejected.
 
 5. **`GET /overview`, `GET /usage`**
    - Overview and under-the-hood data from installed package imports/introspection.
@@ -385,13 +393,17 @@ The frontend shows these entries as a list under **Under the hood** for the curr
     - Top: `DocPanel` (schema docs + quantities, includes inline edit/remove hooks).
     - Bottom: `UnderTheHoodPanel` (normalize/helpers list; needs `apiBase`).
   - **Editable mode:** toggles whether class/quantity mutation actions are enabled; uses `/schema/custom-class` and `/schema/custom-quantity` for persisted additions, and client-side updates for rename/delete.
+  - Workspace controls include **Show base sections** (default off): off keeps diagrams focused on selected schema namespace; on restores full base/framework hierarchy.
   - Mode selection:
     - Compile-time: `VITE_LIGHT_MODE=true` disables branch-diff/task paths.
     - Runtime: frontend also detects Light Mode when `/schema/version` is available and switches behavior accordingly.
 
 - **`GraphView.tsx`**
   - Renders sections as UML cards using Cytoscape + ELK.
+  - Applies namespace-based class filtering when **Show base sections** is off; base/framework sections are hidden unless explicitly shown.
+  - Keeps session-added classes visible/selectable in filtered view (so newly created classes can be edited immediately).
   - Folds quantity metadata into each section’s card label (attributes) and into a `quantitiesByOwner` map for the Doc Panel.
+  - Mouse-wheel zoom sensitivity is intentionally damped for finer control.
   - On node tap:
     - Builds a `Selected` object with:
       - `id = fully-qualified section name`.
@@ -410,6 +422,8 @@ The frontend shows these entries as a list under **Under the hood** for the curr
     - Provides inline edit/remove controls when editable mode is on.
   - For a selected quantity:
     - Shows that quantity’s docstring and type info.
+    - Shows inherited-from metadata when applicable.
+    - Inherited quantities remain read-only in editable mode.
 
 - **`components/UnderTheHoodPanel.tsx`**
   - Props: `{ apiBase: string }`.  
@@ -424,6 +438,7 @@ The frontend shows these entries as a list under **Under the hood** for the curr
 
 - **`components/AddQuantityForm.tsx` & `components/QuantityEditPanel.tsx`**
   - Form helpers for editable mode (add/rename/remove quantities with validation messaging).
+  - Enforce read-only behavior for inherited quantities in the UI.
 
 - **`store/selection.ts`**
   - Zustand store with:
@@ -431,12 +446,14 @@ The frontend shows these entries as a list under **Under the hood** for the curr
     - `setSelected(s: Selected | null)`
   - `Selected` holds:
     - `id`, `kind`, `name`, `doc`, `path`, `line`
+    - inherited quantity metadata (`inherited`, `inheritedFromId`, `inheritedFromName`, `sourceId`) when kind is quantity
     - optional `quantities` (for class nodes).
 
 **Performance tips**
 
 - For large repos, during branch diff (Dev Mode), disable cross-module traversal and/or subsections to keep the graph small.
 - Bird’s-eye view (`OverviewGrid`) is a cheap way to spot new/removed classes without rendering a full graph.
+- Keep **Show base sections** off for cleaner, lower-noise UML views in large inheritance trees.
 
 ---
 
