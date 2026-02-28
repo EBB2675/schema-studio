@@ -415,7 +415,7 @@ export default function GraphView({
       qByOwner.set(q.owner, metaList);
     }
 
-    if (classCards.length > 0) {
+    if (umlState) {
       const sourceSections = new Map(sections);
       const sourceMethods = new Map(methods);
       sections.clear();
@@ -500,7 +500,7 @@ export default function GraphView({
     });
 
     return { sectionsMap: sections, attrsMap: attrs, methodsMap: methods, umlEdges, quantitiesByOwner: qByOwner };
-  }, [graphNodes, resolvedEdges, quantityDiffs, diff, showInheritance, classCards, toQtyMeta]);
+  }, [graphNodes, resolvedEdges, quantityDiffs, diff, showInheritance, classCards, toQtyMeta, umlState]);
 
   useEffect(() => {
     if (!containerRef.current) return;
