@@ -146,13 +146,6 @@ def attach_custom_quantity(graph: dict[str, Any], req: Any, *, supported_dtypes:
 
     section_id = target_section["id"]
 
-    for node in nodes:
-        if node.get("kind") == "quantity" and node.get("owner") == section_id and node.get("label") == req.quantity_name:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Quantity '{req.quantity_name}' already exists on section '{req.class_name}'",
-            )
-
     inherited_origin = _find_inherited_quantity_origin(
         nodes=nodes,
         edges=edges,
@@ -170,6 +163,13 @@ def attach_custom_quantity(graph: dict[str, Any], req: Any, *, supported_dtypes:
                 f"and cannot be redefined on section '{req.class_name}'"
             ),
         )
+
+    for node in nodes:
+        if node.get("kind") == "quantity" and node.get("owner") == section_id and node.get("label") == req.quantity_name:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Quantity '{req.quantity_name}' already exists on section '{req.class_name}'",
+            )
 
     qid = f"{section_id}.{req.quantity_name}"
     new_node = {
