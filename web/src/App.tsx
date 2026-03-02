@@ -2876,15 +2876,14 @@ export default function App() {
             height: "100vh",
             borderLeft: "1px solid var(--panel-border)",
             padding: "10px",
-            gap: "10px"
+            gap: "10px",
+            overflowY: "auto"
           }}
         >
-          {/* TOP PANEL — about half */}
+          {/* TOP PANEL — content-stacked like left sidebar */}
           <div
             style={{
-              flex: 5,
-              minHeight: 0,
-              overflowY: "auto"
+              flex: "0 0 auto"
             }}
           >
             <CollapsibleSection
@@ -2906,12 +2905,10 @@ export default function App() {
             </CollapsibleSection>
           </div>
 
-          {/* BOTTOM PANEL — editable mode controls */}
+          {/* BOTTOM PANEL — content-stacked like left sidebar */}
           <div
             style={{
-              flex: 5,
-              minHeight: 0,
-              overflowY: "auto"
+              flex: "0 0 auto"
             }}
           >
             <CollapsibleSection
