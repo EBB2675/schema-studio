@@ -727,14 +727,15 @@ def _dist_path() -> Path:
         if (cand / "index.html").exists():
             return cand
     here = Path(__file__).resolve().parent
-    # In editable/source installs, prefer freshly built repo dist over packaged static.
-    repo_dist = here.parent.parent / "web" / "dist"
-    if (repo_dist / "index.html").exists():
-        return repo_dist
+    # Default to bundled static assets so source installs do not require frontend builds.
     packaged = here / "static"
     if (packaged / "index.html").exists():
         return packaged
-    return repo_dist if repo_dist.exists() else packaged
+    # Fallback for local development when packaged static is unavailable.
+    repo_dist = here.parent.parent / "web" / "dist"
+    if (repo_dist / "index.html").exists():
+        return repo_dist
+    return packaged if packaged.exists() else repo_dist
 
 
 dist_dir = _dist_path()
