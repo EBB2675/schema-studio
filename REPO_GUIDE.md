@@ -22,6 +22,7 @@ Both modes support schema graphing, docs/usage inspection, custom class/quantity
 - `api/` — FastAPI backend  
 - `api/light_mode/` — Light Mode app, schema source policy, local store, CLI  
 - `extractor/` — schema graph & usage extractor  
+- `scripts/` — maintenance helpers (including Light Mode static asset sync)
 - `api/_data/` — auto-generated bare mirror + worktrees (Dev Mode git features)
 
 **Key endpoints:**
@@ -77,7 +78,8 @@ export SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA=0
 **UX highlights:**
 - UML cards show **sections**; **quantities** appear as attributes inside the card (not separate nodes).
 - Right **Doc Panel** shows the **class docstring** and a **clickable list of quantities**; clicking a quantity shows its docstring.
-- Right **Under-the-hood Panel** shows **normalization methods and helper functions** that act on the selected section (based on `/usage`).
+- Right **Audit trail** panel tracks edit history, archive/restore state, and export/reset actions.
+- Left sidebar **Under-the-hood** panel shows **normalization methods and helper functions** that act on the selected section (based on `/usage`).
 - **Editable mode**: add classes (inheritance or subsection links) and add/rename/remove quantities; dtype validated against allowlist; custom classes get fully qualified ids so quantities work immediately.
 - New classes linked with `inherits` (`is_a`) automatically surface inherited quantities/subsections in the UML and doc panels.
 - Inherited quantities are read-only on child classes (edit/remove/redefine is blocked).
@@ -385,13 +387,14 @@ The frontend shows these entries as a list under **Under the hood** for the curr
   - Sidebar controls are mode-aware:
     - Dev Mode: package + branch selectors, compare-branches controls, auth session state.
     - Light Mode: fixed `develop` branch UX, no branch-diff controls.
+  - Sidebar includes **Under the hood** (usage inspection via `/usage`) and **Compare branches** (Dev Mode only).
   - **Build graph:** always resolves to `/schema` in Light Mode; Dev Mode can use `/schema`, `/graph`, or `/tasks/graph` depending on settings.
   - **Compare branches (Dev Mode only):** `/graph/diff` or `/tasks/graph/diff`.
   - **Bird’s-eye view:** calls `/overview` and renders an `OverviewGrid` of packages/classes.
   - **Exports:** JSON download and PDF snapshot (via `GraphView` export handle).
   - Right column:
     - Top: `DocPanel` (schema docs + quantities, includes inline edit/remove hooks).
-    - Bottom: `UnderTheHoodPanel` (normalize/helpers list; needs `apiBase`).
+    - Bottom: audit trail (edit history, archive/restore, export/clear).
   - **Editable mode:** toggles whether class/quantity mutation actions are enabled; uses `/schema/custom-class` and `/schema/custom-quantity` for persisted additions, and client-side updates for rename/delete.
   - Workspace controls include **Show base sections** (default off): off keeps diagrams focused on selected schema namespace; on restores full base/framework hierarchy.
   - Mode selection:
@@ -426,7 +429,7 @@ The frontend shows these entries as a list under **Under the hood** for the curr
     - Inherited quantities remain read-only in editable mode.
 
 - **`components/UnderTheHoodPanel.tsx`**
-  - Props: `{ apiBase: string }`.  
+  - Props: `{ apiBase: string, token?: string }`.  
   - Reads `selected` from `useSelection`.  
   - If a class is selected:
     - Calls `GET {apiBase}/usage?section_id=<selected.id>`.  
@@ -562,6 +565,17 @@ $SCHEMA_STUDIO_HOME/light_mode.sqlite3
 - On startup, Light Mode attempts a one-time automatic bootstrap when schema metadata is unavailable.
 - Runtime update path is `POST /schema/update` (or UI "Update schema").
 - Update implementation runs `python -m pip install --upgrade git+https://github.com/nomad-coe/nomad-simulations.git@develop`, then invalidates import caches.
+
+**Light Mode frontend assets**
+
+- Light Mode serves bundled static assets from `api/light_mode/static` by default.
+- `SCHEMA_STUDIO_DIST_DIR` can override this path (useful for local frontend iteration).
+- When frontend source changes need to be shipped in Light Mode, rebuild and sync:
+
+~~~bash
+VITE_LIGHT_MODE=true npm --prefix web run build
+./scripts/sync_light_mode_static.sh
+~~~
 
 ---
 
