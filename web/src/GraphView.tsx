@@ -11,6 +11,9 @@ import { fqidFromParts } from "./utils/identifier";
 
 type QtyDiffState = "added" | "removed" | "changed" | undefined;
 
+// Lower value makes mouse-wheel zoom less aggressive.
+const CANVAS_WHEEL_SENSITIVITY = 0.35;
+
 cytoscapeElk(cytoscape, elk);
 
 type RawNode = ApiNode;
@@ -37,6 +40,9 @@ type Props = {
   showInheritance?: boolean;
   theme?: "dark" | "light";
   umlState?: UmlGraphState | null;
+  baseNamespaces?: string[];
+  showBaseSections?: boolean;
+  pinnedClassIds?: string[];
   selectedClassId?: string | null;
   onSelectClass?: (cls: UmlClassNode) => void;
   onCreateQuantity?: (classId: string, data: { quantityName: string; dtype: string; docstring: string }) => Promise<void>;
@@ -90,6 +96,9 @@ export default function GraphView({
   showInheritance = true,
   theme = "dark",
   umlState,
+  baseNamespaces = [],
+  showBaseSections = false,
+  pinnedClassIds = [],
   selectedClassId,
   onSelectClass,
   onCreateQuantity,
@@ -136,7 +145,23 @@ export default function GraphView({
     };
   }, [theme]);
 
-  const classCards = useMemo(() => umlState?.classes ?? [], [umlState]);
+  const namespaceFilters = useMemo(
+    () => baseNamespaces.map((ns) => ns.trim()).filter(Boolean),
+    [baseNamespaces]
+  );
+  const pinnedClassIdSet = useMemo(() => new Set(pinnedClassIds), [pinnedClassIds]);
+  const allClassCards = useMemo(() => umlState?.classes ?? [], [umlState]);
+  const classCards = useMemo(() => {
+    if (!allClassCards.length) return [];
+    if (showBaseSections || !namespaceFilters.length) return allClassCards;
+
+    return allClassCards.filter((cls) => {
+      if (pinnedClassIdSet.has(cls.id)) return true;
+      const moduleName = cls.module || cls.id;
+      return namespaceFilters.some((ns) => moduleName === ns || moduleName.startsWith(`${ns}.`));
+    });
+  }, [allClassCards, namespaceFilters, pinnedClassIdSet, showBaseSections]);
+  const visibleClassIds = useMemo(() => new Set(classCards.map((cls) => cls.id)), [classCards]);
   const editingEnabled = useMemo(() => Boolean(onCreateQuantity && onCreateClass && umlState), [onCreateClass, onCreateQuantity, umlState]);
   const showEditingUi = editingEnabled && editableMode;
 
@@ -151,6 +176,10 @@ export default function GraphView({
       path: q.path ?? undefined,
       line: typeof q.line === "number" ? q.line : undefined,
       owner: q.ownerId,
+      inherited: q.inherited ?? false,
+      inheritedFromId: q.inheritedFromId ?? null,
+      inheritedFromName: q.inheritedFromName ?? null,
+      sourceId: q.sourceId ?? null,
     }),
     []
   );
@@ -293,6 +322,26 @@ export default function GraphView({
     return base;
   }, [nodes, diff]);
 
+  const resolvedEdges = useMemo<RawEdge[]>(() => {
+    if (umlState?.edges?.length) {
+      return umlState.edges
+        .filter((e) => {
+          if (e.type === "hasQuantity") {
+            return visibleClassIds.has(e.source);
+          }
+          return visibleClassIds.has(e.source) && visibleClassIds.has(e.target);
+        })
+        .filter((e) => e.type === "hasSubSection" || e.type === "inherits" || e.type === "hasQuantity")
+        .map((e) => ({
+          source: e.source,
+          target: e.target,
+          type: e.type as RawEdge["type"],
+          card: e.card ?? undefined,
+        }));
+    }
+    return edges;
+  }, [edges, umlState, visibleClassIds]);
+
   // Build:
   // - sectionsMap: id -> section node
   // - attrsMap: section id -> display lines for UML
@@ -366,6 +415,46 @@ export default function GraphView({
       qByOwner.set(q.owner, metaList);
     }
 
+    if (umlState) {
+      const sourceSections = new Map(sections);
+      const sourceMethods = new Map(methods);
+      sections.clear();
+      methods.clear();
+      attrs.clear();
+      qByOwner.clear();
+      classCards.forEach((cls) => {
+        const source = sourceSections.get(cls.id);
+        sections.set(
+          cls.id,
+          ({
+            id: cls.id,
+            kind: "section",
+            label: cls.name,
+            module: cls.module ?? source?.module ?? undefined,
+            doc: cls.doc ?? source?.doc ?? undefined,
+            path: cls.path ?? source?.path ?? undefined,
+            line: typeof cls.line === "number" ? cls.line : source?.line,
+          } as RawNode)
+        );
+        methods.set(cls.id, sourceMethods.get(cls.id) ?? []);
+
+        attrs.set(
+          cls.id,
+          cls.quantities.map((q) => ({
+            name: q.name,
+            dtype: q.dtype,
+            shape: q.shape ?? undefined,
+            card: q.card ?? undefined,
+            diff: undefined,
+          }))
+        );
+        qByOwner.set(
+          cls.id,
+          cls.quantities.map((q) => toQtyMeta(q))
+        );
+      });
+    }
+
     // Also surface removed quantities so they appear in the DocPanel list
     for (const [qid, diffInfo] of quantityDiffs.entries()) {
       if (diffInfo.state !== "removed") continue;
@@ -390,7 +479,7 @@ export default function GraphView({
       qByOwner.set(owner, metaList);
     }
 
-    const baseEdges = [...edges];
+    const baseEdges = [...resolvedEdges];
     if (diff?.edges?.removed?.length) {
       diff.edges.removed.forEach((e) => {
         if (!e?.source || !e?.target) return;
@@ -411,7 +500,7 @@ export default function GraphView({
     });
 
     return { sectionsMap: sections, attrsMap: attrs, methodsMap: methods, umlEdges, quantitiesByOwner: qByOwner };
-  }, [graphNodes, edges, quantityDiffs, diff, showInheritance]);
+  }, [graphNodes, resolvedEdges, quantityDiffs, diff, showInheritance, classCards, toQtyMeta, umlState]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -458,7 +547,7 @@ export default function GraphView({
       elements,
       minZoom: 0.2,
       maxZoom: 3.5,
-      wheelSensitivity: 1.05,
+      wheelSensitivity: CANVAS_WHEEL_SENSITIVITY,
       style: [
         {
           selector: "node[kind='uml_class']",
@@ -611,6 +700,10 @@ export default function GraphView({
         path: q.path ?? null,
         line: typeof q.line === "number" ? q.line : null,
         ownerId: q.owner,
+        inherited: q.inherited ?? false,
+        inheritedFromId: q.inheritedFromId ?? null,
+        inheritedFromName: q.inheritedFromName ?? null,
+        sourceId: q.sourceId ?? null,
       }));
 
       publishClassSelection({
@@ -938,7 +1031,11 @@ export default function GraphView({
                   </div>
                   <div className="uml-qty-list">
                     {cls.quantities.map((q) => {
-                      const metaParts = [q.dtype, q.shape && q.shape !== "[]" ? q.shape : null, q.card ? `[${q.card}]` : null]
+                      const metaParts = [
+                        q.dtype,
+                        q.shape && q.shape !== "[]" ? q.shape : null,
+                        q.card ? `[${q.card}]` : null,
+                      ]
                         .filter(Boolean)
                         .join("  ");
                       return (

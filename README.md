@@ -148,11 +148,13 @@ Open `https://localhost`.
 ## Local Source Development Notes
 
 - Backend deps: `api/requirements.txt`
-- If developing Light Mode from source, build frontend assets first:
+- Source installs use bundled Light Mode static assets by default, so end users do not need a frontend build.
+- If you change frontend code and want to ship those updates in Light Mode, refresh bundled static assets:
   ```bash
   VITE_LIGHT_MODE=true npm --prefix web run build
+  ./scripts/sync_light_mode_static.sh
   ```
-- Then run:
+- Then install/run:
   ```bash
   pip install -e .
   schema-studio

@@ -214,6 +214,86 @@ async def test_custom_edit_endpoints_accept_json_body(client: httpx.AsyncClient)
 
 
 @pytest.mark.anyio
+async def test_redefining_inherited_quantity_is_rejected(client: httpx.AsyncClient):
+    parent_resp = await client.post(
+        "/schema/custom-class",
+        params={"empty": "true"},
+        json={"package": "pkg.default", "name": "Parent", "relation": "inherits"},
+    )
+    assert parent_resp.status_code == 200
+
+    parent_q = await client.post(
+        "/schema/custom-quantity",
+        params={"empty": "true"},
+        json={
+            "package": "pkg.default",
+            "class_name": "Parent",
+            "quantity_name": "shared_q",
+            "dtype": "str",
+        },
+    )
+    assert parent_q.status_code == 200
+
+    child_resp = await client.post(
+        "/schema/custom-class",
+        params={"empty": "true"},
+        json={
+            "package": "pkg.default",
+            "name": "Child",
+            "parent": "pkg.default.Parent",
+            "relation": "inherits",
+        },
+    )
+    assert child_resp.status_code == 200
+
+    redef = await client.post(
+        "/schema/custom-quantity",
+        params={"empty": "true"},
+        json={
+            "package": "pkg.default",
+            "class_name": "Child",
+            "parent_name": "Parent",
+            "parent_relation": "inherits",
+            "quantity_name": "shared_q",
+            "dtype": "str",
+        },
+    )
+    assert redef.status_code == 400
+    assert "inherited" in redef.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_custom_inheritance_edge_direction_is_child_to_parent(client: httpx.AsyncClient):
+    parent_resp = await client.post(
+        "/schema/custom-class",
+        params={"empty": "true"},
+        json={"package": "pkg.default", "name": "Parent", "relation": "inherits"},
+    )
+    assert parent_resp.status_code == 200
+
+    child_resp = await client.post(
+        "/schema/custom-class",
+        params={"empty": "true"},
+        json={
+            "package": "pkg.default",
+            "name": "Child",
+            "parent": "pkg.default.Parent",
+            "relation": "inherits",
+        },
+    )
+    assert child_resp.status_code == 200
+    payload = child_resp.json()
+
+    assert any(
+        e
+        for e in payload.get("edges", [])
+        if e.get("type") == "inherits"
+        and e.get("source") == "pkg.default.Child"
+        and e.get("target") == "pkg.default.Parent"
+    )
+
+
+@pytest.mark.anyio
 async def test_clear_custom_edits_all_packages_flag(client: httpx.AsyncClient):
     add_pkg_a = await client.post(
         "/schema/custom-class",

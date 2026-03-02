@@ -24,6 +24,7 @@ import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_ROOT, DEFAULT_P
 import { useWorkspaceStore } from "./store/workspace";
 import { fqidFromParts, normalizeId, normalizeLabel, normalizeModule } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
+import { buildUmlStateFromGraph } from "./utils/umlState";
 
 type WorkspaceEnvelope = { workspace?: WorkspaceState };
 
@@ -96,6 +97,7 @@ export default function App() {
   const [includeQuantities, setIncludeQuantities] = useState<boolean>(true);
   const [includeSubsections, setIncludeSubsections] = useState<boolean>(true);
   const [includeInheritance, setIncludeInheritance] = useState<boolean>(true);
+  const [showBaseSections, setShowBaseSections] = useState<boolean>(false);
   const [showQuantityMetadata, setShowQuantityMetadata] = useState<boolean>(false);
 
   const [crossModules, setCrossModules] = useState<boolean>(true);
@@ -255,6 +257,18 @@ export default function App() {
     const parts = namespace.split(",").map((p: string) => p.trim()).filter(Boolean);
     return parts.length > 0 ? parts.join(",") : DEFAULT_NAMESPACE;
   }, [namespace]);
+  const namespaceFilters = useMemo(
+    () => normalizedNamespace.split(",").map((p: string) => p.trim()).filter(Boolean),
+    [normalizedNamespace]
+  );
+  const pinnedClassIds = useMemo(
+    () =>
+      auditTrail
+        .filter((entry) => entry.replayable !== false && entry.change?.type === "add-class")
+        .map((entry) => (entry.change.type === "add-class" ? entry.change.cls.id : ""))
+        .filter(Boolean),
+    [auditTrail]
+  );
 
   const basePackageForEmpty = useMemo(() => {
     const parts = normalizedNamespace.split(",").map((p: string) => p.trim()).filter(Boolean);
@@ -1034,71 +1048,7 @@ export default function App() {
     }
   };
 
-  const toQuantityNode = useCallback((n: ApiNode): QuantityNode => {
-    const id = normalizeId(n.id);
-    const ownerId = normalizeId(n.owner);
-    const fallbackName = id.split(".").pop() || id;
-    return {
-      id,
-      name: normalizeLabel(n.label, fallbackName),
-      dtype: n.dtype ?? n.data_type ?? n.type ?? undefined,
-      shape: n.shape ?? null,
-      card: n.card ?? null,
-      doc: n.doc ?? null,
-      path: n.path ?? null,
-      line: typeof n.line === "number" ? n.line : null,
-      ownerId,
-    };
-  }, []);
-
-  const buildUmlState = useCallback((g: ApiGraph | null): UmlGraphState | null => {
-    if (!g) return null;
-    const nodes = g.nodes || [];
-    const edges = g.edges || [];
-    const normalizedEdges = edges
-      .map((e: ApiEdge) => ({
-        source: normalizeId(e.source),
-        target: normalizeId(e.target),
-        type: e.type,
-        card: e.card ?? null,
-      }))
-      .filter((e) => e.source && e.target && e.type);
-    const sections = nodes.filter((n) => n.kind === "section");
-    const quantities = nodes.filter((n) => n.kind === "quantity").map((q) => toQuantityNode(q));
-    const parentInfoByChild = new Map<string, { id: string; relation: string }>();
-    normalizedEdges.forEach((e) => {
-      if ((e.type === "inherits" || e.type === "hasSubSection") && e.target && e.source) {
-        parentInfoByChild.set(e.target, { id: e.source, relation: e.type });
-      }
-    });
-
-    const classList: UmlClassNode[] = sections.map((sec) => {
-      const id = normalizeId(sec.id);
-      const ownedQuantities = quantities.filter((q) => q.ownerId === id);
-
-      const parentInfo = parentInfoByChild.get(id);
-      const relation = parentInfo?.relation === "hasSubSection" ? "hasSubSection" : parentInfo?.relation === "inherits" ? "inherits" : null;
-
-      return {
-        id,
-        name: normalizeLabel(sec.label, id),
-        doc: sec.doc ?? null,
-        module: normalizeModule(sec.module) || sec.module || null,
-        path: sec.path ?? null,
-        line: typeof sec.line === "number" ? sec.line : null,
-        quantities: ownedQuantities,
-        parentId: parentInfo?.id ?? null,
-        parentRelation: relation,
-      };
-    });
-
-    return {
-      package: normalizeModule(g.package) || g.package,
-      root: g.root ? normalizeLabel(g.root, g.root) : null,
-      classes: classList,
-      edges: normalizedEdges,
-    };
-  }, [toQuantityNode]);
+  const buildUmlState = useCallback((g: ApiGraph | null): UmlGraphState | null => buildUmlStateFromGraph(g), []);
 
   const seedAuditFromAppliedEdits = useCallback(
     (graphWithEdits: ApiGraph | null) => {
@@ -1283,6 +1233,10 @@ export default function App() {
             path: q.path ?? undefined,
             line: typeof q.line === "number" ? q.line : undefined,
             owner: q.ownerId,
+            inherited: q.inherited ?? false,
+            inheritedFromId: q.inheritedFromId ?? null,
+            inheritedFromName: q.inheritedFromName ?? null,
+            sourceId: q.sourceId ?? null,
           })),
         });
         return;
@@ -1298,6 +1252,10 @@ export default function App() {
         shape: qty.shape ?? undefined,
         card: qty.card ?? undefined,
         owner: cls.id,
+        inherited: qty.inherited ?? false,
+        inheritedFromId: qty.inheritedFromId ?? null,
+        inheritedFromName: qty.inheritedFromName ?? null,
+        sourceId: qty.sourceId ?? null,
       });
       return;
     }
@@ -1319,6 +1277,10 @@ export default function App() {
         path: q.path ?? undefined,
         line: typeof q.line === "number" ? q.line : undefined,
         owner: q.ownerId,
+        inherited: q.inherited ?? false,
+        inheritedFromId: q.inheritedFromId ?? null,
+        inheritedFromName: q.inheritedFromName ?? null,
+        sourceId: q.sourceId ?? null,
       })),
     });
   }, [selectedClassId, selectedQuantityId, setSelected, umlState]);
@@ -1361,6 +1323,16 @@ export default function App() {
         setQuantityActionErr(message);
         throw new Error(message);
       }
+      const trimmedQuantityName = quantityName.trim();
+      const visibleNameConflict = targetClass.quantities.find((q) => q.name === trimmedQuantityName);
+      if (visibleNameConflict) {
+        const inheritedFrom = visibleNameConflict.inheritedFromName || visibleNameConflict.inheritedFromId;
+        const message = visibleNameConflict.inherited
+          ? `Quantity '${trimmedQuantityName}' is inherited from ${inheritedFrom || "a parent class"} and cannot be redefined on ${targetClass.name}.`
+          : `A quantity named '${trimmedQuantityName}' already exists on ${targetClass.name}.`;
+        setQuantityActionErr(message);
+        throw new Error(message);
+      }
 
       const r = await api.post(
         "/schema/custom-quantity",
@@ -1369,7 +1341,7 @@ export default function App() {
           class_name: classLabel,
           parent_name: parentLabel,
           parent_relation: parentRelation,
-          quantity_name: quantityName,
+          quantity_name: trimmedQuantityName,
           dtype,
           docstring: docstring || null,
         },
@@ -1389,8 +1361,8 @@ export default function App() {
         type: "add-quantity",
         classId: targetClass.id,
         quantity: {
-          id: `${targetClass.id}.${quantityName}`,
-          name: quantityName,
+          id: `${targetClass.id}.${trimmedQuantityName}`,
+          name: trimmedQuantityName,
           dtype,
           doc: docstring || null,
           ownerId: targetClass.id,
@@ -1425,11 +1397,11 @@ export default function App() {
               c.name?.endsWith?.(`.${updatedClass.name}`)
           )
           ?.quantities.find(
-            (q) => q.name === quantityName || q.id === `${updatedClass.id}.${quantityName}`
+            (q) => q.name === trimmedQuantityName || q.id === `${updatedClass.id}.${trimmedQuantityName}`
           ) ??
         ({
-          id: `${updatedClass.id}.${quantityName}`,
-          name: quantityName,
+          id: `${updatedClass.id}.${trimmedQuantityName}`,
+          name: trimmedQuantityName,
           dtype,
           doc: docstring || null,
           ownerId: updatedClass.id,
@@ -1489,10 +1461,11 @@ export default function App() {
         }
       );
       const next = ensureGraphResponse(res.data);
+      const expectedClassId = normalizeId(`${pkg}.${name}`);
       const newChange: AuditTrailEntry["change"] = {
         type: "add-class",
         cls: {
-          id: `${pkg}.${name}`,
+          id: expectedClassId,
           name,
           doc: docstring || null,
           module: pkg,
@@ -1509,9 +1482,14 @@ export default function App() {
       setUmlState(nextUml);
       syncWorkspaceFromResponse(mergedGraph);
       const newCls =
-        nextUml?.classes.find((c) => c.name === name || c.id === name || c.id.endsWith(`.${name}`)) ??
+        nextUml?.classes.find((c) => normalizeId(c.id) === expectedClassId) ??
+        nextUml?.classes.find(
+          (c) =>
+            normalizeId(c.name) === normalizeId(name) &&
+            normalizeModule(c.module) === normalizeModule(pkg)
+        ) ??
         ({
-          id: `${pkg}.${name}`,
+          id: expectedClassId,
           name,
           doc: docstring || null,
           module: pkg,
@@ -1592,7 +1570,8 @@ export default function App() {
       path: cls.path ?? null,
       line: cls.line ?? null,
     };
-    const qtyNodes: ApiNode[] = cls.quantities.map((q) => ({
+    const ownedQuantities = cls.quantities.filter((q) => !q.inherited);
+    const qtyNodes: ApiNode[] = ownedQuantities.map((q) => ({
       id: q.id,
       kind: "quantity",
       label: q.name,
@@ -1604,16 +1583,17 @@ export default function App() {
       path: q.path ?? undefined,
       line: q.line ?? undefined,
     }));
-    const qtyEdges: ApiEdge[] = cls.quantities.map((q) => ({
+    const qtyEdges: ApiEdge[] = ownedQuantities.map((q) => ({
       source: q.ownerId,
       target: q.id,
       type: "hasQuantity" as const,
       card: q.card ?? null,
     }));
-    const relationType: ApiEdge["type"] =
-      cls.parentRelation === "hasSubSection" ? "hasSubSection" : "inherits";
-    const inheritEdge: ApiEdge[] = cls.parentId
-      ? [{ source: cls.parentId, target: cls.id, type: relationType, card: null }]
+    const relationType: ApiEdge["type"] = cls.parentRelation === "hasSubSection" ? "hasSubSection" : "inherits";
+    const parentLinkEdge: ApiEdge[] = cls.parentId
+      ? relationType === "inherits"
+        ? [{ source: cls.id, target: cls.parentId, type: relationType, card: null }]
+        : [{ source: cls.parentId, target: cls.id, type: relationType, card: null }]
       : [];
 
     return {
@@ -1622,10 +1602,10 @@ export default function App() {
       edges: [
         ...(g.edges || []).filter(
           (e) =>
-            !((e.type === "inherits" || e.type === "hasSubSection") && e.target === cls.id)
+            !((e.type === "inherits" && e.source === cls.id) || (e.type === "hasSubSection" && e.target === cls.id))
         ),
         ...qtyEdges,
-        ...inheritEdge
+        ...parentLinkEdge
       ],
     };
   }, []);
@@ -1955,9 +1935,38 @@ export default function App() {
     return graph;
   };
 
+  const findQuantityInUml = useCallback(
+    (quantityId: string, ownerHint?: string | null): { cls: UmlClassNode; qty: QuantityNode } | null => {
+      if (!umlState) return null;
+
+      const ownerClass = ownerHint ? umlState.classes.find((c) => c.id === ownerHint) ?? null : null;
+      const classes = ownerClass ? [ownerClass, ...umlState.classes.filter((c) => c.id !== ownerHint)] : umlState.classes;
+
+      for (const cls of classes) {
+        const qty = cls.quantities.find((q) => q.id === quantityId);
+        if (qty) return { cls, qty };
+      }
+      for (const cls of classes) {
+        const qty = cls.quantities.find((q) => q.inherited && q.sourceId === quantityId);
+        if (qty) return { cls, qty };
+      }
+      return null;
+    },
+    [umlState]
+  );
+
   const editQuantity = (quantityId: string, updates: QuantityFormData) => {
     const current = ensureEditableReady();
     if (!current) return;
+    const ownerHint = selected?.kind === "quantity" ? selected.owner : selectedClassId;
+    const umlQuantity = findQuantityInUml(quantityId, ownerHint);
+    if (umlQuantity?.qty.inherited) {
+      const inheritedFrom = umlQuantity.qty.inheritedFromName || umlQuantity.qty.inheritedFromId || "a parent class";
+      setQuantityActionErr(
+        `Quantity '${umlQuantity.qty.name}' is inherited from ${inheritedFrom} and cannot be edited on ${umlQuantity.cls.name}.`
+      );
+      return;
+    }
 
     const target = current.nodes.find((n) => n.id === quantityId && n.kind === "quantity");
     if (!target) {
@@ -1976,11 +1985,20 @@ export default function App() {
     }
 
     const newId = `${target.owner}.${trimmedName}`;
-    const conflict = current.nodes.some(
+    const ownerClass = umlState?.classes.find((c) => c.id === target.owner);
+    const nameConflict = ownerClass?.quantities.find((q) => q.id !== quantityId && q.name === trimmedName);
+    const conflict = Boolean(nameConflict) || current.nodes.some(
       (n) => n.kind === "quantity" && n.owner === target.owner && n.id !== quantityId && (n.id === newId || n.label === trimmedName)
     );
     if (conflict) {
-      setQuantityActionErr("A quantity with that name already exists on this class.");
+      if (nameConflict?.inherited) {
+        const inheritedFrom = nameConflict.inheritedFromName || nameConflict.inheritedFromId || "a parent class";
+        setQuantityActionErr(
+          `A quantity named '${trimmedName}' is inherited from ${inheritedFrom} and cannot be overridden on this class.`
+        );
+      } else {
+        setQuantityActionErr("A quantity with that name already exists on this class.");
+      }
       return;
     }
 
@@ -2029,6 +2047,15 @@ export default function App() {
   const removeQuantity = (quantityId: string) => {
     const current = ensureEditableReady();
     if (!current) return;
+    const ownerHint = selected?.kind === "quantity" ? selected.owner : selectedClassId;
+    const umlQuantity = findQuantityInUml(quantityId, ownerHint);
+    if (umlQuantity?.qty.inherited) {
+      const inheritedFrom = umlQuantity.qty.inheritedFromName || umlQuantity.qty.inheritedFromId || "a parent class";
+      setQuantityActionErr(
+        `Quantity '${umlQuantity.qty.name}' is inherited from ${inheritedFrom} and cannot be removed on ${umlQuantity.cls.name}.`
+      );
+      return;
+    }
 
     const target = current.nodes.find((n) => n.id === quantityId && n.kind === "quantity");
     if (!target) {
@@ -2475,6 +2502,14 @@ export default function App() {
               <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <input
                   type="checkbox"
+                  checked={showBaseSections}
+                  onChange={(e) => setShowBaseSections(e.target.checked)}
+                />
+                Show base sections
+              </label>
+              <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
                   checked={crossModules}
                   onChange={(e) => setCrossModules(e.target.checked)}
                 />
@@ -2704,6 +2739,9 @@ export default function App() {
                 nodes={diffData.head.graph.nodes}
                 edges={diffData.head.graph.edges}
                 diff={diffData.diff}
+                baseNamespaces={namespaceFilters}
+                showBaseSections={showBaseSections}
+                pinnedClassIds={pinnedClassIds}
                 showQuantityMetadata={showQuantityMetadata}
                 showInheritance={includeInheritance}
                 theme={theme}
@@ -2765,19 +2803,22 @@ export default function App() {
                 </div>
                 <GraphView
                   nodes={graph.nodes}
-                edges={graph.edges}
-                umlState={umlState}
-                selectedClassId={selectedClassId}
-                showQuantityMetadata={showQuantityMetadata}
-                showInheritance={includeInheritance}
-                theme={theme}
-                onReady={setGraphHandle}
-                onSelectClass={handleCanvasClassSelect}
-                onCreateQuantity={createQuantityOnCanvas}
-                onCreateClass={createClassOnCanvas}
-                creatingQuantityFor={creatingQuantityFor}
-                creatingClass={creatingClass}
-                onClearSelection={handleCanvasClear}
+                  edges={graph.edges}
+                  umlState={umlState}
+                  baseNamespaces={namespaceFilters}
+                  showBaseSections={showBaseSections}
+                  pinnedClassIds={pinnedClassIds}
+                  selectedClassId={selectedClassId}
+                  showQuantityMetadata={showQuantityMetadata}
+                  showInheritance={includeInheritance}
+                  theme={theme}
+                  onReady={setGraphHandle}
+                  onSelectClass={handleCanvasClassSelect}
+                  onCreateQuantity={createQuantityOnCanvas}
+                  onCreateClass={createClassOnCanvas}
+                  creatingQuantityFor={creatingQuantityFor}
+                  creatingClass={creatingClass}
+                  onClearSelection={handleCanvasClear}
                   editableMode={editableMode}
                 />
               </div>
@@ -2835,15 +2876,14 @@ export default function App() {
             height: "100vh",
             borderLeft: "1px solid var(--panel-border)",
             padding: "10px",
-            gap: "10px"
+            gap: "10px",
+            overflowY: "auto"
           }}
         >
-          {/* TOP PANEL — about half */}
+          {/* TOP PANEL — content-stacked like left sidebar */}
           <div
             style={{
-              flex: 5,
-              minHeight: 0,
-              overflowY: "auto"
+              flex: "0 0 auto"
             }}
           >
             <CollapsibleSection
@@ -2865,12 +2905,10 @@ export default function App() {
             </CollapsibleSection>
           </div>
 
-          {/* BOTTOM PANEL — editable mode controls */}
+          {/* BOTTOM PANEL — content-stacked like left sidebar */}
           <div
             style={{
-              flex: 5,
-              minHeight: 0,
-              overflowY: "auto"
+              flex: "0 0 auto"
             }}
           >
             <CollapsibleSection

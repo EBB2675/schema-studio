@@ -24,8 +24,15 @@ export default function QuantityEditPanel({
   const [formName, setFormName] = useState("");
   const [formDtype, setFormDtype] = useState<string>(SUPPORTED_DTYPES[0]);
   const [formDoc, setFormDoc] = useState("");
+  const inheritedBlockedReason =
+    selected?.kind === "quantity" && selected.inherited
+      ? `This quantity is inherited from ${selected.inheritedFromName || selected.inheritedFromId || "a parent class"} and is read-only here.`
+      : null;
 
-  const disableActions = useMemo(() => !!blockedReason || !editableMode, [blockedReason, editableMode]);
+  const disableActions = useMemo(
+    () => !!blockedReason || !editableMode || !!inheritedBlockedReason,
+    [blockedReason, editableMode, inheritedBlockedReason]
+  );
 
   useEffect(() => {
     clearActionError();
@@ -116,6 +123,7 @@ export default function QuantityEditPanel({
 
           {actionError && <div style={{ color: "#b91c1c", fontSize: 13 }}>{actionError}</div>}
           {blockedReason && <div style={{ color: "#6b7280", fontSize: 13 }}>{blockedReason}</div>}
+          {inheritedBlockedReason && <div style={{ color: "#6b7280", fontSize: 13 }}>{inheritedBlockedReason}</div>}
 
           <div className="row" style={{ justifyContent: "space-between", gap: 8 }}>
             <button className="btn secondary" type="button" onClick={confirmRemove} disabled={disableActions}>

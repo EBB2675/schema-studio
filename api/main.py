@@ -36,6 +36,10 @@ from .edit_store import (
     save_edit,
     split_conflicts,
 )
+from .custom_graph_edits import (
+    attach_custom_class as _attach_custom_class_impl,
+    attach_custom_quantity as _attach_custom_quantity_impl,
+)
 
 # Keep this list in sync with `web/src/components/quantityShared.ts`.
 SUPPORTED_CUSTOM_DTYPES = {
@@ -490,132 +494,11 @@ async def _persist_edit(
 
 
 def _attach_custom_quantity(graph: dict, req: CustomQuantityRequest) -> dict:
-    """
-    Inject a synthetic quantity node and edge into the graph without rebuilding it.
-    Performs validation to ensure the target section exists and no duplicate
-    quantities are added.
-    """
-    if req.dtype not in SUPPORTED_CUSTOM_DTYPES:
-        allowed = ", ".join(sorted(SUPPORTED_CUSTOM_DTYPES))
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported dtype '{req.dtype}'. Supported: {allowed}",
-        )
-
-    nodes = graph.get("nodes", [])
-    edges = graph.get("edges", [])
-
-    target_section = None
-    for node in nodes:
-        if node.get("kind") != "section":
-            continue
-        if node.get("label") != req.class_name:
-            continue
-        module = node.get("module") or ""
-        if module.startswith(req.package):
-            target_section = node
-            break
-
-    if target_section is None:
-        if not req.parent_name:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Section '{req.class_name}' not found in package '{req.package}'",
-            )
-
-        # Allow adding a quantity to a freshly created synthetic class by materializing it here.
-        new_id = f"{req.package}.{req.class_name}"
-        target_section = {
-            "id": new_id,
-            "kind": "section",
-            "label": req.class_name,
-            "doc": None,
-            "module": req.package,
-        }
-        nodes = nodes + [target_section]
-
-        # If a parent is provided, add an edge with the requested relation (default inherits).
-        parent = next(
-            (
-                n
-                for n in nodes
-                if n.get("kind") == "section"
-                and (n.get("id") == req.parent_name or n.get("label") == req.parent_name)
-            ),
-            None,
-        )
-        parent_id = parent.get("id") if parent else req.parent_name
-        relation = req.parent_relation or "inherits"
-        edges = edges + [{"source": parent_id, "target": new_id, "type": relation, "card": None}]
-
-    section_id = target_section["id"]
-    for node in nodes:
-        if node.get("kind") == "quantity" and node.get("owner") == section_id:
-            if node.get("label") == req.quantity_name:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"Quantity '{req.quantity_name}' already exists on section "
-                        f"'{req.class_name}'"
-                    ),
-                )
-
-    qid = f"{section_id}.{req.quantity_name}"
-    new_node = {
-        "id": qid,
-        "kind": "quantity",
-        "label": req.quantity_name,
-        "doc": req.docstring or None,
-        "dtype": req.dtype,
-        "owner": section_id,
-        "module": target_section.get("module"),
-    }
-    nodes = nodes + [new_node]
-    edges = edges + [
-        {"source": section_id, "target": qid, "type": "hasQuantity", "card": None}
-    ]
-
-    graph = dict(graph)
-    graph["nodes"] = nodes
-    graph["edges"] = edges
-    return graph
+    return _attach_custom_quantity_impl(graph, req, supported_dtypes=SUPPORTED_CUSTOM_DTYPES)
 
 
 def _attach_custom_class(graph: dict, req: CustomClassRequest) -> dict:
-    """
-    Inject a synthetic class node (and optional inheritance edge) into the graph.
-    """
-    nodes = graph.get("nodes", [])
-    edges = graph.get("edges", [])
-
-    for node in nodes:
-        if node.get("kind") != "section":
-            continue
-        if node.get("label") == req.name or node.get("id") == req.name:
-            raise HTTPException(status_code=400, detail=f"Class '{req.name}' already exists")
-
-    # Always use a fully qualified id to keep consistency when adding quantities later.
-    new_id = f"{req.package}.{req.name}"
-
-    new_node = {
-        "id": new_id,
-        "kind": "section",
-        "label": req.name,
-        "doc": req.docstring or None,
-        "module": req.package,
-    }
-    nodes = nodes + [new_node]
-
-    if req.parent:
-        parent = next((n for n in nodes if n.get("id") == req.parent or n.get("label") == req.parent), None)
-        parent_id = parent.get("id") if parent else req.parent
-        relation = req.relation if req.relation in ("inherits", "hasSubSection") else "inherits"
-        edges = edges + [{"source": parent_id, "target": new_id, "type": relation, "card": None}]
-
-    graph = dict(graph)
-    graph["nodes"] = nodes
-    graph["edges"] = edges
-    return graph
+    return _attach_custom_class_impl(graph, req)
 
 
 @app.post("/schema/custom-quantity")

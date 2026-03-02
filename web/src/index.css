@@ -11,6 +11,9 @@
   --view-tag-bg: rgba(124, 58, 237, 0.14);
   --view-tag-border: rgba(124, 58, 237, 0.5);
   --view-tag-fg: #c7d2fe;
+  --inherited-tag-bg: rgba(56, 189, 248, 0.16);
+  --inherited-tag-border: rgba(56, 189, 248, 0.45);
+  --inherited-tag-fg: #bae6fd;
   --pill-warning-bg: rgba(234, 179, 8, 0.22);
   --pill-warning-fg: #fef9c3;
 }
@@ -91,6 +94,9 @@
   --view-tag-bg: rgba(124, 58, 237, 0.12);
   --view-tag-border: rgba(124, 58, 237, 0.38);
   --view-tag-fg: #312e81;
+  --inherited-tag-bg: rgba(14, 165, 233, 0.12);
+  --inherited-tag-border: rgba(14, 165, 233, 0.35);
+  --inherited-tag-fg: #0c4a6e;
   --pill-warning-bg: rgba(234, 179, 8, 0.18);
   --pill-warning-fg: #92400e;
   color-scheme: light;
@@ -330,6 +336,13 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   background: var(--view-tag-bg);
   border-color: var(--view-tag-border);
   color: var(--view-tag-fg);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.tag.inherited {
+  background: var(--inherited-tag-bg);
+  border-color: var(--inherited-tag-border);
+  color: var(--inherited-tag-fg);
   font-weight: 700;
   letter-spacing: 0.01em;
 }
@@ -924,7 +937,6 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   background: var(--doc-soft);
   font-size: 12px;
 }
-
 .uml-qty-name {
   font-weight: 700;
   font-family: var(--font-mono);

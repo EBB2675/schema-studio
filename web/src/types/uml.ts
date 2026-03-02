@@ -8,6 +8,10 @@ export type QuantityNode = {
   path?: string | null;
   line?: number | null;
   ownerId: string;
+  inherited?: boolean;
+  inheritedFromId?: string | null;
+  inheritedFromName?: string | null;
+  sourceId?: string | null;
 };
 
 export type UmlClassNode = {

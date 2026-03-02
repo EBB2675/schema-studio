@@ -115,3 +115,53 @@ def test_unsupported_dtype_returns_error(client: TestClient, tmp_path: Path, mon
     )
     assert resp.status_code == 400
     assert "Unsupported dtype" in resp.json()["detail"]
+
+
+def test_redefining_inherited_quantity_is_rejected(client: TestClient):
+    pkg_name = f"inherit_pkg_{uuid4().hex}"
+
+    parent_resp = client.post(
+        "/schema/custom-class",
+        params={"empty": True},
+        json={"package": pkg_name, "name": "Parent"},
+    )
+    assert parent_resp.status_code == 200
+
+    parent_q = client.post(
+        "/schema/custom-quantity",
+        params={"empty": True},
+        json={
+            "package": pkg_name,
+            "class_name": "Parent",
+            "quantity_name": "shared_q",
+            "dtype": "float",
+        },
+    )
+    assert parent_q.status_code == 200
+
+    child_resp = client.post(
+        "/schema/custom-class",
+        params={"empty": True},
+        json={
+            "package": pkg_name,
+            "name": "Child",
+            "parent": f"{pkg_name}.Parent",
+            "relation": "inherits",
+        },
+    )
+    assert child_resp.status_code == 200
+
+    redef = client.post(
+        "/schema/custom-quantity",
+        params={"empty": True},
+        json={
+            "package": pkg_name,
+            "class_name": "Child",
+            "parent_name": "Parent",
+            "parent_relation": "inherits",
+            "quantity_name": "shared_q",
+            "dtype": "float",
+        },
+    )
+    assert redef.status_code == 400
+    assert "inherited" in redef.json()["detail"]

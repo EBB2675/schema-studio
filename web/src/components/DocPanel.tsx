@@ -16,6 +16,9 @@ function QtyRow({ q, onClick, onEdit, onRemove, editableMode, disabled }: { q: Q
   if (q.dtype) meta.push(q.dtype);
   if (q.shape && q.shape !== "[]") meta.push(q.shape);
   if (q.card) meta.push(`[${q.card}]`);
+  if (q.inherited) {
+    meta.push(`Inherited from ${q.inheritedFromName || q.inheritedFromId || "parent"}`);
+  }
 
   const diffLabel =
     q.diff?.state === "added"
@@ -51,7 +54,7 @@ function QtyRow({ q, onClick, onEdit, onRemove, editableMode, disabled }: { q: Q
           <div style={{ fontSize: 11, opacity: 0.7 }}>{meta.join("  ")}</div>
         </div>
         {diffLabel ? <span className={diffClass || "pill"}>{diffLabel}</span> : null}
-        <div className="tag view">View</div>
+        <div className={`tag ${q.inherited ? "inherited" : "view"}`}>{q.inherited ? "Inherited" : "View"}</div>
       </button>
 
       {editableMode && (
@@ -113,6 +116,10 @@ export default function DocPanel({
       shape: q.shape,
       card: q.card,
       owner: q.owner,
+      inherited: q.inherited ?? false,
+      inheritedFromId: q.inheritedFromId ?? null,
+      inheritedFromName: q.inheritedFromName ?? null,
+      sourceId: q.sourceId ?? null,
       diff: q.diff
     });
   };
@@ -155,7 +162,7 @@ export default function DocPanel({
                 onEdit={() => showQuantity(q)}
                 onRemove={() => confirmRemove(q.id)}
                 editableMode={editableMode}
-                disabled={disableActions}
+                disabled={disableActions || !!q.inherited}
               />
             ))}
             {(!selected.quantities || selected.quantities.length === 0) && (
@@ -187,6 +194,11 @@ export default function DocPanel({
               : null, selected.card ? `[${selected.card}]` : null]
               .filter(Boolean).join("  ")}
           </div>
+          {selected.inherited ? (
+            <div className="small" style={{ marginTop: 6 }}>
+              Inherited from {selected.inheritedFromName || selected.inheritedFromId || "parent"}.
+            </div>
+          ) : null}
           <pre className="doc-docstring">{selected.doc || "No docstring available."}</pre>
 
           <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--panel-border)" }}>
