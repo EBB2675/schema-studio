@@ -23,7 +23,6 @@ This repository is the upstream unless explicitly changed by the maintainers.
 - Canonical upstream: [https://github.com/EBB2675/schema-studio]
 
 ### Downstream mirrors
-Institutional or organizational repositories may host downstream mirrors for visibility, archival, or operational reasons (for example, CI, deployment, or sustainability requirements).
 
 Downstream mirrors are not considered the canonical development location unless the maintainers explicitly designate them as such.
 
