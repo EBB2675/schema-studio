@@ -1,0 +1,12 @@
+changelog:
+  exclude:
+    authors: [github-actions, pre-commit-ci]
+  categories:
+    - title: 💥 Incompatible API Changes
+      labels: [breaking, refactor]
+    - title: 💡 Added Functionalities (Backward Compatible)
+      labels: [feature, enhancement, DX, UX, docs, tests, security, performance]
+    - title: 🛠 Backward Compatible Bug Fixes And Minor Changes (Backward Compatible)
+      labels: [dependencies, fix, datamodel, pkg]
+    - title: 🤷‍♂️ Other Changes
+      labels: ['*']
