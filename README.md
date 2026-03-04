@@ -171,15 +171,13 @@ Core endpoints:
 - `GET /schema/version`, `POST /schema/update`, `POST /send-design`
 - `GET /git/packages` (fixed branch behavior)
 
-## Author
+## Authors
 
 **[Dr. Esma B. Boydas](https://github.com/EBB2675)**  
-NOMAD Laboratory (FAIRmat), Humboldt-Universitat zu Berlin
-
-## Credits
+Humboldt-Universität zu Berlin / FAIRmat-NFDI
 
 **[Dr. Jose M. Pizarro](https://github.com/JosePizarro3)**  
-Bundesanstalt fur Materialforschung und -prufung (BAM)  
+Bundesanstalt fur Materialforschung und -prüfung (BAM)  
 Original idea and technical guidance.
 
 
