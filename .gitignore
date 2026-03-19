@@ -2,5 +2,6 @@ __pycache__/
 api/_data/
 .env
 .venv/
+.tmp/
 dist/
 schema_studio.egg*
