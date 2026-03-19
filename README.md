@@ -160,6 +160,30 @@ Open `https://localhost`.
   schema-studio
   ```
 
+## Desktop Development (Tauri Work-In-Progress)
+
+The desktop rollout is being developed incrementally on top of `tauri-changes-test`.
+
+Current direction:
+- Tauri manages a native window.
+- Tauri starts the Light Mode backend as a child process.
+- The backend must not open a browser when launched by Tauri.
+- Closing the desktop app should terminate the backend process tree.
+
+Current limitations observed in this environment:
+- `node` is not available on `PATH`
+- `cargo` is not available on `PATH`
+- `python -m venv .venv` hit an `ensurepip` permission issue here
+
+Planned dev smoke test once prerequisites are installed:
+```bash
+cd web
+npm install
+npm run tauri:dev
+```
+
+See `docs/tauri-light-mode-plan.md` for the branch-by-branch rollout and packaging strategy.
+
 ## API (Light Mode)
 
 Core endpoints:

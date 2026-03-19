@@ -31,13 +31,29 @@ def _open_browser_when_ready(url: str, timeout_seconds: float = 120.0) -> None:
     webbrowser.open(url)
 
 
-def main() -> None:
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def run_server(*, open_browser: bool | None = None) -> None:
     url = f"http://{DEFAULT_HOST}:{DEFAULT_PORT}"
     print(BANNER)
-    print(f"Launching browser at {url} when server is ready\n")
-    threading.Thread(target=_open_browser_when_ready, args=(url,), daemon=True).start()
+    if open_browser is None:
+        open_browser = _env_flag("SCHEMA_STUDIO_OPEN_BROWSER", True)
+    if open_browser:
+        print(f"Launching browser at {url} when server is ready\n")
+        threading.Thread(target=_open_browser_when_ready, args=(url,), daemon=True).start()
+    else:
+        print(f"Browser auto-open disabled; server available at {url}\n")
 
     uvicorn.run(app, host=DEFAULT_HOST, port=DEFAULT_PORT, log_level=os.getenv("UVICORN_LOG_LEVEL", "info"))
+
+
+def main() -> None:
+    run_server()
 
 
 if __name__ == "__main__":

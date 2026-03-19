@@ -1,0 +1,14 @@
+[package]
+name = "schema-studio-desktop"
+version = "0.1.0"
+description = "Schema Studio desktop shell for Light Mode"
+authors = ["Schema Studio Team"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.2.0" }
+
+[dependencies]
+reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "rustls-tls"] }
+tauri = { version = "2.8.1" }
+
