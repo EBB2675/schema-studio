@@ -196,6 +196,7 @@ fn spawn_backend(config: &LauncherConfig) -> Result<Child, String> {
     cmd.current_dir(&repo_root)
         .env("SCHEMA_STUDIO_HOST", &config.host)
         .env("SCHEMA_STUDIO_PORT", config.port.to_string())
+        .env("SCHEMA_STUDIO_PARENT_PID", std::process::id().to_string())
         .env(
             "SCHEMA_STUDIO_OPEN_BROWSER",
             env::var("SCHEMA_STUDIO_OPEN_BROWSER").unwrap_or_else(|_| "0".to_string()),
@@ -212,6 +213,9 @@ fn spawn_backend(config: &LauncherConfig) -> Result<Child, String> {
     }
     if let Ok(value) = env::var("SCHEMA_STUDIO_DEFAULT_NAMESPACE") {
         cmd.env("SCHEMA_STUDIO_DEFAULT_NAMESPACE", value);
+    }
+    if let Ok(value) = env::var("SCHEMA_STUDIO_DIST_DIR") {
+        cmd.env("SCHEMA_STUDIO_DIST_DIR", value);
     }
     if let Ok(value) = env::var("SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA") {
         cmd.env("SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA", value);
@@ -328,7 +332,7 @@ fn stop_backend(child_state: &SharedChild) {
 }
 
 fn create_window(app: &tauri::AppHandle, config: &LauncherConfig) -> Result<(), tauri::Error> {
-    WebviewWindowBuilder::new(
+    let window = WebviewWindowBuilder::new(
         app,
         APP_LABEL,
         WebviewUrl::External(config.base_url().parse().expect("valid backend URL")),
@@ -338,6 +342,9 @@ fn create_window(app: &tauri::AppHandle, config: &LauncherConfig) -> Result<(), 
     .min_inner_size(1100.0, 720.0)
     .resizable(true)
     .build()?;
+
+    #[cfg(debug_assertions)]
+    window.open_devtools();
 
     Ok(())
 }
