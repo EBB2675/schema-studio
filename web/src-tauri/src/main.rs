@@ -1,4 +1,7 @@
 use std::{
+    env,
+    fs,
+    net::{SocketAddr, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{Arc, Mutex},
@@ -10,12 +13,36 @@ use tauri::{RunEvent, WebviewUrl, WebviewWindowBuilder};
 
 const APP_LABEL: &str = "main";
 const WINDOW_TITLE: &str = "Schema Studio Light";
-const BACKEND_HOST: &str = "127.0.0.1";
-const BACKEND_PORT: u16 = 5179;
-const BACKEND_URL: &str = "http://127.0.0.1:5179";
-const HEALTH_URL: &str = "http://127.0.0.1:5179/health";
 
 type SharedChild = Arc<Mutex<Option<Child>>>;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DesktopMode {
+    Light,
+    Dev,
+}
+
+impl DesktopMode {
+    fn parse(raw: &str) -> Result<Self, String> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "light" => Ok(Self::Light),
+            "dev" => Ok(Self::Dev),
+            other => Err(format!(
+                "Unsupported SCHEMA_STUDIO_DESKTOP_MODE={other:?}. Supported modes: light"
+            )),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct LauncherConfig {
+    mode: DesktopMode,
+    host: String,
+    port: u16,
+    python: String,
+    startup_timeout: Duration,
+    reuse_backend: bool,
+}
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -25,26 +52,176 @@ fn repo_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn preferred_python(repo_root: &Path) -> String {
-    let candidate = repo_root.join(".venv").join("Scripts").join("python.exe");
-    if candidate.exists() {
-        return candidate.to_string_lossy().into_owned();
+fn load_repo_env(repo_root: &Path) {
+    let env_path = repo_root.join(".env");
+    let Ok(contents) = fs::read_to_string(env_path) else {
+        return;
+    };
+
+    for raw_line in contents.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let key = key.trim();
+        if key.is_empty() || env::var_os(key).is_some() {
+            continue;
+        }
+
+        let mut value = value.trim().to_string();
+        let quoted = (value.starts_with('"') && value.ends_with('"'))
+            || (value.starts_with('\'') && value.ends_with('\''));
+        if quoted && value.len() >= 2 {
+            value = value[1..value.len() - 1].to_string();
+        }
+
+        unsafe {
+            env::set_var(key, value);
+        }
     }
+}
+
+fn env_flag(name: &str, default: bool) -> bool {
+    env::var(name)
+        .ok()
+        .map(|raw| !matches!(raw.trim().to_ascii_lowercase().as_str(), "0" | "false" | "no" | "off"))
+        .unwrap_or(default)
+}
+
+fn env_u16(name: &str, default: u16) -> Result<u16, String> {
+    match env::var(name) {
+        Ok(raw) => raw
+            .trim()
+            .parse::<u16>()
+            .map_err(|err| format!("Invalid {name}={raw:?}: {err}")),
+        Err(_) => Ok(default),
+    }
+}
+
+fn env_u64(name: &str, default: u64) -> Result<u64, String> {
+    match env::var(name) {
+        Ok(raw) => raw
+            .trim()
+            .parse::<u64>()
+            .map_err(|err| format!("Invalid {name}={raw:?}: {err}")),
+        Err(_) => Ok(default),
+    }
+}
+
+fn default_python_candidates(repo_root: &Path) -> Vec<PathBuf> {
+    vec![
+        repo_root.join(".venv").join("Scripts").join("python.exe"),
+        repo_root.join(".venv").join("bin").join("python"),
+    ]
+}
+
+fn preferred_python(repo_root: &Path) -> String {
+    if let Ok(raw) = env::var("SCHEMA_STUDIO_DESKTOP_PYTHON") {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    for candidate in default_python_candidates(repo_root) {
+        if candidate.exists() {
+            return candidate.to_string_lossy().into_owned();
+        }
+    }
+
+    if cfg!(target_os = "windows") {
+        return "python.exe".to_string();
+    }
+
     "python".to_string()
 }
 
-fn spawn_backend() -> Result<Child, String> {
+impl LauncherConfig {
+    fn from_env(repo_root: &Path) -> Result<Self, String> {
+        let mode = DesktopMode::parse(
+            &env::var("SCHEMA_STUDIO_DESKTOP_MODE").unwrap_or_else(|_| "light".to_string()),
+        )?;
+        let host =
+            env::var("SCHEMA_STUDIO_DESKTOP_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+        let port = env_u16("SCHEMA_STUDIO_DESKTOP_PORT", 5179)?;
+        let startup_timeout =
+            Duration::from_secs(env_u64("SCHEMA_STUDIO_DESKTOP_STARTUP_TIMEOUT_SECONDS", 30)?);
+        let reuse_backend = env_flag("SCHEMA_STUDIO_DESKTOP_REUSE_BACKEND", false);
+
+        Ok(Self {
+            mode,
+            host,
+            port,
+            python: preferred_python(repo_root),
+            startup_timeout,
+            reuse_backend,
+        })
+    }
+
+    fn base_url(&self) -> String {
+        format!("http://{}:{}", self.host, self.port)
+    }
+
+    fn health_url(&self) -> String {
+        format!("{}/health", self.base_url())
+    }
+
+    fn socket_addr(&self) -> Result<SocketAddr, String> {
+        format!("{}:{}", self.host, self.port)
+            .parse()
+            .map_err(|err| format!("Invalid desktop backend address {}:{}: {err}", self.host, self.port))
+    }
+}
+
+fn mode_command(mode: DesktopMode) -> Result<Vec<String>, String> {
+    match mode {
+        DesktopMode::Light => Ok(vec!["-m".to_string(), "api.light_mode.cli".to_string()]),
+        DesktopMode::Dev => Err(
+            "Desktop launcher contract is ready for future modes, but only Light Mode is implemented right now."
+                .to_string(),
+        ),
+    }
+}
+
+fn spawn_backend(config: &LauncherConfig) -> Result<Child, String> {
     let repo_root = repo_root();
-    let mut cmd = Command::new(preferred_python(&repo_root));
+    let mut cmd = Command::new(&config.python);
+    for arg in mode_command(config.mode)? {
+        cmd.arg(arg);
+    }
+
     cmd.current_dir(&repo_root)
-        .arg("-m")
-        .arg("api.light_mode.cli")
-        .env("SCHEMA_STUDIO_HOST", BACKEND_HOST)
-        .env("SCHEMA_STUDIO_PORT", BACKEND_PORT.to_string())
-        .env("SCHEMA_STUDIO_OPEN_BROWSER", "0")
+        .env("SCHEMA_STUDIO_HOST", &config.host)
+        .env("SCHEMA_STUDIO_PORT", config.port.to_string())
+        .env(
+            "SCHEMA_STUDIO_OPEN_BROWSER",
+            env::var("SCHEMA_STUDIO_OPEN_BROWSER").unwrap_or_else(|_| "0".to_string()),
+        )
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
+
+    if let Ok(value) = env::var("SCHEMA_STUDIO_HOME") {
+        cmd.env("SCHEMA_STUDIO_HOME", value);
+    }
+    if let Ok(value) = env::var("SCHEMA_STUDIO_DEFAULT_PACKAGE") {
+        cmd.env("SCHEMA_STUDIO_DEFAULT_PACKAGE", value);
+    }
+    if let Ok(value) = env::var("SCHEMA_STUDIO_DEFAULT_NAMESPACE") {
+        cmd.env("SCHEMA_STUDIO_DEFAULT_NAMESPACE", value);
+    }
+    if let Ok(value) = env::var("SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA") {
+        cmd.env("SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA", value);
+    }
+    if let Ok(value) = env::var("SCHEMA_STUDIO_SEND_ENDPOINT") {
+        cmd.env("SCHEMA_STUDIO_SEND_ENDPOINT", value);
+    }
+    if let Ok(value) = env::var("UVICORN_LOG_LEVEL") {
+        cmd.env("UVICORN_LOG_LEVEL", value);
+    }
 
     #[cfg(target_os = "windows")]
     {
@@ -53,25 +230,82 @@ fn spawn_backend() -> Result<Child, String> {
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
-    cmd.spawn()
-        .map_err(|err| format!("failed to launch Light Mode backend: {err}"))
+    cmd.spawn().map_err(|err| {
+        format!(
+            "failed to launch backend with interpreter {:?}: {err}",
+            config.python
+        )
+    })
 }
 
-fn wait_for_backend(timeout: Duration) -> Result<(), String> {
+fn backend_is_healthy(config: &LauncherConfig) -> bool {
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(1))
+        .build()
+    {
+        Ok(client) => client,
+        Err(_) => return false,
+    };
+    matches!(
+        client.get(config.health_url()).send(),
+        Ok(response) if response.status().is_success()
+    )
+}
+
+fn port_is_in_use(config: &LauncherConfig) -> Result<bool, String> {
+    let addr = config.socket_addr()?;
+    Ok(TcpStream::connect_timeout(&addr, Duration::from_millis(250)).is_ok())
+}
+
+fn ensure_backend_state_before_spawn(config: &LauncherConfig) -> Result<bool, String> {
+    if backend_is_healthy(config) {
+        if config.reuse_backend {
+            return Ok(true);
+        }
+        return Err(format!(
+            "A backend is already running at {}. Stop it first, or set SCHEMA_STUDIO_DESKTOP_REUSE_BACKEND=1 to attach to it during development.",
+            config.base_url()
+        ));
+    }
+
+    if port_is_in_use(config)? {
+        return Err(format!(
+            "Port {} is already in use, but no healthy Schema Studio backend answered at {}. Free the port or change SCHEMA_STUDIO_DESKTOP_PORT.",
+            config.port,
+            config.health_url()
+        ));
+    }
+
+    Ok(false)
+}
+
+fn wait_for_backend(config: &LauncherConfig, child_state: &SharedChild) -> Result<(), String> {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(1))
         .build()
         .map_err(|err| format!("failed to build health-check client: {err}"))?;
     let start = Instant::now();
-    while start.elapsed() < timeout {
-        match client.get(HEALTH_URL).send() {
+    while start.elapsed() < config.startup_timeout {
+        match client.get(config.health_url()).send() {
             Ok(response) if response.status().is_success() => return Ok(()),
-            _ => thread::sleep(Duration::from_millis(250)),
+            _ => {
+                let mut guard = child_state.lock().expect("backend child mutex poisoned");
+                if let Some(child) = guard.as_mut() {
+                    if let Ok(Some(status)) = child.try_wait() {
+                        return Err(format!(
+                            "Light Mode backend exited before becoming ready (status: {status})"
+                        ));
+                    }
+                }
+                drop(guard);
+                thread::sleep(Duration::from_millis(250));
+            }
         }
     }
     Err(format!(
-        "Light Mode backend did not become ready at {HEALTH_URL} within {} seconds",
-        timeout.as_secs()
+        "Light Mode backend did not become ready at {} within {} seconds",
+        config.health_url(),
+        config.startup_timeout.as_secs()
     ))
 }
 
@@ -93,35 +327,48 @@ fn stop_backend(child_state: &SharedChild) {
     }
 }
 
+fn create_window(app: &tauri::AppHandle, config: &LauncherConfig) -> Result<(), tauri::Error> {
+    WebviewWindowBuilder::new(
+        app,
+        APP_LABEL,
+        WebviewUrl::External(config.base_url().parse().expect("valid backend URL")),
+    )
+    .title(WINDOW_TITLE)
+    .inner_size(1440.0, 960.0)
+    .min_inner_size(1100.0, 720.0)
+    .resizable(true)
+    .build()?;
+
+    Ok(())
+}
+
 fn main() {
+    let repo_root = repo_root();
+    load_repo_env(&repo_root);
+    let config = LauncherConfig::from_env(&repo_root)
+        .unwrap_or_else(|err| panic!("invalid desktop launcher configuration: {err}"));
+
     let backend_child: SharedChild = Arc::new(Mutex::new(None));
     let managed_child = Arc::clone(&backend_child);
+    let config_for_setup = config.clone();
+    let config_for_window = config.clone();
 
     tauri::Builder::default()
         .setup(move |app| {
-            let child = spawn_backend()?;
-            {
-                let mut guard = managed_child.lock().expect("backend child mutex poisoned");
-                *guard = Some(child);
+            let reusing_existing = ensure_backend_state_before_spawn(&config_for_setup)?;
+            if !reusing_existing {
+                let child = spawn_backend(&config_for_setup)?;
+                {
+                    let mut guard = managed_child.lock().expect("backend child mutex poisoned");
+                    *guard = Some(child);
+                }
+                if let Err(err) = wait_for_backend(&config_for_setup, &managed_child) {
+                    stop_backend(&managed_child);
+                    return Err(err.into());
+                }
             }
 
-            if let Err(err) = wait_for_backend(Duration::from_secs(30)) {
-                stop_backend(&managed_child);
-                return Err(err.into());
-            }
-
-            WebviewWindowBuilder::new(
-                app,
-                APP_LABEL,
-                WebviewUrl::External(BACKEND_URL.parse().expect("valid backend URL")),
-            )
-            .title(WINDOW_TITLE)
-            .inner_size(1440.0, 960.0)
-            .min_inner_size(1100.0, 720.0)
-            .resizable(true)
-            .build()?;
-
-            Ok(())
+            create_window(app.handle(), &config_for_window).map_err(Into::into)
         })
         .build(tauri::generate_context!())
         .expect("error while building Schema Studio desktop shell")

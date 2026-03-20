@@ -128,6 +128,13 @@ Verify:
 - the backend process starts automatically
 - closing the Tauri window also terminates the backend process
 - relaunching the app does not leave the previous backend bound to port `5179`
+- if you intentionally want to attach to an already-running backend during development, set `SCHEMA_STUDIO_DESKTOP_REUSE_BACKEND=1`
+
+Optional launcher config:
+
+- create `.env` from `.env.light.example`
+- point `SCHEMA_STUDIO_DESKTOP_PYTHON` at the interpreter you want Tauri to launch
+- keep `SCHEMA_STUDIO_DESKTOP_MODE=light` for now; future modes can use the same launcher contract later
 
 ## Packaging Strategy
 
