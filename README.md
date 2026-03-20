@@ -188,10 +188,35 @@ The Tauri launcher reads `.env` from the repository root before it starts the ba
 Useful desktop-specific variables:
 - `SCHEMA_STUDIO_DESKTOP_MODE` — currently `light` only
 - `SCHEMA_STUDIO_DESKTOP_PYTHON` — explicit Python interpreter path
+- `SCHEMA_STUDIO_DESKTOP_BACKEND` — explicit path to a packaged backend executable
 - `SCHEMA_STUDIO_DESKTOP_PORT` — backend port for the desktop launcher
 - `SCHEMA_STUDIO_DESKTOP_REUSE_BACKEND` — set to `1` to attach to an already-running backend during development
 
 See `docs/tauri-light-mode-plan.md` for the branch-by-branch rollout and packaging strategy.
+
+## Windows Packaging (First Desktop Target)
+
+The current packaging path targets Windows first:
+
+1. Build the frontend for Light Mode:
+   ```bash
+   cd web
+   VITE_LIGHT_MODE=true npm run build
+   ```
+2. Build the Python backend sidecar from the repo root:
+   ```bash
+   python scripts/build_light_mode_backend.py
+   ```
+3. Build the Tauri installer:
+   ```bash
+   cd web
+   npm run tauri:build
+   ```
+
+Notes:
+- The sidecar build currently uses `PyInstaller`.
+- The generated binary is placed under `web/src-tauri/binaries/`.
+- The Tauri launcher will prefer the packaged backend binary when it exists and fall back to Python only for development.
 
 ## API (Light Mode)
 

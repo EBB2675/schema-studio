@@ -175,3 +175,18 @@ The desktop shell should not hardcode Light Mode forever. Instead, it should evo
 - future modes: custom startup profiles
 
 The shell can stay stable if it launches a mode-specific backend command and waits for a mode-specific health endpoint.
+
+## Windows Sidecar Contract
+
+The first installer path uses a packaged backend sidecar:
+
+- Build a Windows backend executable with `PyInstaller`
+- Place it at `web/src-tauri/binaries/schema-studio-backend-x86_64-pc-windows-msvc.exe`
+- Configure Tauri `externalBin` to bundle that sidecar
+- Make the Rust launcher prefer the packaged backend and only fall back to Python for development
+
+This keeps the end-user flow simple:
+
+- installer includes the backend
+- no manual Python installation
+- no `SCHEMA_STUDIO_DESKTOP_PYTHON` required for normal users

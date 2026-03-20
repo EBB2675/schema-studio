@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
+    "tauri:build": "tauri build --config src-tauri/tauri.bundle.conf.json",
+    "backend:build:windows": "python ..\\scripts\\build_light_mode_backend.py",
     "test": "vitest",
     "test:run": "vitest run",
     "test:contracts": "vitest run tests/contracts.test.ts"
