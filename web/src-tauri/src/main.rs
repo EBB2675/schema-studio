@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use std::{
     env,
     fs,
@@ -413,6 +415,9 @@ fn create_window(app: &tauri::AppHandle, config: &LauncherConfig) -> Result<(), 
 
     #[cfg(debug_assertions)]
     window.open_devtools();
+
+    #[cfg(not(debug_assertions))]
+    let _ = &window;
 
     Ok(())
 }
