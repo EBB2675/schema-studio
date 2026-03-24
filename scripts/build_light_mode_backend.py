@@ -44,7 +44,7 @@ def ensure_pyinstaller() -> None:
         import PyInstaller  # noqa: F401
     except ImportError as exc:
         raise SystemExit(
-            "PyInstaller is required for Windows packaging.\n"
+            "PyInstaller is required for desktop backend packaging.\n"
             "Install it in your active environment, e.g.:\n"
             "  python -m pip install pyinstaller"
         ) from exc
@@ -70,14 +70,13 @@ def pyinstaller_command(target_triple: str, workdir: Path) -> list[str]:
     distpath = workdir / "dist"
     workpath = workdir / "build"
     specpath = workdir / "spec"
-    return [
+    command = [
         sys.executable,
         "-m",
         "PyInstaller",
         "--noconfirm",
         "--clean",
         "--onefile",
-        "--noconsole",
         "--name",
         BACKEND_NAME,
         "--distpath",
@@ -106,6 +105,9 @@ def pyinstaller_command(target_triple: str, workdir: Path) -> list[str]:
         f"{DIST_DIR}{os.pathsep}light_mode_static",
         str(ENTRYPOINT),
     ]
+    if sys.platform.startswith("win"):
+        command.insert(6, "--noconsole")
+    return command
 
 
 def main() -> None:

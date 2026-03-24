@@ -190,3 +190,21 @@ This keeps the end-user flow simple:
 - installer includes the backend
 - no manual Python installation
 - no `SCHEMA_STUDIO_DESKTOP_PYTHON` required for normal users
+
+## Linux Packaging Direction
+
+The Linux target follows the same sidecar approach as Windows:
+
+- build the frontend on Linux
+- build the backend sidecar on Linux with `PyInstaller`
+- build Linux bundles with Tauri
+
+Initial Linux bundle targets:
+
+- `.deb` for Debian and Ubuntu systems
+- `.AppImage` for portable Linux testing
+
+Important constraint:
+
+- Linux bundles should be produced on Linux, not on Windows
+- to maximize compatibility, build on an older supported base image or runner
