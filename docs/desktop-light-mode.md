@@ -132,11 +132,17 @@ cd web
 npm run tauri:build:linux
 ```
 
-Expected Linux outputs:
+Expected default Linux output:
 
 ```text
 web/src-tauri/target/release/bundle/deb/
-web/src-tauri/target/release/bundle/appimage/
+```
+
+If you also want a portable AppImage build:
+
+```bash
+cd web
+npm run tauri:build:linux:portable
 ```
 
 ## Test Checklist

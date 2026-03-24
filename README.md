@@ -251,11 +251,11 @@ The Linux installer path follows the same sidecar model:
 
 Expected Linux outputs:
 - `web/src-tauri/target/release/bundle/deb/`
-- `web/src-tauri/target/release/bundle/appimage/`
 
 Notes:
 - Build Linux bundles on Linux, not on Windows.
-- The first Linux targets are `.deb` and `.AppImage`.
+- `npm run tauri:build:linux` builds `.deb` by default.
+- If you also want an `.AppImage`, run `npm run tauri:build:linux:portable`.
 - See `docs/desktop-light-mode.md` for a fuller developer workflow.
 
 ## API (Light Mode)

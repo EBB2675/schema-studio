@@ -201,8 +201,8 @@ The Linux target follows the same sidecar approach as Windows:
 
 Initial Linux bundle targets:
 
-- `.deb` for Debian and Ubuntu systems
-- `.AppImage` for portable Linux testing
+- `.deb` for Debian and Ubuntu systems as the default build target
+- optional `.AppImage` for portable Linux testing
 
 Important constraint:
 
