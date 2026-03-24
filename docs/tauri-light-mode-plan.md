@@ -208,3 +208,15 @@ Important constraint:
 
 - Linux bundles should be produced on Linux, not on Windows
 - to maximize compatibility, build on an older supported base image or runner
+
+## Mode Extension Follow-Up
+
+After Windows and Linux Light Mode packaging, the next cleanup step is to keep the launcher extensible:
+
+- shared desktop shell behavior should stay generic
+- mode-specific details should live in a small launcher contract
+- future heavier modes should plug into that contract instead of duplicating process-management logic
+
+See:
+
+- [desktop-mode-extension.md](/D:/REPOS/schema-studio/docs/desktop-mode-extension.md)
