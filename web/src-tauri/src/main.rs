@@ -244,6 +244,14 @@ fn mode_command(mode: DesktopMode) -> Result<Vec<String>, String> {
 fn spawn_backend(config: &LauncherConfig) -> Result<Child, String> {
     let repo_root = repo_root();
     let launch = resolve_backend_launch(config, &repo_root);
+    let launch_cwd = match &launch {
+        BackendLaunch::Packaged(path) => path
+            .parent()
+            .map(Path::to_path_buf)
+            .or_else(|| env::current_dir().ok())
+            .unwrap_or_else(|| repo_root.clone()),
+        BackendLaunch::PythonModule(_) => repo_root.clone(),
+    };
     let mut cmd = match &launch {
         BackendLaunch::Packaged(path) => Command::new(path),
         BackendLaunch::PythonModule(python) => {
@@ -259,7 +267,7 @@ fn spawn_backend(config: &LauncherConfig) -> Result<Child, String> {
         cmd.env_remove("SCHEMA_STUDIO_DIST_DIR");
     }
 
-    cmd.current_dir(&repo_root)
+    cmd.current_dir(&launch_cwd)
         .env("SCHEMA_STUDIO_HOST", &config.host)
         .env("SCHEMA_STUDIO_PORT", config.port.to_string())
         .env("SCHEMA_STUDIO_PARENT_PID", std::process::id().to_string())
