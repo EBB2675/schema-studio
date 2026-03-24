@@ -4,6 +4,7 @@ from __future__ import annotations
 import ctypes
 from ctypes import wintypes
 import os
+import sys
 import threading
 import time
 from urllib.request import urlopen
@@ -100,7 +101,14 @@ def run_server(*, open_browser: bool | None = None) -> None:
     else:
         print(f"Browser auto-open disabled; server available at {url}\n")
 
-    uvicorn.run(app, host=DEFAULT_HOST, port=DEFAULT_PORT, log_level=os.getenv("UVICORN_LOG_LEVEL", "info"))
+    use_colors = sys.stdout is not None and sys.stderr is not None and not _env_flag("SCHEMA_STUDIO_HEADLESS", False)
+    uvicorn.run(
+        app,
+        host=DEFAULT_HOST,
+        port=DEFAULT_PORT,
+        log_level=os.getenv("UVICORN_LOG_LEVEL", "info"),
+        use_colors=use_colors,
+    )
 
 
 def main() -> None:

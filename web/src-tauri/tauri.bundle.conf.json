@@ -25,9 +25,12 @@
     }
   },
   "bundle": {
-    "active": false,
+    "active": true,
     "icon": [
       "icons/icon.ico"
+    ],
+    "externalBin": [
+      "binaries/schema-studio-backend"
     ],
     "targets": "all"
   }

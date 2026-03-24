@@ -143,6 +143,7 @@ export default function App() {
   const [schemaSource, setSchemaSource] = useState<string | null>(null);
   const [schemaUpdateStatus, setSchemaUpdateStatus] = useState<string | null>(null);
   const [schemaUpdating, setSchemaUpdating] = useState<boolean>(false);
+  const canUpdateSchema = isLightMode && schemaSource !== "bundled";
 
   // branch diff state
   const [branches, setBranches] = useState<string[]>([]);
@@ -2364,12 +2365,22 @@ export default function App() {
           </div>
           {isLightMode ? (
             <div className="row" style={{ marginTop: 12, gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <button className="btn secondary" type="button" onClick={updateSchema} disabled={schemaUpdating}>
-                {schemaUpdating ? "Updating schema…" : "Update schema"}
+              <button
+                className="btn secondary"
+                type="button"
+                onClick={updateSchema}
+                disabled={schemaUpdating || !canUpdateSchema}
+                title={canUpdateSchema ? undefined : "Desktop builds ship with a bundled schema. Install a newer app release to update it."}
+              >
+                {schemaUpdating ? "Updating schema…" : canUpdateSchema ? "Update schema" : "Bundled schema"}
               </button>
               {schemaUpdateStatus ? (
                 <div className="small" style={{ color: schemaUpdateStatus.startsWith("Update failed") ? "#fca5a5" : "var(--muted)" }}>
                   {schemaUpdateStatus}
+                </div>
+              ) : !canUpdateSchema ? (
+                <div className="small" style={{ color: "var(--muted)" }}>
+                  Install a newer desktop release to update the bundled schema.
                 </div>
               ) : null}
             </div>

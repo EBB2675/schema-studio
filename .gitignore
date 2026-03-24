@@ -6,4 +6,6 @@ api/_data/
 dist/
 web/src-tauri/target/
 web/src-tauri/gen/
+web/src-tauri/binaries/*
+!web/src-tauri/binaries/.gitkeep
 schema_studio.egg*

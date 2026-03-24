@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use std::{
     env,
     fs,
@@ -13,6 +15,7 @@ use tauri::{RunEvent, WebviewUrl, WebviewWindowBuilder};
 
 const APP_LABEL: &str = "main";
 const WINDOW_TITLE: &str = "Schema Studio Light";
+const SIDECAR_BASENAME: &str = "schema-studio-backend";
 
 type SharedChild = Arc<Mutex<Option<Child>>>;
 
@@ -39,6 +42,7 @@ struct LauncherConfig {
     mode: DesktopMode,
     host: String,
     port: u16,
+    backend_override: Option<String>,
     python: String,
     startup_timeout: Duration,
     reuse_backend: bool,
@@ -147,6 +151,10 @@ impl LauncherConfig {
         let host =
             env::var("SCHEMA_STUDIO_DESKTOP_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
         let port = env_u16("SCHEMA_STUDIO_DESKTOP_PORT", 5179)?;
+        let backend_override = env::var("SCHEMA_STUDIO_DESKTOP_BACKEND")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
         let startup_timeout =
             Duration::from_secs(env_u64("SCHEMA_STUDIO_DESKTOP_STARTUP_TIMEOUT_SECONDS", 30)?);
         let reuse_backend = env_flag("SCHEMA_STUDIO_DESKTOP_REUSE_BACKEND", false);
@@ -155,6 +163,7 @@ impl LauncherConfig {
             mode,
             host,
             port,
+            backend_override,
             python: preferred_python(repo_root),
             startup_timeout,
             reuse_backend,
@@ -176,6 +185,52 @@ impl LauncherConfig {
     }
 }
 
+fn sidecar_filename() -> String {
+    let triple = env::var("TAURI_ENV_TARGET_TRIPLE")
+        .or_else(|_| env::var("TARGET"))
+        .unwrap_or_else(|_| "x86_64-pc-windows-msvc".to_string());
+    if cfg!(target_os = "windows") {
+        return format!("{SIDECAR_BASENAME}-{triple}.exe");
+    }
+    format!("{SIDECAR_BASENAME}-{triple}")
+}
+
+fn packaged_backend_candidates(repo_root: &Path) -> Vec<PathBuf> {
+    let sidecar_name = sidecar_filename();
+    let mut candidates = vec![
+        repo_root.join("web").join("src-tauri").join("binaries").join(&sidecar_name),
+    ];
+
+    if let Ok(current_exe) = env::current_exe() {
+        if let Some(exe_dir) = current_exe.parent() {
+            candidates.push(exe_dir.join(&sidecar_name));
+            candidates.push(exe_dir.join("resources").join(&sidecar_name));
+            candidates.push(exe_dir.join("Resources").join(&sidecar_name));
+        }
+    }
+
+    candidates
+}
+
+enum BackendLaunch {
+    Packaged(PathBuf),
+    PythonModule(String),
+}
+
+fn resolve_backend_launch(config: &LauncherConfig, repo_root: &Path) -> BackendLaunch {
+    if let Some(path) = config.backend_override.as_ref() {
+        return BackendLaunch::Packaged(PathBuf::from(path));
+    }
+
+    for candidate in packaged_backend_candidates(repo_root) {
+        if candidate.exists() {
+            return BackendLaunch::Packaged(candidate);
+        }
+    }
+
+    BackendLaunch::PythonModule(config.python.clone())
+}
+
 fn mode_command(mode: DesktopMode) -> Result<Vec<String>, String> {
     match mode {
         DesktopMode::Light => Ok(vec!["-m".to_string(), "api.light_mode.cli".to_string()]),
@@ -188,12 +243,31 @@ fn mode_command(mode: DesktopMode) -> Result<Vec<String>, String> {
 
 fn spawn_backend(config: &LauncherConfig) -> Result<Child, String> {
     let repo_root = repo_root();
-    let mut cmd = Command::new(&config.python);
-    for arg in mode_command(config.mode)? {
-        cmd.arg(arg);
+    let launch = resolve_backend_launch(config, &repo_root);
+    let launch_cwd = match &launch {
+        BackendLaunch::Packaged(path) => path
+            .parent()
+            .map(Path::to_path_buf)
+            .or_else(|| env::current_dir().ok())
+            .unwrap_or_else(|| repo_root.clone()),
+        BackendLaunch::PythonModule(_) => repo_root.clone(),
+    };
+    let mut cmd = match &launch {
+        BackendLaunch::Packaged(path) => Command::new(path),
+        BackendLaunch::PythonModule(python) => {
+            let mut cmd = Command::new(python);
+            for arg in mode_command(config.mode)? {
+                cmd.arg(arg);
+            }
+            cmd
+        }
+    };
+
+    if matches!(launch, BackendLaunch::Packaged(_)) {
+        cmd.env_remove("SCHEMA_STUDIO_DIST_DIR");
     }
 
-    cmd.current_dir(&repo_root)
+    cmd.current_dir(&launch_cwd)
         .env("SCHEMA_STUDIO_HOST", &config.host)
         .env("SCHEMA_STUDIO_PORT", config.port.to_string())
         .env("SCHEMA_STUDIO_PARENT_PID", std::process::id().to_string())
@@ -235,10 +309,14 @@ fn spawn_backend(config: &LauncherConfig) -> Result<Child, String> {
     }
 
     cmd.spawn().map_err(|err| {
-        format!(
-            "failed to launch backend with interpreter {:?}: {err}",
-            config.python
-        )
+        match &launch {
+            BackendLaunch::Packaged(path) => {
+                format!("failed to launch packaged backend {:?}: {err}", path)
+            }
+            BackendLaunch::PythonModule(python) => {
+                format!("failed to launch backend with interpreter {:?}: {err}", python)
+            }
+        }
     })
 }
 
@@ -345,6 +423,9 @@ fn create_window(app: &tauri::AppHandle, config: &LauncherConfig) -> Result<(), 
 
     #[cfg(debug_assertions)]
     window.open_devtools();
+
+    #[cfg(not(debug_assertions))]
+    let _ = &window;
 
     Ok(())
 }
