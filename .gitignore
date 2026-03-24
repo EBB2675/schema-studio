@@ -5,4 +5,5 @@ api/_data/
 .tmp/
 dist/
 web/src-tauri/target/
+web/src-tauri/gen/
 schema_studio.egg*

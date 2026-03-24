@@ -182,6 +182,15 @@ npm install
 npm run tauri:dev
 ```
 
+You can optionally create a repo-root `.env` using `.env.light.example`.
+The Tauri launcher reads `.env` from the repository root before it starts the backend.
+
+Useful desktop-specific variables:
+- `SCHEMA_STUDIO_DESKTOP_MODE` — currently `light` only
+- `SCHEMA_STUDIO_DESKTOP_PYTHON` — explicit Python interpreter path
+- `SCHEMA_STUDIO_DESKTOP_PORT` — backend port for the desktop launcher
+- `SCHEMA_STUDIO_DESKTOP_REUSE_BACKEND` — set to `1` to attach to an already-running backend during development
+
 See `docs/tauri-light-mode-plan.md` for the branch-by-branch rollout and packaging strategy.
 
 ## API (Light Mode)

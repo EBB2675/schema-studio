@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import mimetypes
 import os
 from pathlib import Path
 from threading import Lock
@@ -17,7 +18,6 @@ import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from extractor.graph_builder import _root_namespace, build_graph, list_sections
@@ -45,6 +45,29 @@ DEFAULT_BASE_NS = os.getenv("SCHEMA_STUDIO_DEFAULT_NAMESPACE", "nomad_simulation
 AUTO_BOOTSTRAP_SCHEMA = os.getenv("SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA", "1").lower() not in {"0", "false", "no"}
 
 logger = logging.getLogger(__name__)
+
+# On some Windows setups, the registry-backed mimetype lookup maps `.js` to
+# `text/plain`, which causes modern browsers and WebView2 to reject Vite's ES modules.
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("application/javascript", ".mjs")
+mimetypes.add_type("text/css", ".css")
+
+ASSET_MEDIA_TYPES = {
+    ".js": "application/javascript",
+    ".mjs": "application/javascript",
+    ".css": "text/css",
+    ".svg": "image/svg+xml",
+    ".json": "application/json",
+    ".map": "application/json",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".ico": "image/x-icon",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+}
 
 # Keep this list in sync with web/src/components/quantityShared.ts.
 SUPPORTED_CUSTOM_DTYPES = {
@@ -740,8 +763,19 @@ def _dist_path() -> Path:
 
 dist_dir = _dist_path()
 logger.info("Serving frontend assets from: %s", dist_dir)
-if dist_dir.exists():
-    app.mount("/assets", StaticFiles(directory=dist_dir / "assets"), name="assets")
+
+
+def _asset_file_response(asset_path: Path) -> FileResponse:
+    media_type = ASSET_MEDIA_TYPES.get(asset_path.suffix.lower())
+    return FileResponse(
+        asset_path,
+        media_type=media_type,
+        headers={
+            "Cache-Control": "no-store, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 def _index_file_response(index: Path) -> FileResponse:
@@ -754,6 +788,19 @@ def _index_file_response(index: Path) -> FileResponse:
             "Expires": "0",
         },
     )
+
+
+@app.get("/assets/{asset_path:path}")
+async def static_assets(asset_path: str):
+    target = (dist_dir / "assets" / asset_path).resolve()
+    assets_root = (dist_dir / "assets").resolve()
+    try:
+        target.relative_to(assets_root)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Not found")
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+    return _asset_file_response(target)
 
 
 @app.get("/")
