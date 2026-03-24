@@ -117,6 +117,34 @@ Expected MSI output:
 web\src-tauri\target\release\bundle\msi\
 ```
 
+### Linux packaging
+
+Build Linux installers on a Linux machine or Linux CI runner.
+
+On Ubuntu, install the Tauri/Linux prerequisites first, then run:
+
+```bash
+cd web
+VITE_LIGHT_MODE=true npm run build
+cd ..
+python scripts/build_light_mode_backend.py
+cd web
+npm run tauri:build:linux
+```
+
+Expected default Linux output:
+
+```text
+web/src-tauri/target/release/bundle/deb/
+```
+
+If you also want a portable AppImage build:
+
+```bash
+cd web
+npm run tauri:build:linux:portable
+```
+
 ## Test Checklist
 
 ### Development

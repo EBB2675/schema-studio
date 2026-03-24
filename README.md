@@ -229,6 +229,35 @@ Use standard Windows uninstall flow:
 
 The MSI removes the installed app binaries. Local Light Mode data may remain in the user config directory; see `docs/desktop-light-mode.md` if you want a fully clean uninstall.
 
+## Linux Packaging (Ubuntu/Debian First Pass)
+
+The Linux installer path follows the same sidecar model:
+
+1. Build the frontend on Linux:
+   ```bash
+   cd web
+   VITE_LIGHT_MODE=true npm run build
+   ```
+2. Build the backend sidecar on Linux:
+   ```bash
+   cd ..
+   python scripts/build_light_mode_backend.py
+   ```
+3. Build the Linux bundles:
+   ```bash
+   cd web
+   npm run tauri:build:linux
+   ```
+
+Expected Linux outputs:
+- `web/src-tauri/target/release/bundle/deb/`
+
+Notes:
+- Build Linux bundles on Linux, not on Windows.
+- `npm run tauri:build:linux` builds `.deb` by default.
+- If you also want an `.AppImage`, run `npm run tauri:build:linux:portable`.
+- See `docs/desktop-light-mode.md` for a fuller developer workflow.
+
 ## API (Light Mode)
 
 Core endpoints:
