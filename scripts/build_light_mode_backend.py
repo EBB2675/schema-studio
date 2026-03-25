@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Build the packaged Light Mode backend sidecar used by Tauri installers."""
+
 import os
 from pathlib import Path
 import shutil
@@ -17,6 +19,7 @@ BACKEND_NAME = "schema-studio-backend"
 
 
 def host_triple() -> str:
+    """Return the active Rust target triple used for the desktop sidecar name."""
     result = subprocess.run(
         ["rustc", "--print", "host-tuple"],
         capture_output=True,
@@ -51,6 +54,7 @@ def ensure_pyinstaller() -> None:
 
 
 def ensure_frontend_dist() -> None:
+    """Require a current frontend bundle before freezing the backend."""
     if (DIST_DIR / "index.html").exists():
         return
     raise SystemExit(
@@ -67,6 +71,11 @@ def output_binary_path(target_triple: str) -> Path:
 
 
 def pyinstaller_command(target_triple: str, workdir: Path) -> list[str]:
+    """Build the PyInstaller command used for the backend sidecar.
+
+    The sidecar bundles the Light Mode frontend assets and the schema/runtime
+    dependencies needed by the local packaged backend.
+    """
     distpath = workdir / "dist"
     workpath = workdir / "build"
     specpath = workdir / "spec"
@@ -106,6 +115,7 @@ def pyinstaller_command(target_triple: str, workdir: Path) -> list[str]:
         str(ENTRYPOINT),
     ]
     if sys.platform.startswith("win"):
+        # Hide the helper console window for packaged Windows installs.
         command.insert(6, "--noconsole")
     return command
 

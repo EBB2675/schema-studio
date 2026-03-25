@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+"""Frozen backend entrypoint used by the packaged Tauri desktop app."""
+
 import os
 from pathlib import Path
 import sys
 
 
 def _ensure_headless_stdio() -> None:
+    """Replace missing stdio streams in windowless packaged runs."""
     if sys.stdin is None:
         sys.stdin = open(os.devnull, "r", encoding="utf-8")
     if sys.stdout is None:
@@ -15,6 +18,7 @@ def _ensure_headless_stdio() -> None:
 
 
 def _configure_frozen_dist() -> None:
+    """Expose bundled frontend assets and packaged-runtime flags to the backend."""
     meipass = getattr(sys, "_MEIPASS", None)
     if not meipass:
         return

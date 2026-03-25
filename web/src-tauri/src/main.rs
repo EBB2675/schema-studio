@@ -1,8 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::{
-    env,
-    fs,
+    env, fs,
     net::{SocketAddr, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -19,7 +18,9 @@ type SharedChild = Arc<Mutex<Option<Child>>>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DesktopMode {
+    // The only production desktop target today.
     Light,
+    // Reserved for a future heavier desktop profile.
     Dev,
 }
 
@@ -44,6 +45,7 @@ struct ModeDescriptor {
 }
 
 impl ModeDescriptor {
+    /// Translate a user-facing mode name into the small contract the launcher needs.
     fn for_mode(mode: DesktopMode) -> Result<Self, String> {
         match mode {
             DesktopMode::Light => Ok(Self {
@@ -78,7 +80,11 @@ impl ModeDescriptor {
 
     fn packaged_backend_candidates(self, repo_root: &Path) -> Vec<PathBuf> {
         let sidecar_name = self.sidecar_filename();
-        let mut candidates = vec![repo_root.join("web").join("src-tauri").join("binaries").join(&sidecar_name)];
+        let mut candidates = vec![repo_root
+            .join("web")
+            .join("src-tauri")
+            .join("binaries")
+            .join(&sidecar_name)];
 
         if let Ok(current_exe) = env::current_exe() {
             if let Some(exe_dir) = current_exe.parent() {
@@ -115,6 +121,10 @@ fn repo_root() -> PathBuf {
         .to_path_buf()
 }
 
+/// Load a simple repo-root `.env` file for local desktop development.
+///
+/// This is intentionally lightweight: it only fills missing environment
+/// variables and leaves any already-exported values untouched.
 fn load_repo_env(repo_root: &Path) {
     let env_path = repo_root.join(".env");
     let Ok(contents) = fs::read_to_string(env_path) else {
@@ -150,7 +160,12 @@ fn load_repo_env(repo_root: &Path) {
 fn env_flag(name: &str, default: bool) -> bool {
     env::var(name)
         .ok()
-        .map(|raw| !matches!(raw.trim().to_ascii_lowercase().as_str(), "0" | "false" | "no" | "off"))
+        .map(|raw| {
+            !matches!(
+                raw.trim().to_ascii_lowercase().as_str(),
+                "0" | "false" | "no" | "off"
+            )
+        })
         .unwrap_or(default)
 }
 
@@ -215,8 +230,10 @@ impl LauncherConfig {
             .ok()
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty());
-        let startup_timeout =
-            Duration::from_secs(env_u64("SCHEMA_STUDIO_DESKTOP_STARTUP_TIMEOUT_SECONDS", 30)?);
+        let startup_timeout = Duration::from_secs(env_u64(
+            "SCHEMA_STUDIO_DESKTOP_STARTUP_TIMEOUT_SECONDS",
+            30,
+        )?);
         let reuse_backend = env_flag("SCHEMA_STUDIO_DESKTOP_REUSE_BACKEND", false);
 
         Ok(Self {
@@ -241,7 +258,12 @@ impl LauncherConfig {
     fn socket_addr(&self) -> Result<SocketAddr, String> {
         format!("{}:{}", self.host, self.port)
             .parse()
-            .map_err(|err| format!("Invalid desktop backend address {}:{}: {err}", self.host, self.port))
+            .map_err(|err| {
+                format!(
+                    "Invalid desktop backend address {}:{}: {err}",
+                    self.host, self.port
+                )
+            })
     }
 }
 
@@ -250,6 +272,7 @@ enum BackendLaunch {
     PythonModule(String),
 }
 
+/// Resolve whether this run should use a bundled sidecar or a Python fallback.
 fn resolve_backend_launch(config: &LauncherConfig, repo_root: &Path) -> BackendLaunch {
     if let Some(path) = config.backend_override.as_ref() {
         return BackendLaunch::Packaged(PathBuf::from(path));
@@ -264,17 +287,50 @@ fn resolve_backend_launch(config: &LauncherConfig, repo_root: &Path) -> BackendL
     BackendLaunch::PythonModule(config.python.clone())
 }
 
-fn spawn_backend(config: &LauncherConfig) -> Result<Child, String> {
-    let repo_root = repo_root();
-    let launch = resolve_backend_launch(config, &repo_root);
-    let launch_cwd = match &launch {
+fn launch_workdir(repo_root: &Path, launch: &BackendLaunch) -> PathBuf {
+    match launch {
         BackendLaunch::Packaged(path) => path
             .parent()
             .map(Path::to_path_buf)
             .or_else(|| env::current_dir().ok())
-            .unwrap_or_else(|| repo_root.clone()),
-        BackendLaunch::PythonModule(_) => repo_root.clone(),
-    };
+            .unwrap_or_else(|| repo_root.to_path_buf()),
+        BackendLaunch::PythonModule(_) => repo_root.to_path_buf(),
+    }
+}
+
+fn configure_backend_env(cmd: &mut Command, config: &LauncherConfig, launch: &BackendLaunch) {
+    if matches!(launch, BackendLaunch::Packaged(_)) {
+        // The frozen backend resolves its own bundled frontend path.
+        cmd.env_remove("SCHEMA_STUDIO_DIST_DIR");
+    }
+
+    cmd.env("SCHEMA_STUDIO_HOST", &config.host)
+        .env("SCHEMA_STUDIO_PORT", config.port.to_string())
+        .env("SCHEMA_STUDIO_PARENT_PID", std::process::id().to_string())
+        .env(
+            "SCHEMA_STUDIO_OPEN_BROWSER",
+            env::var("SCHEMA_STUDIO_OPEN_BROWSER").unwrap_or_else(|_| "0".to_string()),
+        );
+
+    for key in [
+        "SCHEMA_STUDIO_HOME",
+        "SCHEMA_STUDIO_DEFAULT_PACKAGE",
+        "SCHEMA_STUDIO_DEFAULT_NAMESPACE",
+        "SCHEMA_STUDIO_DIST_DIR",
+        "SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA",
+        "SCHEMA_STUDIO_SEND_ENDPOINT",
+        "UVICORN_LOG_LEVEL",
+    ] {
+        if let Ok(value) = env::var(key) {
+            cmd.env(key, value);
+        }
+    }
+}
+
+fn spawn_backend(config: &LauncherConfig) -> Result<Child, String> {
+    let repo_root = repo_root();
+    let launch = resolve_backend_launch(config, &repo_root);
+    let launch_cwd = launch_workdir(&repo_root, &launch);
     let mut cmd = match &launch {
         BackendLaunch::Packaged(path) => Command::new(path),
         BackendLaunch::PythonModule(python) => {
@@ -286,43 +342,11 @@ fn spawn_backend(config: &LauncherConfig) -> Result<Child, String> {
         }
     };
 
-    if matches!(launch, BackendLaunch::Packaged(_)) {
-        cmd.env_remove("SCHEMA_STUDIO_DIST_DIR");
-    }
-
     cmd.current_dir(&launch_cwd)
-        .env("SCHEMA_STUDIO_HOST", &config.host)
-        .env("SCHEMA_STUDIO_PORT", config.port.to_string())
-        .env("SCHEMA_STUDIO_PARENT_PID", std::process::id().to_string())
-        .env(
-            "SCHEMA_STUDIO_OPEN_BROWSER",
-            env::var("SCHEMA_STUDIO_OPEN_BROWSER").unwrap_or_else(|_| "0".to_string()),
-        )
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
-
-    if let Ok(value) = env::var("SCHEMA_STUDIO_HOME") {
-        cmd.env("SCHEMA_STUDIO_HOME", value);
-    }
-    if let Ok(value) = env::var("SCHEMA_STUDIO_DEFAULT_PACKAGE") {
-        cmd.env("SCHEMA_STUDIO_DEFAULT_PACKAGE", value);
-    }
-    if let Ok(value) = env::var("SCHEMA_STUDIO_DEFAULT_NAMESPACE") {
-        cmd.env("SCHEMA_STUDIO_DEFAULT_NAMESPACE", value);
-    }
-    if let Ok(value) = env::var("SCHEMA_STUDIO_DIST_DIR") {
-        cmd.env("SCHEMA_STUDIO_DIST_DIR", value);
-    }
-    if let Ok(value) = env::var("SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA") {
-        cmd.env("SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA", value);
-    }
-    if let Ok(value) = env::var("SCHEMA_STUDIO_SEND_ENDPOINT") {
-        cmd.env("SCHEMA_STUDIO_SEND_ENDPOINT", value);
-    }
-    if let Ok(value) = env::var("UVICORN_LOG_LEVEL") {
-        cmd.env("UVICORN_LOG_LEVEL", value);
-    }
+    configure_backend_env(&mut cmd, config, &launch);
 
     #[cfg(target_os = "windows")]
     {
@@ -331,18 +355,20 @@ fn spawn_backend(config: &LauncherConfig) -> Result<Child, String> {
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
-    cmd.spawn().map_err(|err| {
-        match &launch {
-            BackendLaunch::Packaged(path) => {
-                format!("failed to launch packaged backend {:?}: {err}", path)
-            }
-            BackendLaunch::PythonModule(python) => {
-                format!("failed to launch backend with interpreter {:?}: {err}", python)
-            }
+    cmd.spawn().map_err(|err| match &launch {
+        BackendLaunch::Packaged(path) => {
+            format!("failed to launch packaged backend {:?}: {err}", path)
+        }
+        BackendLaunch::PythonModule(python) => {
+            format!(
+                "failed to launch backend with interpreter {:?}: {err}",
+                python
+            )
         }
     })
 }
 
+/// Check whether the configured desktop backend is already answering requests.
 fn backend_is_healthy(config: &LauncherConfig) -> bool {
     let client = match reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(1))
@@ -419,6 +445,7 @@ fn stop_backend(child_state: &SharedChild) {
     if let Some(mut child) = guard.take() {
         #[cfg(target_os = "windows")]
         {
+            // Kill the full process tree so helper children do not linger.
             let _ = Command::new("taskkill")
                 .args(["/PID", &child.id().to_string(), "/T", "/F"])
                 .stdin(Stdio::null())

@@ -43,6 +43,11 @@ def _env_flag(name: str, default: bool) -> bool:
 
 
 def _watch_parent_process() -> None:
+    """Exit when the desktop parent process disappears.
+
+    This keeps Tauri-launched backends from lingering after abrupt terminal
+    stops or desktop-shell crashes.
+    """
     raw_pid = os.getenv("SCHEMA_STUDIO_PARENT_PID", "").strip()
     if not raw_pid:
         return
@@ -90,6 +95,7 @@ def _watch_parent_process() -> None:
 
 
 def run_server(*, open_browser: bool | None = None) -> None:
+    """Run the local Light Mode server with desktop-aware defaults."""
     url = f"http://{DEFAULT_HOST}:{DEFAULT_PORT}"
     print(BANNER)
     _watch_parent_process()

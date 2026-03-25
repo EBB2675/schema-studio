@@ -75,8 +75,8 @@ For development, it is fine to set:
 
 ```env
 SCHEMA_STUDIO_DESKTOP_MODE=light
-SCHEMA_STUDIO_DESKTOP_PYTHON=D:\REPOS\schema-studio\.venv\Scripts\python.exe
-SCHEMA_STUDIO_DIST_DIR=D:\REPOS\schema-studio\web\dist
+SCHEMA_STUDIO_DESKTOP_PYTHON=<repo>\.venv\Scripts\python.exe
+SCHEMA_STUDIO_DIST_DIR=<repo>\web\dist
 SCHEMA_STUDIO_OPEN_BROWSER=0
 ```
 
@@ -172,3 +172,14 @@ See:
 - [desktop-mode-extension.md](./desktop-mode-extension.md)
 
 Use that guide before adding a heavier mode so startup, shutdown, and sidecar packaging stay consistent.
+
+## Future Direction
+
+The current desktop target is intentionally conservative:
+
+- ship Light Mode first
+- keep the backend as a local HTTP service
+- keep packaging self-contained for end users
+
+Future work should build on the shared launcher contract rather than adding
+special-case process logic per mode.

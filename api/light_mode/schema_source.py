@@ -36,6 +36,7 @@ class SchemaUnavailable(RuntimeError):
 
 
 def _is_packaged_backend() -> bool:
+    """Return whether Light Mode is running from a packaged desktop backend."""
     return getattr(sys, "frozen", False) or os.getenv("SCHEMA_STUDIO_PACKAGED_BACKEND") == "1"
 
 
@@ -82,6 +83,8 @@ def _schema_info_from_install() -> SchemaInfo:
         sys.path.insert(0, str(package_root.parent))
 
     if _is_packaged_backend():
+        # Frozen desktop builds ship a bundled schema snapshot rather than a
+        # pip-managed install, so importlib.metadata is not a reliable source.
         version = os.getenv("SCHEMA_STUDIO_SCHEMA_VERSION", "") or ""
         if not version:
             try:
