@@ -194,6 +194,7 @@ Useful desktop-specific variables:
 
 See `docs/tauri-light-mode-plan.md` for the branch-by-branch rollout and packaging strategy.
 See `docs/desktop-light-mode.md` for development, packaging, usage, and uninstall notes.
+See `docs/desktop-mode-extension.md` for how the desktop launcher is structured and how future modes can extend it.
 
 ## Windows Packaging (First Desktop Target)
 

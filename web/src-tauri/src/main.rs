@@ -14,8 +14,6 @@ use std::{
 use tauri::{RunEvent, WebviewUrl, WebviewWindowBuilder};
 
 const APP_LABEL: &str = "main";
-const WINDOW_TITLE: &str = "Schema Studio Light";
-const SIDECAR_BASENAME: &str = "schema-studio-backend";
 
 type SharedChild = Arc<Mutex<Option<Child>>>;
 
@@ -37,9 +35,70 @@ impl DesktopMode {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+struct ModeDescriptor {
+    mode: DesktopMode,
+    window_title: &'static str,
+    sidecar_basename: &'static str,
+    health_path: &'static str,
+}
+
+impl ModeDescriptor {
+    fn for_mode(mode: DesktopMode) -> Result<Self, String> {
+        match mode {
+            DesktopMode::Light => Ok(Self {
+                mode,
+                window_title: "Schema Studio Light",
+                sidecar_basename: "schema-studio-backend",
+                health_path: "/health",
+            }),
+            DesktopMode::Dev => Err(
+                "Desktop launcher mode extension is prepared, but only Light Mode is implemented right now."
+                    .to_string(),
+            ),
+        }
+    }
+
+    fn python_command(self) -> Vec<String> {
+        match self.mode {
+            DesktopMode::Light => vec!["-m".to_string(), "api.light_mode.cli".to_string()],
+            DesktopMode::Dev => Vec::new(),
+        }
+    }
+
+    fn sidecar_filename(self) -> String {
+        let triple = env::var("TAURI_ENV_TARGET_TRIPLE")
+            .or_else(|_| env::var("TARGET"))
+            .unwrap_or_else(|_| "x86_64-pc-windows-msvc".to_string());
+        if cfg!(target_os = "windows") {
+            return format!("{}-{triple}.exe", self.sidecar_basename);
+        }
+        format!("{}-{triple}", self.sidecar_basename)
+    }
+
+    fn packaged_backend_candidates(self, repo_root: &Path) -> Vec<PathBuf> {
+        let sidecar_name = self.sidecar_filename();
+        let mut candidates = vec![repo_root.join("web").join("src-tauri").join("binaries").join(&sidecar_name)];
+
+        if let Ok(current_exe) = env::current_exe() {
+            if let Some(exe_dir) = current_exe.parent() {
+                candidates.push(exe_dir.join(&sidecar_name));
+                candidates.push(exe_dir.join("resources").join(&sidecar_name));
+                candidates.push(exe_dir.join("Resources").join(&sidecar_name));
+            }
+        }
+
+        candidates
+    }
+
+    fn health_url(self, host: &str, port: u16) -> String {
+        format!("http://{host}:{port}{}", self.health_path)
+    }
+}
+
 #[derive(Clone, Debug)]
 struct LauncherConfig {
-    mode: DesktopMode,
+    mode: ModeDescriptor,
     host: String,
     port: u16,
     backend_override: Option<String>,
@@ -145,9 +204,10 @@ fn preferred_python(repo_root: &Path) -> String {
 
 impl LauncherConfig {
     fn from_env(repo_root: &Path) -> Result<Self, String> {
-        let mode = DesktopMode::parse(
+        let raw_mode = DesktopMode::parse(
             &env::var("SCHEMA_STUDIO_DESKTOP_MODE").unwrap_or_else(|_| "light".to_string()),
         )?;
+        let mode = ModeDescriptor::for_mode(raw_mode)?;
         let host =
             env::var("SCHEMA_STUDIO_DESKTOP_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
         let port = env_u16("SCHEMA_STUDIO_DESKTOP_PORT", 5179)?;
@@ -175,7 +235,7 @@ impl LauncherConfig {
     }
 
     fn health_url(&self) -> String {
-        format!("{}/health", self.base_url())
+        self.mode.health_url(&self.host, self.port)
     }
 
     fn socket_addr(&self) -> Result<SocketAddr, String> {
@@ -183,33 +243,6 @@ impl LauncherConfig {
             .parse()
             .map_err(|err| format!("Invalid desktop backend address {}:{}: {err}", self.host, self.port))
     }
-}
-
-fn sidecar_filename() -> String {
-    let triple = env::var("TAURI_ENV_TARGET_TRIPLE")
-        .or_else(|_| env::var("TARGET"))
-        .unwrap_or_else(|_| "x86_64-pc-windows-msvc".to_string());
-    if cfg!(target_os = "windows") {
-        return format!("{SIDECAR_BASENAME}-{triple}.exe");
-    }
-    format!("{SIDECAR_BASENAME}-{triple}")
-}
-
-fn packaged_backend_candidates(repo_root: &Path) -> Vec<PathBuf> {
-    let sidecar_name = sidecar_filename();
-    let mut candidates = vec![
-        repo_root.join("web").join("src-tauri").join("binaries").join(&sidecar_name),
-    ];
-
-    if let Ok(current_exe) = env::current_exe() {
-        if let Some(exe_dir) = current_exe.parent() {
-            candidates.push(exe_dir.join(&sidecar_name));
-            candidates.push(exe_dir.join("resources").join(&sidecar_name));
-            candidates.push(exe_dir.join("Resources").join(&sidecar_name));
-        }
-    }
-
-    candidates
 }
 
 enum BackendLaunch {
@@ -222,23 +255,13 @@ fn resolve_backend_launch(config: &LauncherConfig, repo_root: &Path) -> BackendL
         return BackendLaunch::Packaged(PathBuf::from(path));
     }
 
-    for candidate in packaged_backend_candidates(repo_root) {
+    for candidate in config.mode.packaged_backend_candidates(repo_root) {
         if candidate.exists() {
             return BackendLaunch::Packaged(candidate);
         }
     }
 
     BackendLaunch::PythonModule(config.python.clone())
-}
-
-fn mode_command(mode: DesktopMode) -> Result<Vec<String>, String> {
-    match mode {
-        DesktopMode::Light => Ok(vec!["-m".to_string(), "api.light_mode.cli".to_string()]),
-        DesktopMode::Dev => Err(
-            "Desktop launcher contract is ready for future modes, but only Light Mode is implemented right now."
-                .to_string(),
-        ),
-    }
 }
 
 fn spawn_backend(config: &LauncherConfig) -> Result<Child, String> {
@@ -256,7 +279,7 @@ fn spawn_backend(config: &LauncherConfig) -> Result<Child, String> {
         BackendLaunch::Packaged(path) => Command::new(path),
         BackendLaunch::PythonModule(python) => {
             let mut cmd = Command::new(python);
-            for arg in mode_command(config.mode)? {
+            for arg in config.mode.python_command() {
                 cmd.arg(arg);
             }
             cmd
@@ -415,7 +438,7 @@ fn create_window(app: &tauri::AppHandle, config: &LauncherConfig) -> Result<(), 
         APP_LABEL,
         WebviewUrl::External(config.base_url().parse().expect("valid backend URL")),
     )
-    .title(WINDOW_TITLE)
+    .title(config.mode.window_title)
     .inner_size(1440.0, 960.0)
     .min_inner_size(1100.0, 720.0)
     .resizable(true)

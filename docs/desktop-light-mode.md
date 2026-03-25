@@ -153,6 +153,7 @@ npm run tauri:build:linux:portable
 - no extra browser tab opens
 - closing the app removes the backend listener on `127.0.0.1:5179`
 - `Build graph` succeeds for the default package
+- the launcher reports `light` behavior through the shared mode contract without changing the working Light Mode UX
 
 ### Packaged Windows build
 
@@ -161,3 +162,13 @@ npm run tauri:build:linux:portable
 - `Build graph` works immediately
 - local edits survive closing and reopening the app
 - uninstall works from Windows Settings
+
+## Extending Beyond Light Mode
+
+The desktop shell is now structured so shared launcher behavior is separate from mode-specific rules.
+
+See:
+
+- [desktop-mode-extension.md](./desktop-mode-extension.md)
+
+Use that guide before adding a heavier mode so startup, shutdown, and sidecar packaging stay consistent.
