@@ -11,7 +11,7 @@ The desktop shell now separates:
 
 The shared behavior lives in:
 
-- [main.rs](/D:/REPOS/schema-studio/web/src-tauri/src/main.rs)
+- [main.rs](../web/src-tauri/src/main.rs)
 
 The mode-specific behavior is represented by a small `ModeDescriptor` in that file.
 
@@ -37,7 +37,7 @@ That means a new mode can reuse the same:
 
 ## How To Add Another Mode
 
-1. Extend `DesktopMode` in [main.rs](/D:/REPOS/schema-studio/web/src-tauri/src/main.rs).
+1. Extend `DesktopMode` in [main.rs](../web/src-tauri/src/main.rs).
 2. Add a `ModeDescriptor::for_mode(...)` entry for the new mode.
 3. Define the new mode's:
    - `window_title`

@@ -169,6 +169,6 @@ The desktop shell is now structured so shared launcher behavior is separate from
 
 See:
 
-- [desktop-mode-extension.md](/D:/REPOS/schema-studio/docs/desktop-mode-extension.md)
+- [desktop-mode-extension.md](./desktop-mode-extension.md)
 
 Use that guide before adding a heavier mode so startup, shutdown, and sidecar packaging stay consistent.

@@ -219,4 +219,4 @@ After Windows and Linux Light Mode packaging, the next cleanup step is to keep t
 
 See:
 
-- [desktop-mode-extension.md](/D:/REPOS/schema-studio/docs/desktop-mode-extension.md)
+- [desktop-mode-extension.md](./desktop-mode-extension.md)
