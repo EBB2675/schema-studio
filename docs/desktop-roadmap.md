@@ -39,6 +39,24 @@ When desktop behavior changes, those docs should be updated together.
 1. Keep Light Mode stable across Windows and Linux packaging flows.
 2. Add CI coverage for desktop bundle production where practical.
 3. Keep the packaged runtime self-contained and avoid introducing manual setup for users.
+4. Decide how packaged builds should handle schema packages that are normally first fetched from the internet.
+
+## Schema Package Strategy
+
+The next important product decision is how to handle packages such as
+`nomad-simulations` that may need an online fetch or refresh step.
+
+Options to evaluate:
+
+1. keep shipping a bundled snapshot only
+2. allow an explicit in-app online bootstrap/update flow when internet is available
+3. support a hybrid model with a bundled fallback plus an opt-in online refresh
+
+Whatever path is chosen should preserve:
+
+- a working offline-first install
+- a clear user experience when the internet is unavailable
+- deterministic behavior for packaged desktop releases
 
 ## Medium-Term Priorities
 

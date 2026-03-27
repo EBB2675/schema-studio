@@ -15,6 +15,7 @@ The Windows installer currently ships:
 Current limitation:
 - packaged builds do not self-update the bundled schema yet
 - to get a newer schema, install a newer desktop release
+- package bootstrap/update strategy for schemas that normally need an internet fetch is still a follow-up item
 
 ## Using The Installed App
 

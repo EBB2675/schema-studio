@@ -355,6 +355,14 @@ fn spawn_backend(config: &LauncherConfig) -> Result<Child, String> {
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // Put the backend in its own process group so shutdown can terminate any
+        // helper children it spawned, such as schema update subprocesses.
+        cmd.process_group(0);
+    }
+
     cmd.spawn().map_err(|err| match &launch {
         BackendLaunch::Packaged(path) => {
             format!("failed to launch packaged backend {:?}: {err}", path)
@@ -448,6 +456,32 @@ fn stop_backend(child_state: &SharedChild) {
             // Kill the full process tree so helper children do not linger.
             let _ = Command::new("taskkill")
                 .args(["/PID", &child.id().to_string(), "/T", "/F"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+        }
+
+        #[cfg(unix)]
+        {
+            let group_id = format!("-{}", child.id());
+            let _ = Command::new("kill")
+                .args(["-TERM", &group_id])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status();
+
+            let wait_deadline = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < wait_deadline {
+                if matches!(child.try_wait(), Ok(Some(_))) {
+                    return;
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+
+            let _ = Command::new("kill")
+                .args(["-KILL", &group_id])
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())

@@ -176,7 +176,6 @@ For desktop-specific setup, testing, packaging, and maintenance notes, use the d
 - [Desktop Light Mode](docs/desktop-light-mode.md)
 - [Desktop Mode Extension](docs/desktop-mode-extension.md)
 - [Desktop Roadmap](docs/desktop-roadmap.md)
-- [Tauri Rollout Plan](docs/tauri-light-mode-plan.md)
 
 ## API (Light Mode)
 
