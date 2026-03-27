@@ -44,7 +44,7 @@ By default, Light Mode stores local data under the platform config directory use
 On Windows that is typically under:
 
 ```text
-%APPDATA%\schema_studio_light\schema_studio_light\
+%APPDATA%\schema_studio_light\
 ```
 
 The main file is:
@@ -58,7 +58,7 @@ If you want a fully clean uninstall, remove that folder after uninstalling the a
 On macOS that data is typically under:
 
 ```text
-~/Library/Application Support/schema_studio_light/schema_studio_light/
+~/Library/Application Support/schema_studio_light/
 ```
 
 ## Development Workflow
