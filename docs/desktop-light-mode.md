@@ -92,6 +92,8 @@ The Tauri launcher reads the repo-root `.env`.
 
 For development, it is fine to set:
 
+macOS / Linux:
+
 ```env
 SCHEMA_STUDIO_DESKTOP_MODE=light
 SCHEMA_STUDIO_DESKTOP_PYTHON=<repo>/.venv/bin/python
@@ -99,9 +101,14 @@ SCHEMA_STUDIO_DIST_DIR=<repo>/web/dist
 SCHEMA_STUDIO_OPEN_BROWSER=0
 ```
 
-On Windows, replace the paths with:
-- `SCHEMA_STUDIO_DESKTOP_PYTHON=<repo>\.venv\Scripts\python.exe`
-- `SCHEMA_STUDIO_DIST_DIR=<repo>\web\dist`
+Windows:
+
+```env
+SCHEMA_STUDIO_DESKTOP_MODE=light
+SCHEMA_STUDIO_DESKTOP_PYTHON=<repo>\.venv\Scripts\python.exe
+SCHEMA_STUDIO_DIST_DIR=<repo>\web\dist
+SCHEMA_STUDIO_OPEN_BROWSER=0
+```
 
 Then run:
 
