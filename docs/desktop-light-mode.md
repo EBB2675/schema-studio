@@ -6,7 +6,7 @@ This document covers the current Tauri desktop path for Schema Studio Light Mode
 
 The packaged desktop app is designed so end users do not need to install Python, create a virtual environment, or run `pip install`.
 
-The Windows installer currently ships:
+The packaged desktop app currently ships:
 - the Tauri desktop shell
 - a bundled Python backend executable
 - a bundled Light Mode frontend build
@@ -19,7 +19,7 @@ Current limitation:
 
 ## Using The Installed App
 
-1. Install the Windows package.
+1. Install the desktop package for your platform.
 2. Launch `Schema Studio Light`.
 3. Choose a package such as `nomad_simulations.schema_packages.model_method`.
 4. Choose a root section if you want to narrow the graph.
@@ -35,6 +35,8 @@ On Windows, uninstall the app using one of these normal system paths:
 
 Uninstalling the MSI removes the app binaries. Local user data may remain.
 
+On macOS, remove `Schema Studio Light.app` from `/Applications` or wherever you installed it.
+
 ## Local Data
 
 By default, Light Mode stores local data under the platform config directory used by `platformdirs`.
@@ -42,7 +44,7 @@ By default, Light Mode stores local data under the platform config directory use
 On Windows that is typically under:
 
 ```text
-%APPDATA%\schema_studio_light\schema_studio_light\
+%APPDATA%\schema_studio_light\
 ```
 
 The main file is:
@@ -53,9 +55,25 @@ light_mode.sqlite3
 
 If you want a fully clean uninstall, remove that folder after uninstalling the app.
 
+On macOS that data is typically under:
+
+```text
+~/Library/Application Support/schema_studio_light/
+```
+
 ## Development Workflow
 
 ### Backend + frontend from source
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -e .
+cd web
+npm install
+VITE_LIGHT_MODE=true npm run build
+cd ..
+```
 
 ```powershell
 python -m venv .venv
@@ -74,6 +92,17 @@ The Tauri launcher reads the repo-root `.env`.
 
 For development, it is fine to set:
 
+macOS / Linux:
+
+```env
+SCHEMA_STUDIO_DESKTOP_MODE=light
+SCHEMA_STUDIO_DESKTOP_PYTHON=<repo>/.venv/bin/python
+SCHEMA_STUDIO_DIST_DIR=<repo>/web/dist
+SCHEMA_STUDIO_OPEN_BROWSER=0
+```
+
+Windows:
+
 ```env
 SCHEMA_STUDIO_DESKTOP_MODE=light
 SCHEMA_STUDIO_DESKTOP_PYTHON=<repo>\.venv\Scripts\python.exe
@@ -83,12 +112,53 @@ SCHEMA_STUDIO_OPEN_BROWSER=0
 
 Then run:
 
+```bash
+cd web
+npm run tauri:dev
+```
+
 ```powershell
 cd web
 npm run tauri:dev
 ```
 
-### Desktop packaging
+### macOS packaging
+
+Build macOS app bundles on a Mac.
+
+1. Build the frontend:
+
+```bash
+cd web
+VITE_LIGHT_MODE=true npm run build
+cd ..
+```
+
+2. Build the bundled backend executable for the active Mac architecture:
+
+```bash
+.venv/bin/python scripts/build_light_mode_backend.py
+```
+
+3. Build the macOS app bundle and DMG:
+
+```bash
+cd web
+npm run tauri:build:macos
+```
+
+Expected macOS outputs:
+
+```text
+web/src-tauri/target/release/bundle/macos/
+web/src-tauri/target/release/bundle/dmg/
+```
+
+Notes:
+- the backend sidecar name is architecture-specific, so Apple Silicon builds produce `aarch64-apple-darwin` binaries and Intel builds produce `x86_64-apple-darwin` binaries
+- use `npm run tauri:build:macos:app` if you only want the `.app` bundle during local iteration
+
+### Windows packaging
 
 1. Build the frontend:
 
@@ -146,6 +216,18 @@ cd web
 npm run tauri:build:linux:portable
 ```
 
+### macOS signing and notarization
+
+For local testing on a Mac, an unsigned build is often enough. For wider internal distribution, you can use ad-hoc signing:
+
+```bash
+export APPLE_SIGNING_IDENTITY=-
+cd web
+npm run tauri:build:macos
+```
+
+For a release you distribute outside your machine, use an Apple Developer signing identity and notarization credentials instead of ad-hoc signing.
+
 ## Test Checklist
 
 ### Development
@@ -163,6 +245,15 @@ npm run tauri:build:linux:portable
 - `Build graph` works immediately
 - local edits survive closing and reopening the app
 - uninstall works from Windows Settings
+
+### Packaged macOS build
+
+- open the generated `.app` directly from the build output
+- launching the app opens one app window and no browser tab
+- `Build graph` works immediately
+- local edits survive closing and reopening the app
+- the bundled backend file exists with the active Mac target triple suffix
+- if you build a DMG, the app can be dragged into `/Applications`
 
 ## Extending Beyond Light Mode
 

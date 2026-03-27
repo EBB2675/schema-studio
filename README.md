@@ -170,6 +170,8 @@ Current desktop characteristics:
 - packaged Python backend sidecar
 - self-contained Windows installer support
 - first-pass Linux `.deb` packaging support
+- first-pass macOS `.app` / `.dmg` packaging support
+
 
 For desktop-specific setup, testing, packaging, and maintenance notes, use the dedicated docs:
 
