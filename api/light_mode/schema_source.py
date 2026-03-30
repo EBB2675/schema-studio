@@ -11,6 +11,7 @@ import importlib
 import importlib.metadata
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -27,11 +28,16 @@ UPGRADE_TARGET = f"git+{DEFAULT_REMOTE_REPO}@{DEFAULT_BRANCH}"
 class SchemaInfo:
     package_root: Path
     version: str
-    source: str  # "installed" | "remote-develop"
+    source: str  # "installed" | "remote-develop" | "bundled"
 
 
 class SchemaUnavailable(RuntimeError):
     pass
+
+
+def _is_packaged_backend() -> bool:
+    """Return whether Light Mode is running from a packaged desktop backend."""
+    return getattr(sys, "frozen", False) or os.getenv("SCHEMA_STUDIO_PACKAGED_BACKEND") == "1"
 
 
 def _distribution() -> importlib.metadata.Distribution:
@@ -72,10 +78,23 @@ def _direct_url_payload(dist: importlib.metadata.Distribution) -> dict | None:
 
 
 def _schema_info_from_install() -> SchemaInfo:
-    dist = _distribution()
     package_root = _package_root()
     if str(package_root.parent) not in sys.path:
         sys.path.insert(0, str(package_root.parent))
+
+    if _is_packaged_backend():
+        # Frozen desktop builds ship a bundled schema snapshot rather than a
+        # pip-managed install, so importlib.metadata is not a reliable source.
+        version = os.getenv("SCHEMA_STUDIO_SCHEMA_VERSION", "") or ""
+        if not version:
+            try:
+                package = importlib.import_module(PACKAGE_IMPORT)
+            except Exception:
+                package = None
+            version = getattr(package, "__version__", None) or "bundled"
+        return SchemaInfo(package_root=package_root, version=version, source="bundled")
+
+    dist = _distribution()
 
     direct_url = _direct_url_payload(dist)
     if not direct_url:
@@ -125,6 +144,11 @@ def update_schema() -> SchemaInfo:
     Upgrade to the latest develop branch package using pip.
     Keeps local Light Mode edits in SQLite.
     """
+    if _is_packaged_backend():
+        raise SchemaUnavailable(
+            "Schema updates are disabled in the packaged desktop build. Reinstall a newer desktop release to get a newer bundled schema."
+        )
+
     cmd = [sys.executable, "-m", "pip", "install", "--upgrade", UPGRADE_TARGET]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
