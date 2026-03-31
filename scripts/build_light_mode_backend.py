@@ -101,6 +101,8 @@ def pyinstaller_command(target_triple: str, workdir: Path) -> list[str]:
         "--collect-all",
         "nomad_simulations",
         "--collect-all",
+        "bam_masterdata",
+        "--collect-all",
         "nomad",
         "--collect-all",
         "uvicorn",

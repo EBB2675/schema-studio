@@ -10,7 +10,8 @@ The Windows installer currently ships:
 - the Tauri desktop shell
 - a bundled Python backend executable
 - a bundled Light Mode frontend build
-- a bundled `nomad_simulations` schema package snapshot
+- bundled schema runtime assets for `nomad-simulations`
+- bundled schema runtime assets for `bam-masterdata`
 
 Current limitation:
 - packaged builds do not self-update the bundled schema yet
@@ -21,9 +22,10 @@ Current limitation:
 
 1. Install the Windows package.
 2. Launch `Schema Studio Light`.
-3. Choose a package such as `nomad_simulations.schema_packages.model_method`.
-4. Choose a root section if you want to narrow the graph.
-5. Click `Build graph`.
+3. Choose a schema family first.
+4. Choose a package such as `nomad_simulations.schema_packages.model_method`.
+5. Choose a root section if you want to narrow the graph.
+6. Click `Build graph`.
 
 Light Mode stores local state in SQLite. Your edits persist between launches.
 
@@ -153,14 +155,15 @@ npm run tauri:build:linux:portable
 - `npm run tauri:dev` opens the desktop window
 - no extra browser tab opens
 - closing the app removes the backend listener on `127.0.0.1:5179`
-- `Build graph` succeeds for the default package
+- both schema families are listed before graph building
+- `Build graph` succeeds for both `nomad-simulations` and `bam-masterdata`
 - the launcher reports `light` behavior through the shared mode contract without changing the working Light Mode UX
 
 ### Packaged Windows build
 
 - install the MSI on a machine without using the repo checkout
 - launching the app opens one app window and no console window
-- `Build graph` works immediately
+- `Build graph` works for both bundled schema families
 - local edits survive closing and reopening the app
 - uninstall works from Windows Settings
 

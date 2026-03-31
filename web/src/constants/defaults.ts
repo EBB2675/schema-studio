@@ -12,6 +12,7 @@ export const DEFAULT_BRANCH = import.meta.env.VITE_DEFAULT_BRANCH ?? "develop";
 
 export const WORKSPACE_PRESETS = [
   {
+    key: "nomad",
     label: "nomad-simulations",
     namespace: "nomad_simulations.schema_packages",
     branch: "develop",
@@ -19,6 +20,7 @@ export const WORKSPACE_PRESETS = [
     root: "ModelMethod",
   },
   {
+    key: "bam",
     label: "bam-masterdata",
     namespace: "bam_masterdata.datamodel",
     branch: "main",

@@ -20,7 +20,7 @@ import {
 } from "./types/api";
 import type { WorkspaceState } from "./types/workspace";
 import { API_FEATURE_HEADER, API_VERSION, API_VERSION_HEADER, DEFAULT_FEATURE_FLAGS } from "./constants/api";
-import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_ROOT, DEFAULT_PACKAGE, LIGHT_MODE } from "./constants/defaults";
+import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_ROOT, DEFAULT_PACKAGE, LIGHT_MODE, WORKSPACE_PRESETS } from "./constants/defaults";
 import { useWorkspaceStore } from "./store/workspace";
 import { fqidFromParts, normalizeId, normalizeLabel, normalizeModule } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
@@ -49,6 +49,21 @@ type GraphRequestParams = {
 type GraphTaskBody = {
   branch: string;
   package: string;
+};
+
+type SchemaProfileSummary = {
+  key: string;
+  label: string;
+  default_branch: string;
+  default_package: string;
+  default_base_namespace: string;
+  default_root: string;
+  available: boolean;
+  current: boolean;
+  version?: string | null;
+  source?: string | null;
+  error?: string | null;
+  packaged?: boolean;
 };
 
 type TaskEnqueueResponse = WorkspaceEnvelope & {
@@ -141,6 +156,9 @@ export default function App() {
   const [sendDesignEnabled, setSendDesignEnabled] = useState<boolean>(false);
   const [schemaVersion, setSchemaVersion] = useState<string | null>(null);
   const [schemaSource, setSchemaSource] = useState<string | null>(null);
+  const [schemaProfileKey, setSchemaProfileKey] = useState<string | null>(null);
+  const [schemaProfileError, setSchemaProfileError] = useState<string | null>(null);
+  const [schemaProfiles, setSchemaProfiles] = useState<SchemaProfileSummary[]>([]);
   const [schemaUpdateStatus, setSchemaUpdateStatus] = useState<string | null>(null);
   const [schemaUpdating, setSchemaUpdating] = useState<boolean>(false);
   const canUpdateSchema = isLightMode && schemaSource !== "bundled";
@@ -317,6 +335,7 @@ export default function App() {
 
     workspaceStateRef.current = ws;
     setWorkspace(ws);
+    setSchemaProfileKey(inferProfileKey(ws.package));
     applyWorkspaceInStore(ws);
     if (ws.branch) {
       setPackageBranch(ws.branch);
@@ -457,6 +476,20 @@ export default function App() {
     return normalizeModule(value) || value;
   }, []);
 
+  const inferProfileKey = useCallback((value?: string | null) => {
+    const normalized = normalizePackageName(value);
+    if (normalized.startsWith("bam_masterdata")) return "bam";
+    if (normalized.startsWith("nomad_simulations")) return "nomad";
+    return null;
+  }, [normalizePackageName]);
+
+  const currentSchemaProfile = useMemo(
+    () => schemaProfiles.find((profile) => profile.key === schemaProfileKey) ?? null,
+    [schemaProfileKey, schemaProfiles]
+  );
+  const schemaSelectionRequired = isLightMode && !startEmpty && !currentSchemaProfile;
+  const selectedSchemaReady = !schemaSelectionRequired && (!currentSchemaProfile || currentSchemaProfile.available);
+
   const filterActiveAuditForPackage = useCallback(
     (entries: AuditTrailEntry[], targetPackage?: string | null) => {
       const normalizedTarget = normalizePackageName(targetPackage);
@@ -509,6 +542,8 @@ export default function App() {
       const res = await api.get("/schema/version");
       setSchemaVersion(res.data?.version || null);
       setSchemaSource(res.data?.source || null);
+      setSchemaProfileKey(typeof res.data?.schema_profile === "string" ? res.data.schema_profile : null);
+      setSchemaProfileError(null);
       setSendDesignEnabled(Boolean(res.data?.send_design_enabled));
       if (opts?.promoteLight && !isLightMode) {
         setRuntimeLightMode(true);
@@ -519,6 +554,8 @@ export default function App() {
       }
       return true;
     } catch (error) {
+      setSchemaVersion(null);
+      setSchemaSource(null);
       setSendDesignEnabled(false);
       if (!opts?.silent) {
         setSchemaUpdateStatus(`Schema version unavailable: ${formatApiError(error)}`);
@@ -526,6 +563,37 @@ export default function App() {
       return false;
     }
   }, [api, applyWorkspace, isLightMode]);
+
+  const loadSchemaProfiles = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await api.get("/schema/profiles");
+      const profilesRaw = Array.isArray(res.data?.profiles) ? res.data.profiles : [];
+      const parsed: SchemaProfileSummary[] = profilesRaw
+        .filter((entry: unknown): entry is Record<string, unknown> => typeof entry === "object" && entry !== null)
+        .map((entry: Record<string, unknown>) => ({
+          key: typeof entry.key === "string" ? entry.key : "",
+          label: typeof entry.label === "string" ? entry.label : "",
+          default_branch: typeof entry.default_branch === "string" ? entry.default_branch : DEFAULT_BRANCH,
+          default_package: typeof entry.default_package === "string" ? entry.default_package : DEFAULT_PACKAGE,
+          default_base_namespace: typeof entry.default_base_namespace === "string" ? entry.default_base_namespace : DEFAULT_NAMESPACE,
+          default_root: typeof entry.default_root === "string" ? entry.default_root : DEFAULT_ROOT,
+          available: Boolean(entry.available),
+          current: Boolean(entry.current),
+          version: typeof entry.version === "string" ? entry.version : null,
+          source: typeof entry.source === "string" ? entry.source : null,
+          error: typeof entry.error === "string" ? entry.error : null,
+          packaged: Boolean(entry.packaged),
+        }))
+        .filter((entry: SchemaProfileSummary) => Boolean(entry.key));
+      setSchemaProfiles(parsed);
+      const current = typeof res.data?.current_profile === "string" ? res.data.current_profile : null;
+      setSchemaProfileKey(current || parsed.find((entry: SchemaProfileSummary) => entry.current)?.key || inferProfileKey(pkg));
+      syncWorkspaceFromResponse(res.data);
+    } catch (error) {
+      console.error("Failed to load schema profiles", error);
+    }
+  }, [api, inferProfileKey, pkg, syncWorkspaceFromResponse, token]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -541,6 +609,7 @@ export default function App() {
       setSessionChecked(true);
       applyWorkspace({ branch: DEFAULT_BRANCH, package: DEFAULT_PACKAGE, base_namespace: DEFAULT_NAMESPACE });
       loadSchemaVersion({ promoteLight: true });
+      loadSchemaProfiles();
       return;
     }
     let cancelled = false;
@@ -562,6 +631,10 @@ export default function App() {
         const res = await api.get("/workspace");
         if (cancelled) return;
         applyWorkspace(res.data.workspace as WorkspaceState);
+        setSchemaVersion(typeof res.data?.schema_version === "string" ? res.data.schema_version : null);
+        setSchemaSource(typeof res.data?.schema_source === "string" ? res.data.schema_source : null);
+        setSchemaProfileKey(typeof res.data?.schema_profile === "string" ? res.data.schema_profile : inferProfileKey(res.data?.workspace?.package));
+        setSchemaProfileError(typeof res.data?.schema_error === "string" ? res.data.schema_error : null);
         setAuthError(null);
         setUserName((prev) => res.data?.user?.username || prev || null);
       } catch (error: unknown) {
@@ -578,12 +651,15 @@ export default function App() {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [api, applyWorkspace, isLightMode, loadSchemaVersion, logout, token]);
+  }, [api, applyWorkspace, isLightMode, loadSchemaProfiles, loadSchemaVersion, logout, token]);
 
   useEffect(() => {
     if (!sessionChecked) return;
     loadSchemaVersion({ silent: !isLightMode, promoteLight: true });
-  }, [isLightMode, loadSchemaVersion, sessionChecked]);
+    if (token) {
+      loadSchemaProfiles();
+    }
+  }, [isLightMode, loadSchemaProfiles, loadSchemaVersion, sessionChecked, token]);
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
   const clampDocWidth = useCallback((value: number) => {
@@ -950,6 +1026,29 @@ export default function App() {
     }
   }, [api, isLightMode, normalizedNamespace, syncWorkspaceFromResponse, token, workspaceBranch]);
 
+  const applySchemaProfile = useCallback(async (profileKey: string) => {
+    const selected = schemaProfiles.find((profile) => profile.key === profileKey);
+    const fallbackPreset = WORKSPACE_PRESETS.find((preset) => preset.key === profileKey);
+    const nextPackage = selected?.default_package ?? fallbackPreset?.pkg;
+    const nextNamespace = selected?.default_base_namespace ?? fallbackPreset?.namespace;
+    const nextBranch = selected?.default_branch ?? fallbackPreset?.branch ?? DEFAULT_BRANCH;
+    const nextRoot = selected?.default_root ?? fallbackPreset?.root ?? DEFAULT_ROOT;
+    if (!nextPackage || !nextNamespace) return;
+
+    setSchemaProfileKey(profileKey);
+    setPkg(nextPackage);
+    setRoot(nextRoot);
+    if (!isLightMode) {
+      setWorkspaceBranch(nextBranch);
+    }
+    applyWorkspace({ branch: nextBranch, package: nextPackage, base_namespace: nextNamespace });
+    await updateWorkspaceOnServer({
+      branch: nextBranch,
+      package: nextPackage,
+      base_namespace: nextNamespace,
+    });
+  }, [applyWorkspace, isLightMode, schemaProfiles, setPkg, setWorkspaceBranch, updateWorkspaceOnServer]);
+
   // fetch available schema packages from develop branch
   const loadPackages = useCallback(async () => {
     if (!token) return;
@@ -987,12 +1086,34 @@ export default function App() {
     }
   }, [api, isLightMode, normalizedNamespace, packageBranch, pkg, scratchPackage, setPkg, startEmpty, syncWorkspaceFromResponse, token]);
 
+  const loadSelectedSchemaProfile = useCallback(async () => {
+    if (!schemaProfileKey) return;
+    setSchemaUpdating(true);
+    setSchemaUpdateStatus(null);
+    try {
+      const res = await api.post("/schema/update", null, { params: { profile: schemaProfileKey } });
+      const version = res.data?.version as string | undefined;
+      setSchemaVersion(version || null);
+      setSchemaSource(typeof res.data?.source === "string" ? res.data.source : null);
+      setSchemaProfileError(null);
+      setSchemaUpdateStatus(version ? `Schema loaded: ${version}` : "Schema loaded.");
+      await loadSchemaProfiles();
+      await loadPackages();
+      await loadRoots();
+    } catch (error) {
+      setSchemaUpdateStatus(`Load failed: ${formatApiError(error)}`);
+    } finally {
+      setSchemaUpdating(false);
+    }
+  }, [api, loadPackages, loadRoots, loadSchemaProfiles, schemaProfileKey]);
+
   useEffect(() => {
     if (!workspace || !token) return;
     loadBranches();
+    loadSchemaProfiles();
     loadPackages();
     loadRoots();
-  }, [loadBranches, loadPackages, loadRoots, token, workspace]);
+  }, [loadBranches, loadPackages, loadRoots, loadSchemaProfiles, token, workspace]);
 
   // compare base/head using same filters as sidebar
   const compareBranches = async () => {
@@ -2251,11 +2372,13 @@ export default function App() {
     setSchemaUpdating(true);
     setSchemaUpdateStatus(null);
     try {
-      const res = await api.post("/schema/update");
+      const res = await api.post("/schema/update", null, { params: { profile: schemaProfileKey || undefined } });
       const version = res.data?.version as string | undefined;
       setSchemaVersion(version || null);
       setSchemaSource(res.data?.source || null);
+      setSchemaProfileError(null);
       setSchemaUpdateStatus(version ? `Schema updated to ${version}` : "Schema updated.");
+      await loadSchemaProfiles();
     } catch (error) {
       setSchemaUpdateStatus(`Update failed: ${formatApiError(error)}`);
     } finally {
@@ -2342,6 +2465,7 @@ export default function App() {
             ) : (
               <span className="tag muted">Schema version…</span>
             )}
+            {schemaProfileKey ? <span className="tag muted">Profile: {schemaProfileKey}</span> : null}
             {selectedClassName ? <span className="tag">Selected: {selectedClassName}</span> : null}
           </div>
           <div style={{ marginTop: 12 }}>
@@ -2418,12 +2542,58 @@ export default function App() {
                 {mode === "overview" ? "Back to diagram" : "Bird's-eye view"}
               </button>
             </div>
+            {isLightMode ? (
+              <div className="card" style={{ padding: 12, border: "1px solid var(--border)", borderRadius: 8, display: "grid", gap: 10 }}>
+                <div>
+                  <div className="label">Select schema family</div>
+                  <div className="small" style={{ color: "var(--muted)", marginTop: 4 }}>
+                    Pick the schema source before loading packages or editing the graph.
+                  </div>
+                </div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {schemaProfiles.map((profile) => {
+                    const isSelected = schemaProfileKey === profile.key;
+                    return (
+                      <button
+                        key={profile.key}
+                        type="button"
+                        className={`btn ${isSelected ? "" : "secondary"}`}
+                        onClick={() => applySchemaProfile(profile.key)}
+                        style={{ justifyContent: "space-between", textAlign: "left" }}
+                      >
+                        <span>{profile.label}</span>
+                        <span className="small" style={{ color: isSelected ? "inherit" : "var(--muted)" }}>
+                          {profile.available
+                            ? profile.source === "bundled"
+                              ? "bundled"
+                              : profile.version || "ready"
+                            : "not loaded"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {currentSchemaProfile && !currentSchemaProfile.available ? (
+                  <div className="small" style={{ color: "#fca5a5" }}>
+                    {currentSchemaProfile.error || "This schema is not available yet. Load it while online to continue."}
+                  </div>
+                ) : null}
+                {schemaProfileError ? (
+                  <div className="small" style={{ color: "#fca5a5" }}>{schemaProfileError}</div>
+                ) : null}
+                {currentSchemaProfile && !currentSchemaProfile.available ? (
+                  <button className="btn secondary" type="button" onClick={loadSelectedSchemaProfile} disabled={schemaUpdating}>
+                    {schemaUpdating ? "Loading schema…" : `Load ${currentSchemaProfile.label}`}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             <div className="row" style={{ gap: 10, alignItems: "flex-end" }}>
               <div style={{ flex: 1 }}>
                 {isLightMode ? (
                   <>
                     <label className="label">Schema branch</label>
-                    <div className="small">{DEFAULT_BRANCH} (fixed in Light Mode)</div>
+                    <div className="small">{currentSchemaProfile?.default_branch || DEFAULT_BRANCH} (fixed per schema family in Light Mode)</div>
                   </>
                 ) : (
                   <>
@@ -2529,7 +2699,7 @@ export default function App() {
             </div>
 
             <div className="row" style={{ marginTop: 14, justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-              <button className="btn" onClick={() => loadGraph()}>
+              <button className="btn" onClick={() => loadGraph()} disabled={!startEmpty && !selectedSchemaReady}>
                 Build graph
               </button>
               <div className="row" style={{ flex: 1, justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
@@ -2565,6 +2735,11 @@ export default function App() {
                 </div>
               ) : null}
             </div>
+            {schemaSelectionRequired ? (
+              <div className="small" style={{ color: "var(--muted)" }}>
+                Select a schema family above before building a graph.
+              </div>
+            ) : null}
 
             {isLightMode && sendDesignEnabled ? (
               <div className="card" style={{ marginTop: 12, padding: 12, border: "1px solid var(--border)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -2841,7 +3016,7 @@ export default function App() {
               </div>
               <div style={{ lineHeight: 1.5, display: "grid", gap: 10 }}>
                 <div>
-                  1) Go to <button className="link-button" type="button" onClick={() => focusAndOpen("workspace")}>Workspace 👈</button> and pick a root, then hit “Build graph” to load your selected schema package.
+                  1) Go to <button className="link-button" type="button" onClick={() => focusAndOpen("workspace")}>Workspace 👈</button>, choose a schema family, then pick a root and hit “Build graph”.
                 </div>
                 <div>
                   2) See the <button className="link-button" type="button" onClick={() => focusAndOpen("documentation")}>Documentation 👉</button> panel to read class/quantity details as you browse.
