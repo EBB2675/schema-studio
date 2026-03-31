@@ -34,6 +34,7 @@ def test_default_profile_is_nomad(monkeypatch):
     assert mod.DEFAULT_BRANCH == "develop"
     assert mod.DEFAULT_PACKAGE == "nomad_simulations.schema_packages.model_method"
     assert mod.DEFAULT_BASE_NAMESPACE == "nomad_simulations.schema_packages"
+    assert mod.DEFAULT_ROOT == "ModelMethod"
 
 
 def test_explicit_bam_profile(monkeypatch):
@@ -44,6 +45,7 @@ def test_explicit_bam_profile(monkeypatch):
     assert mod.DEFAULT_BRANCH == "main"
     assert mod.DEFAULT_PACKAGE == "bam_masterdata.datamodel.object_types"
     assert mod.DEFAULT_BASE_NAMESPACE == "bam_masterdata.datamodel"
+    assert mod.DEFAULT_ROOT == "SearchQuery"
     assert mod.UPGRADE_TARGET.endswith("bam-masterdata.git@main")
 
 
@@ -54,3 +56,13 @@ def test_package_hint_selects_bam_profile(monkeypatch):
     assert mod.LIGHT_PROFILE_KEY == "bam"
     assert mod.PACKAGE_IMPORT == "bam_masterdata"
     assert mod.PACKAGE_DIST == "bam-masterdata"
+
+
+def test_profile_can_be_inferred_from_package(monkeypatch):
+    mod = _reload_schema_source(monkeypatch)
+
+    nomad = mod.schema_profile_for_package("nomad_simulations.schema_packages.model_method")
+    bam = mod.schema_profile_for_package("bam_masterdata.datamodel.object_types")
+
+    assert nomad.key == "nomad"
+    assert bam.key == "bam"
