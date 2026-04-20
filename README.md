@@ -27,9 +27,9 @@ git clone https://github.com/EBB2675/schema-studio.git
 cd schema-studio
 ```
 
-Create a virtual environment (either with `venv` or with `conda`) and activate it:
+Create a virtual environment using Python 3.11 (either with `venv` or with `conda`) and activate it:
 ```bash
-python -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate  # In Linux-based OS
 ```
 
