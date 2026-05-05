@@ -35,8 +35,8 @@ def light_mode_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     app_mod = importlib.reload(app_mod)
     info = SimpleNamespace(package_root=tmp_path, version="deadbeef", source="remote-develop")
 
-    monkeypatch.setattr(app_mod, "current_schema_info", lambda: info)
-    monkeypatch.setattr(app_mod, "update_schema", lambda: info)
+    monkeypatch.setattr(app_mod, "current_schema_info", lambda *args, **kwargs: info)
+    monkeypatch.setattr(app_mod, "update_schema", lambda *args, **kwargs: info)
     monkeypatch.setattr(app_mod, "build_graph", lambda **kwargs: {"package": kwargs["package"], "root": kwargs.get("root"), "nodes": [], "edges": []})
     monkeypatch.setattr(app_mod, "list_sections", lambda _package: ["RootSection"])
     monkeypatch.setattr(app_mod, "list_modules_for_base", lambda base: [f"{base}.alpha", f"{base}.beta"])
@@ -119,8 +119,18 @@ async def test_health_reports_light_mode_schema_metadata(client: httpx.AsyncClie
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["mode"] == "light"
+    assert payload["schema_ready"] is True
     assert payload["schema_version"] == "deadbeef"
     assert payload["schema_source"] == "remote-develop"
+
+
+@pytest.mark.anyio
+async def test_schema_profiles_reports_nomad_and_bam(client: httpx.AsyncClient):
+    resp = await client.get("/schema/profiles")
+    assert resp.status_code == 200
+    payload = resp.json()
+    keys = [entry["key"] for entry in payload["profiles"]]
+    assert keys == ["nomad", "bam"]
 
 
 @pytest.mark.anyio
@@ -358,13 +368,13 @@ async def test_git_packages_auto_bootstraps_schema_when_unavailable_once(
     info = SimpleNamespace(package_root=Path("."), version="feedbeef", source="remote-develop")
     calls = {"current": 0, "update": 0}
 
-    def flaky_current():
+    def flaky_current(*args, **kwargs):
         calls["current"] += 1
         if calls["update"] == 0:
             raise light_mode_module.SchemaUnavailable("schema missing before bootstrap")
         return info
 
-    def one_update():
+    def one_update(*args, **kwargs):
         calls["update"] += 1
         return info
 
@@ -391,12 +401,12 @@ async def test_git_packages_returns_503_when_schema_still_unavailable_after_boot
     monkeypatch.setattr(
         light_mode_module,
         "current_schema_info",
-        lambda: (_ for _ in ()).throw(light_mode_module.SchemaUnavailable("schema unavailable")),
+        lambda *args, **kwargs: (_ for _ in ()).throw(light_mode_module.SchemaUnavailable("schema unavailable")),
     )
     monkeypatch.setattr(
         light_mode_module,
         "update_schema",
-        lambda: (_ for _ in ()).throw(light_mode_module.SchemaUnavailable("bootstrap failed")),
+        lambda *args, **kwargs: (_ for _ in ()).throw(light_mode_module.SchemaUnavailable("bootstrap failed")),
     )
     monkeypatch.setattr(light_mode_module, "_bootstrap_attempted", False)
 

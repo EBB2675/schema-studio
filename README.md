@@ -6,7 +6,7 @@ Interactive schema explorer and editor for data models.
 - Local single-user app (no auth)
 - No MongoDB/Redis required
 - Custom edits persisted in local SQLite
-- Schema source pinned to `nomad-simulations` `develop`
+- Schema family selectable between `nomad-simulations` and `bam-masterdata`
 
 Back end: **FastAPI**  
 Front end: **React + Cytoscape + ELK**  
@@ -51,11 +51,12 @@ schema-studio
 This starts the local server on `http://127.0.0.1:5179` and opens your browser automatically.
 
 ### 3) First-use flow
-1. Pick a package.
-2. Pick a root section (or leave empty for all sections).
-3. Click **Build graph**.
-4. Click classes/quantities to view docs and metadata.
-5. Toggle **Editable mode** to add classes/quantities.
+1. Pick a schema family.
+2. Pick a package.
+3. Pick a root section (or leave empty for all sections).
+4. Click **Build graph**.
+5. Click classes/quantities to view docs and metadata.
+6. Toggle **Editable mode** to add classes/quantities.
 
 ## What You Get in Light Mode
 
@@ -89,7 +90,7 @@ Make sure to set the environment variables before running `schema-studio`.
 | `SCHEMA_STUDIO_HOME` | platform config dir | Where Light Mode stores SQLite data |
 | `SCHEMA_STUDIO_DEFAULT_PACKAGE` | `nomad_simulations.schema_packages.model_method` | Initial package |
 | `SCHEMA_STUDIO_DEFAULT_NAMESPACE` | `nomad_simulations.schema_packages` | Initial base namespace |
-| `SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA` | `1` | Auto-bootstrap schema when missing |
+| `SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA` | `0` | Auto-bootstrap the currently selected schema when missing |
 | `SCHEMA_STUDIO_SEND_ENDPOINT` | unset | Enable `POST /send-design` passthrough |
 | `SCHEMA_STUDIO_DIST_DIR` | auto-detected | Override frontend static assets directory |
 | `UVICORN_LOG_LEVEL` | `info` | Server logging level |
@@ -101,7 +102,7 @@ Light Mode stores data in:
 
 ## Keeping Schema Fresh
 
-Light Mode can update its pinned schema source:
+Light Mode can update or install the currently selected schema source:
 - In the UI: click **Update schema**
 - API: `POST http://127.0.0.1:5179/schema/update`
 
@@ -176,8 +177,10 @@ Current desktop characteristics:
 For desktop-specific setup, testing, packaging, and maintenance notes, use the dedicated docs:
 
 - [Desktop Light Mode](docs/desktop-light-mode.md)
+- [Light Mode Schema Selection](docs/light-mode-schema-selection.md)
 - [Desktop Mode Extension](docs/desktop-mode-extension.md)
 - [Desktop Roadmap](docs/desktop-roadmap.md)
+- [BAM Schema Selection Plan](docs/bam-schema-selection-plan.md)
 
 ## API (Light Mode)
 

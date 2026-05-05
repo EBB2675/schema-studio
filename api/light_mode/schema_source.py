@@ -1,8 +1,8 @@
 """Schema sourcing for Light Mode.
 
 Policy:
-- Always use the installed `nomad-simulations` Python package.
-- Always target the remote `develop` branch lineage for updates.
+- Always use an installed schema package selected by profile.
+- Light mode branch is fixed by profile (for example develop/main).
 - Never use local checkouts/worktrees.
 """
 from __future__ import annotations
@@ -17,22 +17,136 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-PACKAGE_IMPORT = "nomad_simulations"
-PACKAGE_DIST = "nomad-simulations"
-DEFAULT_BRANCH = "develop"
-DEFAULT_REMOTE_REPO = "https://github.com/nomad-coe/nomad-simulations.git"
-UPGRADE_TARGET = f"git+{DEFAULT_REMOTE_REPO}@{DEFAULT_BRANCH}"
+
+@dataclass(frozen=True)
+class SchemaProfile:
+    """Profile configuration describing one supported schema source package."""
+
+    key: str
+    label: str
+    package_import: str
+    package_dist: str
+    default_branch: str
+    default_remote_repo: str
+    default_base_namespace: str
+    default_package: str
+    default_root: str
 
 
 @dataclass
 class SchemaInfo:
+    """Runtime metadata about the installed schema package source/version."""
+
     package_root: Path
     version: str
-    source: str  # "installed" | "remote-develop" | "bundled"
+    source: str  # "installed" | "remote-<branch>" | "bundled"
 
 
 class SchemaUnavailable(RuntimeError):
+    """Raised when a schema profile cannot be validated or updated."""
+
     pass
+
+
+SCHEMA_PROFILES: dict[str, SchemaProfile] = {
+    "nomad": SchemaProfile(
+        key="nomad",
+        label="nomad-simulations",
+        package_import="nomad_simulations",
+        package_dist="nomad-simulations",
+        default_branch="develop",
+        default_remote_repo="https://github.com/nomad-coe/nomad-simulations.git",
+        default_base_namespace="nomad_simulations.schema_packages",
+        default_package="nomad_simulations.schema_packages.model_method",
+        default_root="ModelMethod",
+    ),
+    "bam": SchemaProfile(
+        key="bam",
+        label="bam-masterdata",
+        package_import="bam_masterdata",
+        package_dist="bam-masterdata",
+        default_branch="main",
+        default_remote_repo="https://github.com/BAMresearch/bam-masterdata.git",
+        default_base_namespace="bam_masterdata.datamodel",
+        default_package="bam_masterdata.datamodel.object_types",
+        default_root="SearchQuery",
+    ),
+}
+
+
+def _select_profile() -> SchemaProfile:
+    """Select active schema profile from env override, then package hint, then default."""
+    requested = os.getenv("SCHEMA_STUDIO_LIGHT_SCHEMA_PROFILE", "").strip().lower()
+    if requested in SCHEMA_PROFILES:
+        return SCHEMA_PROFILES[requested]
+
+    if requested:
+        for profile in SCHEMA_PROFILES.values():
+            if requested in {profile.package_import, profile.package_dist}:
+                return profile
+
+    package_hint = os.getenv("SCHEMA_STUDIO_DEFAULT_PACKAGE", "")
+    if package_hint.startswith("bam_masterdata"):
+        return SCHEMA_PROFILES["bam"]
+
+    return SCHEMA_PROFILES["nomad"]
+
+
+ACTIVE_PROFILE = _select_profile()
+LIGHT_PROFILE_KEY = ACTIVE_PROFILE.key
+PACKAGE_IMPORT = ACTIVE_PROFILE.package_import
+PACKAGE_DIST = ACTIVE_PROFILE.package_dist
+DEFAULT_BRANCH = ACTIVE_PROFILE.default_branch
+DEFAULT_REMOTE_REPO = ACTIVE_PROFILE.default_remote_repo
+DEFAULT_BASE_NAMESPACE = ACTIVE_PROFILE.default_base_namespace
+DEFAULT_PACKAGE = ACTIVE_PROFILE.default_package
+DEFAULT_ROOT = ACTIVE_PROFILE.default_root
+UPGRADE_TARGET = f"git+{DEFAULT_REMOTE_REPO}@{DEFAULT_BRANCH}"
+
+
+def active_profile() -> SchemaProfile:
+    """Return the default profile resolved from environment and defaults."""
+    return ACTIVE_PROFILE
+
+
+def list_schema_profiles() -> list[SchemaProfile]:
+    """Return supported schema profiles in display order."""
+    return [SCHEMA_PROFILES["nomad"], SCHEMA_PROFILES["bam"]]
+
+
+def schema_profile_for_key(key: str | None) -> SchemaProfile:
+    """Resolve a profile by short key or package identifier."""
+    if not key:
+        return ACTIVE_PROFILE
+
+    normalized = key.strip().lower()
+    if normalized in SCHEMA_PROFILES:
+        return SCHEMA_PROFILES[normalized]
+
+    for profile in SCHEMA_PROFILES.values():
+        if normalized in {profile.package_import, profile.package_dist}:
+            return profile
+
+    raise SchemaUnavailable(f"Unsupported schema profile {key!r}.")
+
+
+def schema_profile_for_package(package: str | None, base_namespace: str | None = None) -> SchemaProfile:
+    """Infer a profile from the selected package or base namespace."""
+    hints = [package or "", base_namespace or ""]
+    for hint in hints:
+        if hint.startswith("bam_masterdata"):
+            return SCHEMA_PROFILES["bam"]
+        if hint.startswith("nomad_simulations"):
+            return SCHEMA_PROFILES["nomad"]
+    return ACTIVE_PROFILE
+
+
+def _resolve_profile(profile: SchemaProfile | str | None, *, package: str | None = None, base_namespace: str | None = None) -> SchemaProfile:
+    if isinstance(profile, SchemaProfile):
+        return profile
+    if isinstance(profile, str):
+        return schema_profile_for_key(profile)
+    return schema_profile_for_package(package, base_namespace)
 
 
 def _is_packaged_backend() -> bool:
@@ -40,30 +154,33 @@ def _is_packaged_backend() -> bool:
     return getattr(sys, "frozen", False) or os.getenv("SCHEMA_STUDIO_PACKAGED_BACKEND") == "1"
 
 
-def _distribution() -> importlib.metadata.Distribution:
+def _distribution(profile: SchemaProfile) -> importlib.metadata.Distribution:
+    """Return installed package distribution metadata for the selected profile."""
     try:
-        return importlib.metadata.distribution(PACKAGE_DIST)
+        return importlib.metadata.distribution(profile.package_dist)
     except importlib.metadata.PackageNotFoundError as exc:
         raise SchemaUnavailable(
-            "nomad-simulations is not installed. Reinstall Light Mode so it pulls the remote develop package."
+            f"{profile.package_dist} is not installed. Load the schema while online or reinstall Light Mode with the required package."
         ) from exc
 
 
-def _package_root() -> Path:
-    spec = importlib.util.find_spec(PACKAGE_IMPORT)
+def _package_root(profile: SchemaProfile) -> Path:
+    """Resolve filesystem location of the selected schema package."""
+    spec = importlib.util.find_spec(profile.package_import)
     if spec is None:
         raise SchemaUnavailable(
-            "Could not import nomad_simulations. Reinstall Light Mode to restore schema package availability."
+            f"Could not import {profile.package_import}. Load the schema while online or reinstall Light Mode."
         )
     location = spec.submodule_search_locations
     if location:
         return Path(next(iter(location))).resolve()
     if spec.origin:
         return Path(spec.origin).resolve().parent
-    raise SchemaUnavailable("Could not determine nomad_simulations install location.")
+    raise SchemaUnavailable(f"Could not determine install location for {profile.package_import}.")
 
 
 def _direct_url_payload(dist: importlib.metadata.Distribution) -> dict | None:
+    """Parse PEP 610 `direct_url.json` metadata when available."""
     try:
         raw = dist.read_text("direct_url.json")
     except Exception:
@@ -77,8 +194,21 @@ def _direct_url_payload(dist: importlib.metadata.Distribution) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def _schema_info_from_install() -> SchemaInfo:
-    package_root = _package_root()
+def _normalize_repo(url: str) -> str:
+    """Normalize git URL for comparisons by trimming trailing slash and `.git` suffix."""
+    base = url.rstrip("/")
+    return base[:-4] if base.endswith(".git") else base
+
+
+def schema_available(profile: SchemaProfile | str | None = None, *, package: str | None = None, base_namespace: str | None = None) -> bool:
+    """Return whether the selected profile is importable in the current runtime."""
+    resolved = _resolve_profile(profile, package=package, base_namespace=base_namespace)
+    return importlib.util.find_spec(resolved.package_import) is not None
+
+
+def _schema_info_from_install(profile: SchemaProfile) -> SchemaInfo:
+    """Validate installed package provenance and return source/version metadata."""
+    package_root = _package_root(profile)
     if str(package_root.parent) not in sys.path:
         sys.path.insert(0, str(package_root.parent))
 
@@ -88,30 +218,24 @@ def _schema_info_from_install() -> SchemaInfo:
         version = os.getenv("SCHEMA_STUDIO_SCHEMA_VERSION", "") or ""
         if not version:
             try:
-                package = importlib.import_module(PACKAGE_IMPORT)
+                package = importlib.import_module(profile.package_import)
             except Exception:
                 package = None
             version = getattr(package, "__version__", None) or "bundled"
         return SchemaInfo(package_root=package_root, version=version, source="bundled")
 
-    dist = _distribution()
-
+    dist = _distribution(profile)
     direct_url = _direct_url_payload(dist)
     if not direct_url:
-        # Regular index/wheel installs do not include direct_url.json.
         return SchemaInfo(package_root=package_root, version=dist.version, source="installed")
 
     source_url = direct_url.get("url")
     if not isinstance(source_url, str) or source_url.startswith("file://"):
-        raise SchemaUnavailable("Light Mode does not support local nomad-simulations sources.")
+        raise SchemaUnavailable(f"Light Mode does not support local {profile.package_dist} sources.")
 
-    def normalize_repo(url: str) -> str:
-        base = url.rstrip("/")
-        return base[:-4] if base.endswith(".git") else base
-
-    if normalize_repo(source_url) != normalize_repo(DEFAULT_REMOTE_REPO):
+    if _normalize_repo(source_url) != _normalize_repo(profile.default_remote_repo):
         raise SchemaUnavailable(
-            "Light Mode must use the remote nomad-simulations repository on develop."
+            f"Light Mode profile '{profile.key}' must use repository {profile.default_remote_repo}."
         )
 
     vcs_info = direct_url.get("vcs_info")
@@ -119,49 +243,51 @@ def _schema_info_from_install() -> SchemaInfo:
         return SchemaInfo(package_root=package_root, version=dist.version, source="installed")
 
     requested = vcs_info.get("requested_revision")
-    if requested and requested != DEFAULT_BRANCH:
+    if requested and requested != profile.default_branch:
         raise SchemaUnavailable(
-            f"Light Mode is pinned to remote {DEFAULT_BRANCH}; found installed revision {requested!r}."
+            f"Light Mode profile '{profile.key}' is pinned to remote {profile.default_branch}; found revision {requested!r}."
         )
 
     commit = vcs_info.get("commit_id")
     version = commit if isinstance(commit, str) and commit else dist.version
-    return SchemaInfo(package_root=package_root, version=version, source="remote-develop")
+    return SchemaInfo(package_root=package_root, version=version, source=f"remote-{profile.default_branch}")
 
 
-def ensure_schema_ready() -> SchemaInfo:
-    """Validate that the installed schema package is available."""
-    return _schema_info_from_install()
+def ensure_schema_ready(profile: SchemaProfile | str | None = None, *, package: str | None = None, base_namespace: str | None = None) -> SchemaInfo:
+    """Validate that the selected schema package is available."""
+    return _schema_info_from_install(_resolve_profile(profile, package=package, base_namespace=base_namespace))
 
 
-def current_schema_info() -> SchemaInfo:
-    """Return current installed schema metadata."""
-    return _schema_info_from_install()
+def current_schema_info(profile: SchemaProfile | str | None = None, *, package: str | None = None, base_namespace: str | None = None) -> SchemaInfo:
+    """Return current installed schema metadata for the selected profile."""
+    return _schema_info_from_install(_resolve_profile(profile, package=package, base_namespace=base_namespace))
 
 
-def update_schema() -> SchemaInfo:
+def update_schema(profile: SchemaProfile | str | None = None, *, package: str | None = None, base_namespace: str | None = None) -> SchemaInfo:
     """
-    Upgrade to the latest develop branch package using pip.
+    Upgrade or install the selected profile package from its configured remote.
     Keeps local Light Mode edits in SQLite.
     """
+    resolved = _resolve_profile(profile, package=package, base_namespace=base_namespace)
     if _is_packaged_backend():
         raise SchemaUnavailable(
             "Schema updates are disabled in the packaged desktop build. Reinstall a newer desktop release to get a newer bundled schema."
         )
 
-    cmd = [sys.executable, "-m", "pip", "install", "--upgrade", UPGRADE_TARGET]
+    upgrade_target = f"git+{resolved.default_remote_repo}@{resolved.default_branch}"
+    cmd = [sys.executable, "-m", "pip", "install", "--upgrade", upgrade_target]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip()
         raise SchemaUnavailable(f"Schema update failed: {detail or 'pip install failed'}")
 
     importlib.invalidate_caches()
-    prefix = f"{PACKAGE_IMPORT}."
+    prefix = f"{resolved.package_import}."
     for name in list(sys.modules.keys()):
-        if name == PACKAGE_IMPORT or name.startswith(prefix):
+        if name == resolved.package_import or name.startswith(prefix):
             sys.modules.pop(name, None)
 
-    return _schema_info_from_install()
+    return _schema_info_from_install(resolved)
 
 
 def list_modules_for_base(base_package: str) -> list[str]:
