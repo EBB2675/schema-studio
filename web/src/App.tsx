@@ -1146,6 +1146,9 @@ export default function App() {
               case "remove-class":
                 // Reflected if class is gone.
                 return !classIds.has(normalizeId(change.cls.id));
+              case "edit-class":
+                // Reflected if the edited class is present.
+                return classIds.has(normalizeId(change.after.id));
               case "add-quantity":
                 // Reflected if quantity is present.
                 return quantityIds.has(normalizeId(change.quantity.id));
@@ -1565,6 +1568,14 @@ export default function App() {
     return { ...g, nodes, edges };
   }, []);
 
+  const editClassInGraphState = useCallback((g: ApiGraph, cls: UmlClassNode): ApiGraph => {
+    const nodes = (g.nodes || []).map((n) => {
+      if (n.kind !== "section" || n.id !== cls.id) return n;
+      return { ...n, doc: cls.doc ?? null };
+    });
+    return { ...g, nodes };
+  }, []);
+
   const addClassToGraphState = useCallback((g: ApiGraph, cls: UmlClassNode): ApiGraph => {
     const nodesWithoutClass = (g.nodes || []).filter((n) => !(n.kind === "section" && n.id === cls.id));
     const sectionNode: ApiNode = {
@@ -1622,6 +1633,8 @@ export default function App() {
         return addClassToGraphState(current, change.cls);
       case "remove-class":
         return removeClassFromGraphState(current, change.cls.id);
+      case "edit-class":
+        return editClassInGraphState(current, change.after);
       case "add-quantity":
         return addQuantityToGraphState(current, change.quantity);
       case "remove-quantity":
@@ -1633,7 +1646,7 @@ export default function App() {
       default:
         return current;
     }
-  }, [addClassToGraphState, addQuantityToGraphState, removeClassFromGraphState, removeQuantityFromGraphState]);
+  }, [addClassToGraphState, addQuantityToGraphState, editClassInGraphState, removeClassFromGraphState, removeQuantityFromGraphState]);
 
   const replayGraphWithAudit = useCallback(
     (serverGraph: ApiGraph, extraChange?: AuditTrailEntry["change"]): ApiGraph => {
@@ -1931,11 +1944,11 @@ export default function App() {
       return null;
     }
     if (!editableMode) {
-      setQuantityActionErr("Enable editable mode to edit or remove quantities.");
+      setQuantityActionErr("Enable editable mode to make changes.");
       return null;
     }
     if (!graph) {
-      setQuantityActionErr("Build a graph first to modify quantities.");
+      setQuantityActionErr("Build a graph first to make changes.");
       return null;
     }
     return graph;
@@ -1960,6 +1973,58 @@ export default function App() {
     },
     [umlState]
   );
+
+  const editClassDoc = (classId: string, updates: { docstring: string }) => {
+    const current = ensureEditableReady();
+    if (!current) return;
+
+    const target = current.nodes.find((n) => n.id === classId && n.kind === "section");
+    if (!target) {
+      setQuantityActionErr("Class not found in current graph.");
+      return;
+    }
+
+    const targetClass = umlState?.classes.find((c) => c.id === classId);
+    const before: UmlClassNode = targetClass ?? {
+      id: target.id,
+      name: target.label,
+      doc: target.doc ?? null,
+      module: target.module ?? current.package,
+      path: target.path ?? null,
+      line: typeof target.line === "number" ? target.line : null,
+      quantities: [],
+      parentId: null,
+      parentRelation: null,
+      parentCard: null,
+    };
+    const after: UmlClassNode = {
+      ...before,
+      doc: updates.docstring || null,
+    };
+
+    const nextGraph = {
+      ...current,
+      nodes: current.nodes.map((n) => (
+        n.id === classId && n.kind === "section"
+          ? { ...n, doc: updates.docstring || null }
+          : n
+      )),
+    };
+
+    setGraph(nextGraph);
+    setQuantityActionErr(null);
+    appendAudit(
+      { type: "edit-class", before, after },
+      `Edited class ${before.name} docstring`
+    );
+
+    if (selected?.kind === "class" && selected.id === classId) {
+      setSelected({
+        ...selected,
+        doc: updates.docstring || "",
+      });
+    }
+  };
 
   const editQuantity = (quantityId: string, updates: QuantityFormData) => {
     const current = ensureEditableReady();
@@ -2914,6 +2979,7 @@ export default function App() {
                 editableMode={editableMode}
                 onRemoveQuantity={removeQuantity}
                 onEditQuantity={editQuantity}
+                onEditClass={editClassDoc}
                 blockedReason={addBlockedReason}
                 actionError={quantityActionErr}
                 clearActionError={clearQuantityActionError}

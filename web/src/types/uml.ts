@@ -44,6 +44,7 @@ export type UmlGraphState = {
 export type AuditChange =
   | { type: "add-class"; cls: UmlClassNode }
   | { type: "remove-class"; cls: UmlClassNode }
+  | { type: "edit-class"; before: UmlClassNode; after: UmlClassNode }
   | { type: "add-quantity"; classId: string; quantity: QuantityNode }
   | { type: "remove-quantity"; classId: string; quantity: QuantityNode }
   | { type: "edit-quantity"; classId: string; before: QuantityNode; after: QuantityNode };
