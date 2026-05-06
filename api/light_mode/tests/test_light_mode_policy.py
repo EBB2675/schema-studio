@@ -88,6 +88,37 @@ async def test_git_packages_enforces_develop_only(client: httpx.AsyncClient):
 
 
 @pytest.mark.anyio
+async def test_git_packages_filters_modules_without_schema_sections(
+    client: httpx.AsyncClient,
+    light_mode_module,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        light_mode_module,
+        "list_modules_for_base",
+        lambda base: [
+            f"{base}.alpha",
+            f"{base}.schema_package",
+            f"{base}.support",
+            f"{base}.broken",
+        ],
+    )
+
+    def sections_for(module: str):
+        if module.endswith(".broken"):
+            raise ModuleNotFoundError("No module named support_dep", name="support_dep")
+        if module.endswith(".alpha"):
+            return ["SchemaClass"]
+        return []
+
+    monkeypatch.setattr(light_mode_module, "list_sections", sections_for)
+
+    resp = await client.get("/git/packages", params={"base_package": "pkg.base"})
+    assert resp.status_code == 200
+    assert resp.json()["packages"] == ["pkg.base.alpha"]
+
+
+@pytest.mark.anyio
 async def test_overview_enforces_develop_only(client: httpx.AsyncClient, light_mode_module, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         light_mode_module,

@@ -354,6 +354,17 @@ def _missing_requested_package(exc: ModuleNotFoundError, package: str) -> bool:
     return exc.name == package or (bool(exc.name) and package.startswith(f"{exc.name}."))
 
 
+def _schema_modules_with_sections(modules: list[str]) -> list[str]:
+    valid: list[str] = []
+    for module in modules:
+        try:
+            if list_sections(module):
+                valid.append(module)
+        except Exception:
+            continue
+    return sorted(valid)
+
+
 # ---------- routes ----------
 
 
@@ -686,7 +697,7 @@ async def git_packages(base_package: str | None = Query(None), branch: str | Non
     base = base_package or ws.base_namespace
     _ = _schema_info_or_503(auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA)
     modules = list_modules_for_base(base)
-    packages = sorted(modules) if modules else [ws.package]
+    packages = _schema_modules_with_sections(modules) if modules else [ws.package]
     return {
         "packages": packages,
         "base_package": base,
