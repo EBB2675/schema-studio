@@ -191,11 +191,18 @@ def attach_custom_quantity(graph: dict[str, Any], req: Any, *, supported_dtypes:
 def attach_custom_class(graph: dict[str, Any], req: Any) -> dict[str, Any]:
     nodes = list(graph.get("nodes", []))
     edges = list(graph.get("edges", []))
+    update_existing = bool(getattr(req, "update_existing", False))
 
-    for node in nodes:
+    for index, node in enumerate(nodes):
         if node.get("kind") != "section":
             continue
-        if node.get("label") == req.name or node.get("id") == req.name:
+        if node.get("label") == req.name or node.get("id") == req.name or node.get("id") == f"{req.package}.{req.name}":
+            if update_existing:
+                updated_node = {**node, "doc": req.docstring or None}
+                updated = dict(graph)
+                updated["nodes"] = [*nodes[:index], updated_node, *nodes[index + 1:]]
+                updated["edges"] = edges
+                return updated
             raise HTTPException(status_code=400, detail=f"Class '{req.name}' already exists")
 
     # Always use a fully qualified id to keep consistency when adding quantities later.

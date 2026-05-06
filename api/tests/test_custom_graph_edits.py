@@ -103,3 +103,28 @@ def test_custom_inheritance_ignores_cardinality():
         "type": "inherits",
         "card": None,
     } in updated["edges"]
+
+
+def test_custom_class_update_existing_changes_docstring():
+    graph = {
+        "nodes": [
+            {"id": "pkg.Child", "kind": "section", "label": "Child", "module": "pkg", "doc": "old"},
+        ],
+        "edges": [],
+    }
+
+    req = SimpleNamespace(
+        package="pkg",
+        name="Child",
+        parent=None,
+        relation="inherits",
+        card=None,
+        docstring="new",
+        update_existing=True,
+    )
+
+    updated = attach_custom_class(graph, req)
+
+    assert updated["nodes"] == [
+        {"id": "pkg.Child", "kind": "section", "label": "Child", "module": "pkg", "doc": "new"}
+    ]

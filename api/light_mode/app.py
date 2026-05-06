@@ -94,6 +94,7 @@ class CustomClassRequest(BaseModel):
     relation: Literal["inherits", "hasSubSection"] = "inherits"
     card: str | None = None
     docstring: str | None = None
+    update_existing: bool = False
 
 
 class CustomQuantityRequest(BaseModel):
@@ -216,6 +217,7 @@ def _resolve_custom_class_request(
     relation: Literal["inherits", "hasSubSection"] | None,
     card: str | None,
     docstring: str | None,
+    update_existing: bool,
 ) -> CustomClassRequest:
     if req is not None:
         return req
@@ -228,6 +230,7 @@ def _resolve_custom_class_request(
         relation=relation or "inherits",
         card=card,
         docstring=docstring,
+        update_existing=update_existing,
     )
 
 
@@ -283,6 +286,7 @@ def _apply_persisted_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dic
                             "relation": edit.parent_relation or "inherits",
                             "card": edit.card,
                             "docstring": edit.docstring,
+                            "update_existing": True,
                         },
                     )(),
                 )
@@ -344,6 +348,10 @@ def _apply_custom_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dict, 
 
 def _empty_graph(package: str, root: str | None) -> dict:
     return {"package": package, "root": root, "nodes": [], "edges": []}
+
+
+def _missing_requested_package(exc: ModuleNotFoundError, package: str) -> bool:
+    return exc.name == package or (bool(exc.name) and package.startswith(f"{exc.name}."))
 
 
 # ---------- routes ----------
@@ -411,6 +419,10 @@ async def roots(package: str | None = Query(None)):
     pkg = package or ws.package
     try:
         return {"package": pkg, "sections": sorted(list_sections(pkg)), "workspace": _workspace_payload(ws)}
+    except ModuleNotFoundError as exc:
+        if pkg.endswith(".custom_schema") and _missing_requested_package(exc, pkg):
+            return {"package": pkg, "sections": [], "workspace": _workspace_payload(ws)}
+        raise HTTPException(status_code=400, detail=f"{type(exc).__name__}: {exc}") from exc
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=400, detail=f"{type(exc).__name__}: {exc}")
 
@@ -447,8 +459,7 @@ async def schema(
                 base_namespace=ns,
             )
         except ModuleNotFoundError as exc:
-            missing_requested_package = exc.name == pkg or (exc.name and pkg.startswith(f"{exc.name}."))
-            if not missing_requested_package or (not edits and not pkg.endswith(".custom_schema")):
+            if not _missing_requested_package(exc, pkg) or (not edits and not pkg.endswith(".custom_schema")):
                 raise
             graph = _empty_graph(pkg, root)
     graph, conflicts = _apply_custom_edits(graph, edits)
@@ -467,6 +478,7 @@ async def add_custom_class(
     relation: Literal["inherits", "hasSubSection"] | None = Query(None),
     card: str | None = Query(None),
     docstring: str | None = Query(None),
+    update_existing: bool = Query(False),
     root: str | None = Query(None),
     include_quantities: bool = Query(True),
     include_subsections: bool = Query(True),
@@ -483,6 +495,7 @@ async def add_custom_class(
         relation=relation,
         card=card,
         docstring=docstring,
+        update_existing=update_existing,
     )
     _ = _schema_info_or_503(auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA)
     ws = store.update_workspace(
@@ -516,6 +529,7 @@ async def add_custom_class(
                 "relation": req.relation,
                 "card": req.card,
                 "docstring": req.docstring,
+                "update_existing": req.update_existing,
             },
         )(),
     )

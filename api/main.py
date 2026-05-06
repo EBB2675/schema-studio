@@ -344,6 +344,7 @@ class CustomClassRequest(BaseModel):
     relation: Literal["inherits", "hasSubSection"] = "inherits"
     card: str | None = None
     docstring: str | None = None
+    update_existing: bool = False
 
 
 def _serialize_edit(edit: PersistedEdit) -> dict:
@@ -383,6 +384,7 @@ def _apply_persisted_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dic
                         relation=edit.parent_relation or "inherits",
                         card=edit.card,
                         docstring=edit.docstring,
+                        update_existing=True,
                     ),
                 )
             else:

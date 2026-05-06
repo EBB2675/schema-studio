@@ -367,6 +367,60 @@ async def test_custom_schema_package_replays_without_importing_python_module(
 
 
 @pytest.mark.anyio
+async def test_custom_schema_roots_returns_empty_without_importing_python_module(
+    client: httpx.AsyncClient,
+    light_mode_module,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    package = "pkg.custom_schema"
+
+    def missing_package(_package):
+        raise ModuleNotFoundError("No module named 'pkg.custom_schema'", name=package)
+
+    monkeypatch.setattr(light_mode_module, "list_sections", missing_package)
+
+    roots = await client.get("/roots", params={"package": package})
+    assert roots.status_code == 200
+    assert roots.json()["sections"] == []
+
+
+@pytest.mark.anyio
+async def test_custom_class_docstring_update_is_persisted(client: httpx.AsyncClient):
+    create_resp = await client.post(
+        "/schema/custom-class",
+        params={"empty": "true"},
+        json={"package": "pkg.default", "name": "DocClass", "docstring": "old"},
+    )
+    assert create_resp.status_code == 200
+
+    update_resp = await client.post(
+        "/schema/custom-class",
+        params={"empty": "true"},
+        json={
+            "package": "pkg.default",
+            "name": "DocClass",
+            "docstring": "new",
+            "update_existing": True,
+        },
+    )
+    assert update_resp.status_code == 200
+    assert update_resp.json()["persisted_edit"]["docstring"] == "new"
+    assert any(
+        n
+        for n in update_resp.json().get("nodes", [])
+        if n.get("kind") == "section" and n.get("label") == "DocClass" and n.get("doc") == "new"
+    )
+
+    replayed = await client.get("/schema", params={"package": "pkg.default", "empty": "true"})
+    assert replayed.status_code == 200
+    assert any(
+        n
+        for n in replayed.json().get("nodes", [])
+        if n.get("kind") == "section" and n.get("label") == "DocClass" and n.get("doc") == "new"
+    )
+
+
+@pytest.mark.anyio
 async def test_clear_custom_edits_all_packages_flag(client: httpx.AsyncClient):
     add_pkg_a = await client.post(
         "/schema/custom-class",

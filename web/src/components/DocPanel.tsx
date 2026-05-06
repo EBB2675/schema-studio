@@ -8,7 +8,7 @@ type Props = {
   actionError?: string | null;
   onRemoveQuantity: (id: string) => void;
   onEditQuantity: (id: string, updates: { quantityName: string; dtype: string; docstring: string }) => void;
-  onEditClass: (id: string, updates: { docstring: string }) => void;
+  onEditClass: (id: string, updates: { docstring: string }) => void | Promise<void>;
   clearActionError: () => void;
 };
 
@@ -138,10 +138,14 @@ export default function DocPanel({
     }
   };
 
-  const commitClassDoc = () => {
+  const commitClassDoc = async () => {
     if (selected?.kind !== "class" || disableActions) return;
-    onEditClass(selected.id, { docstring: classDocDraft });
-    setEditingClassDoc(false);
+    try {
+      await onEditClass(selected.id, { docstring: classDocDraft });
+      setEditingClassDoc(false);
+    } catch {
+      // Parent actionError displays the concrete failure message.
+    }
   };
 
   return (

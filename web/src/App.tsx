@@ -1974,7 +1974,7 @@ export default function App() {
     [umlState]
   );
 
-  const editClassDoc = (classId: string, updates: { docstring: string }) => {
+  const editClassDoc = async (classId: string, updates: { docstring: string }) => {
     const current = ensureEditableReady();
     if (!current) return;
 
@@ -2001,6 +2001,44 @@ export default function App() {
       ...before,
       doc: updates.docstring || null,
     };
+    const parentName =
+      before.parentId
+        ? umlState?.classes.find((c) => c.id === before.parentId)?.name ||
+          before.parentId.split(".").pop() ||
+          before.parentId
+        : null;
+
+    try {
+      const res = await api.post(
+        "/schema/custom-class",
+        {
+          package: before.module || current.package || pkg,
+          name: before.name,
+          parent: parentName,
+          relation: before.parentId ? before.parentRelation || "inherits" : "inherits",
+          card: before.parentRelation === "hasSubSection" ? before.parentCard ?? null : null,
+          docstring: updates.docstring || null,
+          update_existing: true,
+        },
+        {
+          params: {
+            root,
+            include_quantities: includeQuantities,
+            include_subsections: includeSubsections,
+            include_inheritance: includeInheritance,
+            allow_cross_module: crossModules,
+            base_namespace: normalizedNamespace || undefined,
+            empty: startEmpty ? true : undefined,
+          },
+        }
+      );
+      const updated = ensureGraphResponse(res.data);
+      syncWorkspaceFromResponse(updated);
+    } catch (e: unknown) {
+      const message = formatApiError(e);
+      setQuantityActionErr(message);
+      throw new Error(message);
+    }
 
     const nextGraph = {
       ...current,
