@@ -32,6 +32,7 @@ class PersistedEdit:
     docstring: Optional[str] = None
     parent_name: Optional[str] = None
     parent_relation: Optional[str] = None
+    card: Optional[str] = None
     base_sha: Optional[str] = None
     content_hash: Optional[str] = None
     edit_id: Optional[str] = None
@@ -80,6 +81,7 @@ def doc_to_edit(doc: dict) -> PersistedEdit:
         docstring=doc.get("docstring"),
         parent_name=doc.get("parent_name"),
         parent_relation=doc.get("parent_relation"),
+        card=doc.get("card"),
         edit_type=doc["edit_type"],
         base_sha=doc.get("base_sha"),
         content_hash=doc.get("content_hash"),
@@ -98,6 +100,7 @@ def _payload_differs(a: PersistedEdit, b: PersistedEdit) -> bool:
             "docstring",
             "parent_name",
             "parent_relation",
+            "card",
         )
     )
 
@@ -127,6 +130,7 @@ async def save_edit(db: AsyncIOMotorDatabase, edit: PersistedEdit, *, current_sh
             "docstring": edit.docstring,
             "parent_name": edit.parent_name,
             "parent_relation": edit.parent_relation,
+            "card": edit.card,
             "edit_type": edit.edit_type,
         }
     )
@@ -150,6 +154,7 @@ async def save_edit(db: AsyncIOMotorDatabase, edit: PersistedEdit, *, current_sh
                     "docstring": edit.docstring,
                     "parent_name": edit.parent_name,
                     "parent_relation": edit.parent_relation,
+                    "card": edit.card,
                     "edit_type": edit.edit_type,
                     "base_sha": current_sha,
                     "content_hash": edit_hash,

@@ -1427,7 +1427,7 @@ export default function App() {
     }
   };
 
-  const createClassOnCanvas = async ({ name, parentId, docstring, relation }: { name: string; parentId?: string | null; docstring?: string; relation?: "inherits" | "hasSubSection" }) => {
+  const createClassOnCanvas = async ({ name, parentId, docstring, relation, card }: { name: string; parentId?: string | null; docstring?: string; relation?: "inherits" | "hasSubSection"; card?: string }) => {
     const currentGraph = ensureEditableReady();
     if (!currentGraph) {
       throw new Error(addBlockedReason || "Canvas is not editable");
@@ -1440,13 +1440,16 @@ export default function App() {
     setCreatingClass(true);
     setQuantityActionErr(null);
     try {
+      const classRelation = parentId ? relation || "inherits" : "inherits";
+      const subsectionCard = classRelation === "hasSubSection" ? card?.trim() || null : null;
       const res = await api.post(
         "/schema/custom-class",
         {
           package: pkg,
           name,
           parent: parentId || null,
-          relation: parentId ? relation || "inherits" : "inherits",
+          relation: classRelation,
+          card: subsectionCard,
           docstring: docstring || null,
         },
         {
@@ -1471,7 +1474,8 @@ export default function App() {
           doc: docstring || null,
           module: pkg,
           parentId: parentId || null,
-          parentRelation: parentId ? relation || "inherits" : null,
+          parentRelation: parentId ? classRelation : null,
+          parentCard: subsectionCard,
           quantities: [],
           path: null,
           line: null,
@@ -1495,7 +1499,8 @@ export default function App() {
           doc: docstring || null,
           module: pkg,
           parentId: parentId || null,
-          parentRelation: parentId ? relation || "inherits" : null,
+          parentRelation: parentId ? classRelation : null,
+          parentCard: subsectionCard,
           quantities: [],
           path: null,
           line: null,
@@ -1594,7 +1599,7 @@ export default function App() {
     const parentLinkEdge: ApiEdge[] = cls.parentId
       ? relationType === "inherits"
         ? [{ source: cls.id, target: cls.parentId, type: relationType, card: null }]
-        : [{ source: cls.parentId, target: cls.id, type: relationType, card: null }]
+        : [{ source: cls.parentId, target: cls.id, type: relationType, card: cls.parentCard ?? null }]
       : [];
 
     return {

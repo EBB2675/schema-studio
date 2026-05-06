@@ -294,6 +294,79 @@ async def test_custom_inheritance_edge_direction_is_child_to_parent(client: http
 
 
 @pytest.mark.anyio
+async def test_custom_subsection_cardinality_is_persisted(client: httpx.AsyncClient):
+    parent_resp = await client.post(
+        "/schema/custom-class",
+        params={"empty": "true"},
+        json={"package": "pkg.default", "name": "Parent", "relation": "inherits"},
+    )
+    assert parent_resp.status_code == 200
+
+    child_resp = await client.post(
+        "/schema/custom-class",
+        params={"empty": "true"},
+        json={
+            "package": "pkg.default",
+            "name": "Child",
+            "parent": "pkg.default.Parent",
+            "relation": "hasSubSection",
+            "card": "0..*",
+        },
+    )
+    assert child_resp.status_code == 200
+    payload = child_resp.json()
+
+    assert payload["persisted_edit"]["card"] == "0..*"
+    assert any(
+        e
+        for e in payload.get("edges", [])
+        if e.get("type") == "hasSubSection"
+        and e.get("source") == "pkg.default.Parent"
+        and e.get("target") == "pkg.default.Child"
+        and e.get("card") == "0..*"
+    )
+
+    replayed = await client.get("/schema", params={"package": "pkg.default"})
+    assert replayed.status_code == 200
+    assert any(
+        e
+        for e in replayed.json().get("edges", [])
+        if e.get("type") == "hasSubSection"
+        and e.get("source") == "pkg.default.Parent"
+        and e.get("target") == "pkg.default.Child"
+        and e.get("card") == "0..*"
+    )
+
+
+@pytest.mark.anyio
+async def test_custom_schema_package_replays_without_importing_python_module(
+    client: httpx.AsyncClient,
+    light_mode_module,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    package = "pkg.custom_schema"
+    class_resp = await client.post(
+        "/schema/custom-class",
+        params={"empty": "true"},
+        json={"package": package, "name": "ScratchClass", "relation": "inherits"},
+    )
+    assert class_resp.status_code == 200
+
+    def missing_package(**_kwargs):
+        raise ModuleNotFoundError("No module named 'pkg.custom_schema'", name=package)
+
+    monkeypatch.setattr(light_mode_module, "build_graph", missing_package)
+
+    replayed = await client.get("/schema", params={"package": package})
+    assert replayed.status_code == 200
+    assert any(
+        n
+        for n in replayed.json().get("nodes", [])
+        if n.get("kind") == "section" and n.get("label") == "ScratchClass"
+    )
+
+
+@pytest.mark.anyio
 async def test_clear_custom_edits_all_packages_flag(client: httpx.AsyncClient):
     add_pkg_a = await client.post(
         "/schema/custom-class",

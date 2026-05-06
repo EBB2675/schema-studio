@@ -214,10 +214,11 @@ def attach_custom_class(graph: dict[str, Any], req: Any) -> dict[str, Any]:
         parent = _section_by_id_or_label(nodes, req.parent)
         parent_id = parent.get("id") if parent else req.parent
         relation = req.relation if req.relation in ("inherits", "hasSubSection") else "inherits"
+        card = getattr(req, "card", None) if relation == "hasSubSection" else None
         if relation == "inherits":
             edges = edges + [{"source": new_id, "target": parent_id, "type": relation, "card": None}]
         else:
-            edges = edges + [{"source": parent_id, "target": new_id, "type": relation, "card": None}]
+            edges = edges + [{"source": parent_id, "target": new_id, "type": relation, "card": card}]
 
     updated = dict(graph)
     updated["nodes"] = nodes

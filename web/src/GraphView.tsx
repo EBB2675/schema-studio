@@ -47,7 +47,7 @@ type Props = {
   selectedClassId?: string | null;
   onSelectClass?: (cls: UmlClassNode) => void;
   onCreateQuantity?: (classId: string, data: { quantityName: string; dtype: string; docstring: string }) => Promise<void>;
-  onCreateClass?: (data: { name: string; parentId?: string | null; docstring?: string; relation?: "inherits" | "hasSubSection" }) => Promise<void>;
+  onCreateClass?: (data: { name: string; parentId?: string | null; docstring?: string; relation?: "inherits" | "hasSubSection"; card?: string }) => Promise<void>;
   creatingQuantityFor?: string | null;
   creatingClass?: boolean;
   onClearSelection?: () => void;
@@ -156,11 +156,12 @@ export default function GraphView({
     docstring: "",
   });
   const [showClassForm, setShowClassForm] = useState<boolean>(false);
-  const [classDraft, setClassDraft] = useState<{ name: string; parentId: string; docstring: string; relation: "inherits" | "hasSubSection" }>({
+  const [classDraft, setClassDraft] = useState<{ name: string; parentId: string; docstring: string; relation: "inherits" | "hasSubSection"; card: string }>({
     name: "",
     parentId: "",
     docstring: "",
     relation: "inherits",
+    card: "",
   });
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [classError, setClassError] = useState<string | null>(null);
@@ -300,10 +301,11 @@ export default function GraphView({
         parentId: classDraft.parentId || null,
         docstring: classDraft.docstring.trim() || undefined,
         relation: classDraft.relation,
+        card: classDraft.relation === "hasSubSection" ? classDraft.card.trim() || undefined : undefined,
       });
       setClassError(null);
       setShowClassForm(false);
-      setClassDraft({ name: "", parentId: "", docstring: "", relation: "inherits" });
+      setClassDraft({ name: "", parentId: "", docstring: "", relation: "inherits", card: "" });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Failed to add class";
       setClassError(message);
@@ -987,7 +989,13 @@ export default function GraphView({
                   id="new-class-parent"
                   className="select"
                   value={classDraft.parentId}
-                  onChange={(e) => setClassDraft((prev) => ({ ...prev, parentId: e.target.value }))}
+                  onChange={(e) =>
+                    setClassDraft((prev) => ({
+                      ...prev,
+                      parentId: e.target.value,
+                      card: e.target.value ? prev.card : "",
+                    }))
+                  }
                 >
                   <option value="">No parent</option>
                   {classCards.map((cls) => (
@@ -1005,6 +1013,7 @@ export default function GraphView({
                     setClassDraft((prev) => ({
                       ...prev,
                       relation: e.target.value as "inherits" | "hasSubSection",
+                      card: e.target.value === "hasSubSection" ? prev.card : "",
                     }))
                   }
                   disabled={!classDraft.parentId}
@@ -1013,6 +1022,34 @@ export default function GraphView({
                   <option value="inherits">Inheritance (is-a)</option>
                   <option value="hasSubSection">Subsection (has-a)</option>
                 </select>
+                {classDraft.parentId && classDraft.relation === "hasSubSection" ? (
+                  <>
+                    <div className="row" style={{ alignItems: "center", gap: 8 }}>
+                      <input
+                        id="new-class-repeated"
+                        type="checkbox"
+                        checked={classDraft.card === "0..*"}
+                        onChange={(e) =>
+                          setClassDraft((prev) => ({
+                            ...prev,
+                            card: e.target.checked ? "0..*" : "",
+                          }))
+                        }
+                      />
+                      <label className="label" htmlFor="new-class-repeated" style={{ margin: 0 }}>
+                        Repeated subsection
+                      </label>
+                    </div>
+                    <label className="label" htmlFor="new-class-card">Cardinality</label>
+                    <input
+                      id="new-class-card"
+                      className="input"
+                      value={classDraft.card}
+                      onChange={(e) => setClassDraft((prev) => ({ ...prev, card: e.target.value }))}
+                      placeholder="0..*"
+                    />
+                  </>
+                ) : null}
                 <label className="label" htmlFor="new-class-doc">Docstring</label>
                 <textarea
                   id="new-class-doc"
