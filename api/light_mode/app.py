@@ -360,7 +360,10 @@ def _schema_modules_with_sections(modules: list[str]) -> list[str]:
         try:
             if list_sections(module):
                 valid.append(module)
+        except ImportError:
+            continue
         except Exception:
+            logger.exception("Unexpected error while listing sections for module '%s'", module)
             continue
     return sorted(valid)
 
