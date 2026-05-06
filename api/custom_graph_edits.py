@@ -192,22 +192,42 @@ def attach_custom_class(graph: dict[str, Any], req: Any) -> dict[str, Any]:
     nodes = list(graph.get("nodes", []))
     edges = list(graph.get("edges", []))
     update_existing = bool(getattr(req, "update_existing", False))
+    new_id = f"{req.package}.{req.name}"
 
-    for index, node in enumerate(nodes):
+    if update_existing:
+        candidates: list[tuple[int, dict[str, Any]]] = []
+        label_candidates: list[tuple[int, dict[str, Any]]] = []
+        for index, node in enumerate(nodes):
+            if node.get("kind") != "section":
+                continue
+            if node.get("id") == req.name or node.get("id") == new_id:
+                candidates.append((index, node))
+                continue
+            if node.get("label") == req.name and node.get("module") == req.package:
+                candidates.append((index, node))
+                continue
+            if node.get("label") == req.name:
+                label_candidates.append((index, node))
+
+        if not candidates and len(label_candidates) == 1:
+            candidates = label_candidates
+        if len(candidates) > 1 or (not candidates and len(label_candidates) > 1):
+            raise HTTPException(status_code=400, detail=f"Class '{req.name}' is ambiguous; use a fully qualified id")
+        if candidates:
+            index, node = candidates[0]
+            updated_node = {**node, "doc": req.docstring or None}
+            updated = dict(graph)
+            updated["nodes"] = [*nodes[:index], updated_node, *nodes[index + 1:]]
+            updated["edges"] = edges
+            return updated
+
+    for node in nodes:
         if node.get("kind") != "section":
             continue
-        if node.get("label") == req.name or node.get("id") == req.name or node.get("id") == f"{req.package}.{req.name}":
-            if update_existing:
-                updated_node = {**node, "doc": req.docstring or None}
-                updated = dict(graph)
-                updated["nodes"] = [*nodes[:index], updated_node, *nodes[index + 1:]]
-                updated["edges"] = edges
-                return updated
+        if node.get("label") == req.name or node.get("id") == req.name or node.get("id") == new_id:
             raise HTTPException(status_code=400, detail=f"Class '{req.name}' already exists")
 
     # Always use a fully qualified id to keep consistency when adding quantities later.
-    new_id = f"{req.package}.{req.name}"
-
     new_node = {
         "id": new_id,
         "kind": "section",
