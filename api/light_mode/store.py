@@ -55,6 +55,7 @@ class PersistedEdit:
     docstring: Optional[str] = None
     parent_name: Optional[str] = None
     parent_relation: Optional[str] = None
+    card: Optional[str] = None
     base_sha: Optional[str] = None
     content_hash: Optional[str] = None
     created_at: Optional[str] = None
@@ -99,6 +100,7 @@ class LocalStore:
                     docstring TEXT,
                     parent_name TEXT,
                     parent_relation TEXT,
+                    card TEXT,
                     edit_type TEXT NOT NULL,
                     base_sha TEXT,
                     content_hash TEXT,
@@ -108,6 +110,9 @@ class LocalStore:
                 );
                 """
             )
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(custom_edits)").fetchall()}
+            if "card" not in columns:
+                conn.execute("ALTER TABLE custom_edits ADD COLUMN card TEXT")
             # Seed workspace defaults if empty
             cur = conn.execute("SELECT COUNT(*) AS n FROM workspace")
             if cur.fetchone()["n"] == 0:
@@ -207,6 +212,7 @@ class LocalStore:
                 "docstring": edit.docstring,
                 "parent_name": edit.parent_name,
                 "parent_relation": edit.parent_relation,
+                "card": edit.card,
                 "edit_type": edit.edit_type,
             }
         )
@@ -225,7 +231,7 @@ class LocalStore:
                 conn.execute(
                     """
                     UPDATE custom_edits
-                    SET dtype = ?, docstring = ?, parent_name = ?, parent_relation = ?, edit_type = ?, base_sha = ?, content_hash = ?, updated_at = ?
+                    SET dtype = ?, docstring = ?, parent_name = ?, parent_relation = ?, card = ?, edit_type = ?, base_sha = ?, content_hash = ?, updated_at = ?
                     WHERE id = ?
                     """,
                     (
@@ -233,6 +239,7 @@ class LocalStore:
                         edit.docstring,
                         edit.parent_name,
                         edit.parent_relation,
+                        edit.card,
                         edit.edit_type,
                         current_sha,
                         payload_hash,
@@ -247,8 +254,8 @@ class LocalStore:
                 """
                 INSERT INTO custom_edits (
                     user_id, branch, package, class_name, quantity_name, dtype, docstring, parent_name, parent_relation,
-                    edit_type, base_sha, content_hash, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    card, edit_type, base_sha, content_hash, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     edit.user_id,
@@ -260,6 +267,7 @@ class LocalStore:
                     edit.docstring,
                     edit.parent_name,
                     edit.parent_relation,
+                    edit.card,
                     edit.edit_type,
                     current_sha,
                     payload_hash,
@@ -284,6 +292,7 @@ class LocalStore:
             docstring=row["docstring"],
             parent_name=row["parent_name"],
             parent_relation=row["parent_relation"],
+            card=row["card"],
             edit_type=row["edit_type"],
             base_sha=row["base_sha"],
             content_hash=row["content_hash"],

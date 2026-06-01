@@ -92,7 +92,9 @@ class CustomClassRequest(BaseModel):
     name: str
     parent: str | None = None
     relation: Literal["inherits", "hasSubSection"] = "inherits"
+    card: str | None = None
     docstring: str | None = None
+    update_existing: bool = False
 
 
 class CustomQuantityRequest(BaseModel):
@@ -138,6 +140,7 @@ def _serialize_edit(edit: PersistedEdit) -> dict:
         "docstring": edit.docstring,
         "parent_name": edit.parent_name,
         "parent_relation": edit.parent_relation,
+        "card": edit.card,
         "edit_type": edit.edit_type,
         "base_sha": edit.base_sha,
         "created_at": edit.created_at,
@@ -212,7 +215,9 @@ def _resolve_custom_class_request(
     name: str | None,
     parent: str | None,
     relation: Literal["inherits", "hasSubSection"] | None,
+    card: str | None,
     docstring: str | None,
+    update_existing: bool,
 ) -> CustomClassRequest:
     if req is not None:
         return req
@@ -223,7 +228,9 @@ def _resolve_custom_class_request(
         name=name,
         parent=parent,
         relation=relation or "inherits",
+        card=card,
         docstring=docstring,
+        update_existing=update_existing,
     )
 
 
@@ -277,7 +284,9 @@ def _apply_persisted_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dic
                             "name": edit.class_name,
                             "parent": edit.parent_name,
                             "relation": edit.parent_relation or "inherits",
+                            "card": edit.card,
                             "docstring": edit.docstring,
+                            "update_existing": True,
                         },
                     )(),
                 )
@@ -335,6 +344,28 @@ def _apply_custom_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dict, 
         graph_with_edits = dict(graph_with_edits)
         graph_with_edits["applied_edits"] = [_serialize_edit(e) for e in applied]
     return graph_with_edits, conflicts
+
+
+def _empty_graph(package: str, root: str | None) -> dict:
+    return {"package": package, "root": root, "nodes": [], "edges": []}
+
+
+def _missing_requested_package(exc: ModuleNotFoundError, package: str) -> bool:
+    return exc.name == package or (bool(exc.name) and package.startswith(f"{exc.name}."))
+
+
+def _schema_modules_with_sections(modules: list[str]) -> list[str]:
+    valid: list[str] = []
+    for module in modules:
+        try:
+            if list_sections(module):
+                valid.append(module)
+        except ImportError:
+            continue
+        except Exception:
+            logger.exception("Unexpected error while listing sections for module '%s'", module)
+            continue
+    return sorted(valid)
 
 
 # ---------- routes ----------
@@ -402,6 +433,10 @@ async def roots(package: str | None = Query(None)):
     pkg = package or ws.package
     try:
         return {"package": pkg, "sections": sorted(list_sections(pkg)), "workspace": _workspace_payload(ws)}
+    except ModuleNotFoundError as exc:
+        if pkg.endswith(".custom_schema") and _missing_requested_package(exc, pkg):
+            return {"package": pkg, "sections": [], "workspace": _workspace_payload(ws)}
+        raise HTTPException(status_code=400, detail=f"{type(exc).__name__}: {exc}") from exc
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=400, detail=f"{type(exc).__name__}: {exc}")
 
@@ -423,19 +458,24 @@ async def schema(
     ns = base_namespace or ws.base_namespace or _root_namespace(pkg)
     if package or base_namespace:
         ws = store.update_workspace(branch=LIGHT_MODE_BRANCH, package=pkg, base_namespace=ns)
-    if empty:
-        graph = {"package": pkg, "root": root, "nodes": [], "edges": []}
-        return graph | {"workspace": _workspace_payload(ws)}
-    graph = build_graph(
-        package=pkg,
-        root=root,
-        include_quantities=include_quantities,
-        include_subsections=include_subsections,
-        include_inheritance=include_inheritance,
-        allow_cross_module=allow_cross_module,
-        base_namespace=ns,
-    )
     edits = store.list_edits(user_id=LIGHT_MODE_USER, branch=ws.branch, package=pkg)
+    if empty:
+        graph = _empty_graph(pkg, root)
+    else:
+        try:
+            graph = build_graph(
+                package=pkg,
+                root=root,
+                include_quantities=include_quantities,
+                include_subsections=include_subsections,
+                include_inheritance=include_inheritance,
+                allow_cross_module=allow_cross_module,
+                base_namespace=ns,
+            )
+        except ModuleNotFoundError as exc:
+            if not _missing_requested_package(exc, pkg) or (not edits and not pkg.endswith(".custom_schema")):
+                raise
+            graph = _empty_graph(pkg, root)
     graph, conflicts = _apply_custom_edits(graph, edits)
     response = graph | {"workspace": _workspace_payload(ws)}
     if conflicts:
@@ -450,7 +490,9 @@ async def add_custom_class(
     name: str | None = Query(None),
     parent: str | None = Query(None),
     relation: Literal["inherits", "hasSubSection"] | None = Query(None),
+    card: str | None = Query(None),
     docstring: str | None = Query(None),
+    update_existing: bool = Query(False),
     root: str | None = Query(None),
     include_quantities: bool = Query(True),
     include_subsections: bool = Query(True),
@@ -465,7 +507,9 @@ async def add_custom_class(
         name=name,
         parent=parent,
         relation=relation,
+        card=card,
         docstring=docstring,
+        update_existing=update_existing,
     )
     _ = _schema_info_or_503(auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA)
     ws = store.update_workspace(
@@ -497,7 +541,9 @@ async def add_custom_class(
                 "name": req.name,
                 "parent": req.parent,
                 "relation": req.relation,
+                "card": req.card,
                 "docstring": req.docstring,
+                "update_existing": req.update_existing,
             },
         )(),
     )
@@ -510,6 +556,7 @@ async def add_custom_class(
             class_name=req.name,
             parent_name=req.parent,
             parent_relation=req.relation,
+            card=req.card if req.relation == "hasSubSection" else None,
             docstring=req.docstring,
             edit_type="class",
         ),
@@ -653,7 +700,7 @@ async def git_packages(base_package: str | None = Query(None), branch: str | Non
     base = base_package or ws.base_namespace
     _ = _schema_info_or_503(auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA)
     modules = list_modules_for_base(base)
-    packages = sorted(modules) if modules else [ws.package]
+    packages = _schema_modules_with_sections(modules) if modules else [ws.package]
     return {
         "packages": packages,
         "base_package": base,

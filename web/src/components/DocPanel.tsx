@@ -8,6 +8,7 @@ type Props = {
   actionError?: string | null;
   onRemoveQuantity: (id: string) => void;
   onEditQuantity: (id: string, updates: { quantityName: string; dtype: string; docstring: string }) => void;
+  onEditClass: (id: string, updates: { docstring: string }) => void | Promise<void>;
   clearActionError: () => void;
 };
 
@@ -75,12 +76,15 @@ export default function DocPanel({
   editableMode,
   onRemoveQuantity,
   onEditQuantity,
+  onEditClass,
   blockedReason,
   actionError,
   clearActionError,
 }: Props) {
   const { selected, setSelected } = useSelection();
   const [classContext, setClassContext] = useState<Selected | null>(null);
+  const [editingClassDoc, setEditingClassDoc] = useState(false);
+  const [classDocDraft, setClassDocDraft] = useState("");
 
   useEffect(() => {
     clearActionError();
@@ -89,6 +93,8 @@ export default function DocPanel({
   useEffect(() => {
     if (selected?.kind === "class") {
       setClassContext(selected);
+      setClassDocDraft(selected.doc || "");
+      setEditingClassDoc(false);
     }
   }, [selected]);
 
@@ -132,6 +138,16 @@ export default function DocPanel({
     }
   };
 
+  const commitClassDoc = async () => {
+    if (selected?.kind !== "class" || disableActions) return;
+    try {
+      await onEditClass(selected.id, { docstring: classDocDraft });
+      setEditingClassDoc(false);
+    } catch {
+      // Parent actionError displays the concrete failure message.
+    }
+  };
+
   return (
     <div className="doc-shell">
       {!selected ? (
@@ -147,7 +163,44 @@ export default function DocPanel({
             ) : null}
           </div>
           <h2 className="doc-title">{selected.name}</h2>
-          <pre className="doc-docstring">{selected.doc || "No docstring available."}</pre>
+          <div style={{ marginBottom: 14 }}>
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <div className="meta-label">Docstring</div>
+              {editableMode ? (
+                <button
+                  className="btn secondary"
+                  type="button"
+                  aria-label={editingClassDoc ? "Cancel class docstring edit" : "Edit class docstring"}
+                  style={{ padding: "6px 10px" }}
+                  onClick={() => setEditingClassDoc((prev) => !prev)}
+                  disabled={disableActions}
+                >
+                  {editingClassDoc ? "Cancel" : "Edit"}
+                </button>
+              ) : null}
+            </div>
+            {editingClassDoc ? (
+              <div className="action-stack" style={{ gap: 8 }}>
+                <textarea
+                  className="input"
+                  aria-label="Class docstring"
+                  style={{ minHeight: 100, resize: "vertical" }}
+                  value={classDocDraft}
+                  onChange={(e) => setClassDocDraft(e.target.value)}
+                  disabled={disableActions}
+                />
+                {actionError ? <div style={{ color: "#b91c1c", fontSize: 13 }}>{actionError}</div> : null}
+                {blockedReason ? <div style={{ color: "#6b7280", fontSize: 13 }}>{blockedReason}</div> : null}
+                <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+                  <button className="btn" type="button" onClick={commitClassDoc} disabled={disableActions}>
+                    Save changes
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <pre className="doc-docstring">{selected.doc || "No docstring available."}</pre>
+            )}
+          </div>
 
           <div className="doc-subtitle">
             <span>Quantities</span>

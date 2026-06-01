@@ -27,6 +27,7 @@ export type GraphExportHandle = {
 
 type DiffNodes = { added: ApiNode[]; removed: ApiNode[]; changed: { id: string }[] };
 type DiffEdges = { added: ApiEdge[]; removed: ApiEdge[] };
+type CardBox = { x: number; y: number; w: number; h: number };
 
 type Props = {
   nodes: RawNode[];
@@ -46,7 +47,7 @@ type Props = {
   selectedClassId?: string | null;
   onSelectClass?: (cls: UmlClassNode) => void;
   onCreateQuantity?: (classId: string, data: { quantityName: string; dtype: string; docstring: string }) => Promise<void>;
-  onCreateClass?: (data: { name: string; parentId?: string | null; docstring?: string; relation?: "inherits" | "hasSubSection" }) => Promise<void>;
+  onCreateClass?: (data: { name: string; parentId?: string | null; docstring?: string; relation?: "inherits" | "hasSubSection"; card?: string }) => Promise<void>;
   creatingQuantityFor?: string | null;
   creatingClass?: boolean;
   onClearSelection?: () => void;
@@ -59,6 +60,37 @@ const cleanType = (t?: string | null) => {
   if (m) return m[1];
   if (t.startsWith("m_")) return t.replace(/^m_/, "");
   return t;
+};
+
+const editableCardWidth = (box: CardBox) => Math.max(box.w + 24, 200);
+
+const connectionPoints = (source: CardBox, target: CardBox) => {
+  const sx = source.x + source.w / 2;
+  const sy = source.y + source.h / 2;
+  const tx = target.x + target.w / 2;
+  const ty = target.y + target.h / 2;
+  const dx = tx - sx;
+  const dy = ty - sy;
+
+  if (dx === 0 && dy === 0) {
+    return { x1: sx, y1: sy, x2: tx, y2: ty };
+  }
+
+  const sourceScale = Math.min(
+    dx === 0 ? Number.POSITIVE_INFINITY : source.w / 2 / Math.abs(dx),
+    dy === 0 ? Number.POSITIVE_INFINITY : source.h / 2 / Math.abs(dy)
+  );
+  const targetScale = Math.min(
+    dx === 0 ? Number.POSITIVE_INFINITY : target.w / 2 / Math.abs(dx),
+    dy === 0 ? Number.POSITIVE_INFINITY : target.h / 2 / Math.abs(dy)
+  );
+
+  return {
+    x1: sx + dx * sourceScale,
+    y1: sy + dy * sourceScale,
+    x2: tx - dx * targetScale,
+    y2: ty - dy * targetScale,
+  };
 };
 
 function umlLabel(
@@ -124,11 +156,12 @@ export default function GraphView({
     docstring: "",
   });
   const [showClassForm, setShowClassForm] = useState<boolean>(false);
-  const [classDraft, setClassDraft] = useState<{ name: string; parentId: string; docstring: string; relation: "inherits" | "hasSubSection" }>({
+  const [classDraft, setClassDraft] = useState<{ name: string; parentId: string; docstring: string; relation: "inherits" | "hasSubSection"; card: string }>({
     name: "",
     parentId: "",
     docstring: "",
     relation: "inherits",
+    card: "",
   });
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [classError, setClassError] = useState<string | null>(null);
@@ -268,10 +301,11 @@ export default function GraphView({
         parentId: classDraft.parentId || null,
         docstring: classDraft.docstring.trim() || undefined,
         relation: classDraft.relation,
+        card: classDraft.relation === "hasSubSection" ? classDraft.card.trim() || undefined : undefined,
       });
       setClassError(null);
       setShowClassForm(false);
-      setClassDraft({ name: "", parentId: "", docstring: "", relation: "inherits" });
+      setClassDraft({ name: "", parentId: "", docstring: "", relation: "inherits", card: "" });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Failed to add class";
       setClassError(message);
@@ -831,6 +865,31 @@ export default function GraphView({
     [cardBoxes, classCards]
   );
 
+  const editableEdgeViews = useMemo(() => {
+    const displayBoxes = new Map<string, CardBox>();
+    cardViews.forEach(({ cls, box }) => {
+      if (!box) return;
+      displayBoxes.set(cls.id, { ...box, w: editableCardWidth(box) });
+    });
+
+    return umlEdges
+      .map((edge, index) => {
+        const source = displayBoxes.get(edge.source);
+        const target = displayBoxes.get(edge.target);
+        if (!source || !target) return null;
+        return {
+          key: `${edge.type}:${index}:${edge.source}->${edge.target}`,
+          edge,
+          points: connectionPoints(source, target),
+        };
+      })
+      .filter((view): view is {
+        key: string;
+        edge: RawEdge;
+        points: { x1: number; y1: number; x2: number; y2: number };
+      } => Boolean(view));
+  }, [cardViews, umlEdges]);
+
   const onDragMove = useCallback(
     (e: MouseEvent) => {
       const state = dragRef.current;
@@ -930,7 +989,13 @@ export default function GraphView({
                   id="new-class-parent"
                   className="select"
                   value={classDraft.parentId}
-                  onChange={(e) => setClassDraft((prev) => ({ ...prev, parentId: e.target.value }))}
+                  onChange={(e) =>
+                    setClassDraft((prev) => ({
+                      ...prev,
+                      parentId: e.target.value,
+                      card: e.target.value ? prev.card : "",
+                    }))
+                  }
                 >
                   <option value="">No parent</option>
                   {classCards.map((cls) => (
@@ -948,6 +1013,7 @@ export default function GraphView({
                     setClassDraft((prev) => ({
                       ...prev,
                       relation: e.target.value as "inherits" | "hasSubSection",
+                      card: e.target.value === "hasSubSection" ? prev.card : "",
                     }))
                   }
                   disabled={!classDraft.parentId}
@@ -956,6 +1022,34 @@ export default function GraphView({
                   <option value="inherits">Inheritance (is-a)</option>
                   <option value="hasSubSection">Subsection (has-a)</option>
                 </select>
+                {classDraft.parentId && classDraft.relation === "hasSubSection" ? (
+                  <>
+                    <div className="row" style={{ alignItems: "center", gap: 8 }}>
+                      <input
+                        id="new-class-repeated"
+                        type="checkbox"
+                        checked={classDraft.card === "0..*"}
+                        onChange={(e) =>
+                          setClassDraft((prev) => ({
+                            ...prev,
+                            card: e.target.checked ? "0..*" : "",
+                          }))
+                        }
+                      />
+                      <label className="label" htmlFor="new-class-repeated" style={{ margin: 0 }}>
+                        Repeated subsection
+                      </label>
+                    </div>
+                    <label className="label" htmlFor="new-class-card">Cardinality</label>
+                    <input
+                      id="new-class-card"
+                      className="input"
+                      value={classDraft.card}
+                      onChange={(e) => setClassDraft((prev) => ({ ...prev, card: e.target.value }))}
+                      placeholder="0..*"
+                    />
+                  </>
+                ) : null}
                 <label className="label" htmlFor="new-class-doc">Docstring</label>
                 <textarea
                   id="new-class-doc"
@@ -984,6 +1078,78 @@ export default function GraphView({
               pointerEvents: "none"
             }}
           >
+            <svg
+              aria-hidden="true"
+              className="uml-edit-edges"
+              style={{ position: "absolute", inset: 0, overflow: "visible", pointerEvents: "none", zIndex: 1 }}
+            >
+              <defs>
+                <marker
+                  id="edit-composition-arrow"
+                  markerWidth="10"
+                  markerHeight="10"
+                  refX="8"
+                  refY="5"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill={palette.composition} />
+                </marker>
+                <marker
+                  id="edit-composition-diamond"
+                  markerWidth="12"
+                  markerHeight="12"
+                  refX="2"
+                  refY="6"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <path d="M 2 6 L 6 2 L 10 6 L 6 10 z" fill={palette.composition} stroke={palette.composition} />
+                </marker>
+                <marker
+                  id="edit-inheritance-arrow"
+                  markerWidth="12"
+                  markerHeight="12"
+                  refX="10"
+                  refY="6"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <path d="M 1 1 L 11 6 L 1 11 z" fill="none" stroke={palette.inheritance} strokeWidth="1.5" />
+                </marker>
+              </defs>
+              {editableEdgeViews.map(({ key, edge, points }) => {
+                const isInheritance = edge.type === "inherits";
+                const midX = (points.x1 + points.x2) / 2;
+                const midY = (points.y1 + points.y2) / 2;
+                return (
+                  <g key={key}>
+                    <line
+                      x1={points.x1}
+                      y1={points.y1}
+                      x2={points.x2}
+                      y2={points.y2}
+                      stroke={isInheritance ? palette.inheritance : palette.composition}
+                      strokeWidth={2}
+                      strokeDasharray={isInheritance ? "10 8" : undefined}
+                      markerStart={isInheritance ? undefined : "url(#edit-composition-diamond)"}
+                      markerEnd={isInheritance ? "url(#edit-inheritance-arrow)" : "url(#edit-composition-arrow)"}
+                    />
+                    {!isInheritance && edge.card ? (
+                      <text
+                        x={midX}
+                        y={midY - 6}
+                        fill={palette.composition}
+                        fontSize={10}
+                        textAnchor="middle"
+                      >
+                        {edge.card}
+                      </text>
+                    ) : null}
+                  </g>
+                );
+              })}
+            </svg>
             {cardViews.map(({ cls, box }) => {
               if (!box) return null;
               const isSelected = selectedClassId === cls.id;
@@ -996,7 +1162,7 @@ export default function GraphView({
                   className={`uml-card ${isSelected ? "is-selected" : ""} ${hasInline ? "has-inline" : ""} ${draggingId === cls.id ? "dragging" : ""}`}
                   style={{
                     transform: `translate(${box.x}px, ${box.y}px)`,
-                    width: Math.max(box.w + 24, 200),
+                    width: editableCardWidth(box),
                     minWidth: 200,
                     zIndex,
                     pointerEvents: "auto",

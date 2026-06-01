@@ -20,7 +20,7 @@ const baseGraph = (): ApiGraph => ({
   ],
   edges: [
     { source: "pkg.schema.Child", target: "pkg.schema.Parent", type: "inherits" },
-    { source: "pkg.schema.Parent", target: "pkg.schema.Sub", type: "hasSubSection" },
+    { source: "pkg.schema.Parent", target: "pkg.schema.Sub", type: "hasSubSection", card: "0..*" },
     { source: "pkg.schema.Parent", target: "pkg.schema.Parent.shared_q", type: "hasQuantity" },
   ],
 });
@@ -43,9 +43,23 @@ describe("buildUmlStateFromGraph inheritance", () => {
 
     expect(
       uml!.edges.some(
-        (e) => e.type === "hasSubSection" && e.source === "pkg.schema.Child" && e.target === "pkg.schema.Sub"
+        (e) =>
+          e.type === "hasSubSection" &&
+          e.source === "pkg.schema.Child" &&
+          e.target === "pkg.schema.Sub" &&
+          e.card === "0..*"
       )
     ).toBe(true);
+  });
+
+  it("stores subsection parent cardinality on class nodes", () => {
+    const uml = buildUmlStateFromGraph(baseGraph());
+    const sub = uml!.classes.find((c) => c.id === "pkg.schema.Sub");
+
+    expect(sub).toBeDefined();
+    expect(sub!.parentId).toBe("pkg.schema.Parent");
+    expect(sub!.parentRelation).toBe("hasSubSection");
+    expect(sub!.parentCard).toBe("0..*");
   });
 
   it("prefers owned quantity over inherited quantity with the same name", () => {

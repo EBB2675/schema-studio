@@ -342,7 +342,9 @@ class CustomClassRequest(BaseModel):
     name: str
     parent: str | None = None
     relation: Literal["inherits", "hasSubSection"] = "inherits"
+    card: str | None = None
     docstring: str | None = None
+    update_existing: bool = False
 
 
 def _serialize_edit(edit: PersistedEdit) -> dict:
@@ -357,6 +359,7 @@ def _serialize_edit(edit: PersistedEdit) -> dict:
         "docstring": edit.docstring,
         "parent_name": edit.parent_name,
         "parent_relation": edit.parent_relation,
+        "card": edit.card,
         "edit_type": edit.edit_type,
         "base_sha": edit.base_sha,
         "created_at": edit.created_at,
@@ -379,7 +382,9 @@ def _apply_persisted_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dic
                         name=edit.class_name,
                         parent=edit.parent_name,
                         relation=edit.parent_relation or "inherits",
+                        card=edit.card,
                         docstring=edit.docstring,
+                        update_existing=True,
                     ),
                 )
             else:
@@ -462,6 +467,7 @@ async def _persist_edit(
                 class_name=req.name,
                 parent_name=req.parent,
                 parent_relation=req.relation,
+                card=req.card if req.relation == "hasSubSection" else None,
                 docstring=req.docstring,
                 edit_type="class",
                 base_sha=current_sha,

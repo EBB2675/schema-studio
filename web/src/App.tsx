@@ -1146,6 +1146,9 @@ export default function App() {
               case "remove-class":
                 // Reflected if class is gone.
                 return !classIds.has(normalizeId(change.cls.id));
+              case "edit-class":
+                // Reflected if the edited class is present.
+                return classIds.has(normalizeId(change.after.id));
               case "add-quantity":
                 // Reflected if quantity is present.
                 return quantityIds.has(normalizeId(change.quantity.id));
@@ -1427,7 +1430,7 @@ export default function App() {
     }
   };
 
-  const createClassOnCanvas = async ({ name, parentId, docstring, relation }: { name: string; parentId?: string | null; docstring?: string; relation?: "inherits" | "hasSubSection" }) => {
+  const createClassOnCanvas = async ({ name, parentId, docstring, relation, card }: { name: string; parentId?: string | null; docstring?: string; relation?: "inherits" | "hasSubSection"; card?: string }) => {
     const currentGraph = ensureEditableReady();
     if (!currentGraph) {
       throw new Error(addBlockedReason || "Canvas is not editable");
@@ -1440,13 +1443,16 @@ export default function App() {
     setCreatingClass(true);
     setQuantityActionErr(null);
     try {
+      const classRelation = parentId ? relation || "inherits" : "inherits";
+      const subsectionCard = classRelation === "hasSubSection" ? card?.trim() || null : null;
       const res = await api.post(
         "/schema/custom-class",
         {
           package: pkg,
           name,
           parent: parentId || null,
-          relation: parentId ? relation || "inherits" : "inherits",
+          relation: classRelation,
+          card: subsectionCard,
           docstring: docstring || null,
         },
         {
@@ -1471,7 +1477,8 @@ export default function App() {
           doc: docstring || null,
           module: pkg,
           parentId: parentId || null,
-          parentRelation: parentId ? relation || "inherits" : null,
+          parentRelation: parentId ? classRelation : null,
+          parentCard: subsectionCard,
           quantities: [],
           path: null,
           line: null,
@@ -1495,7 +1502,8 @@ export default function App() {
           doc: docstring || null,
           module: pkg,
           parentId: parentId || null,
-          parentRelation: parentId ? relation || "inherits" : null,
+          parentRelation: parentId ? classRelation : null,
+          parentCard: subsectionCard,
           quantities: [],
           path: null,
           line: null,
@@ -1560,6 +1568,14 @@ export default function App() {
     return { ...g, nodes, edges };
   }, []);
 
+  const editClassInGraphState = useCallback((g: ApiGraph, cls: UmlClassNode): ApiGraph => {
+    const nodes = (g.nodes || []).map((n) => {
+      if (n.kind !== "section" || n.id !== cls.id) return n;
+      return { ...n, doc: cls.doc ?? null };
+    });
+    return { ...g, nodes };
+  }, []);
+
   const addClassToGraphState = useCallback((g: ApiGraph, cls: UmlClassNode): ApiGraph => {
     const nodesWithoutClass = (g.nodes || []).filter((n) => !(n.kind === "section" && n.id === cls.id));
     const sectionNode: ApiNode = {
@@ -1594,7 +1610,7 @@ export default function App() {
     const parentLinkEdge: ApiEdge[] = cls.parentId
       ? relationType === "inherits"
         ? [{ source: cls.id, target: cls.parentId, type: relationType, card: null }]
-        : [{ source: cls.parentId, target: cls.id, type: relationType, card: null }]
+        : [{ source: cls.parentId, target: cls.id, type: relationType, card: cls.parentCard ?? null }]
       : [];
 
     return {
@@ -1617,6 +1633,8 @@ export default function App() {
         return addClassToGraphState(current, change.cls);
       case "remove-class":
         return removeClassFromGraphState(current, change.cls.id);
+      case "edit-class":
+        return editClassInGraphState(current, change.after);
       case "add-quantity":
         return addQuantityToGraphState(current, change.quantity);
       case "remove-quantity":
@@ -1628,7 +1646,7 @@ export default function App() {
       default:
         return current;
     }
-  }, [addClassToGraphState, addQuantityToGraphState, removeClassFromGraphState, removeQuantityFromGraphState]);
+  }, [addClassToGraphState, addQuantityToGraphState, editClassInGraphState, removeClassFromGraphState, removeQuantityFromGraphState]);
 
   const replayGraphWithAudit = useCallback(
     (serverGraph: ApiGraph, extraChange?: AuditTrailEntry["change"]): ApiGraph => {
@@ -1926,11 +1944,11 @@ export default function App() {
       return null;
     }
     if (!editableMode) {
-      setQuantityActionErr("Enable editable mode to edit or remove quantities.");
+      setQuantityActionErr("Enable editable mode to make changes.");
       return null;
     }
     if (!graph) {
-      setQuantityActionErr("Build a graph first to modify quantities.");
+      setQuantityActionErr("Build a graph first to make changes.");
       return null;
     }
     return graph;
@@ -1955,6 +1973,96 @@ export default function App() {
     },
     [umlState]
   );
+
+  const editClassDoc = async (classId: string, updates: { docstring: string }) => {
+    const current = ensureEditableReady();
+    if (!current) return;
+
+    const target = current.nodes.find((n) => n.id === classId && n.kind === "section");
+    if (!target) {
+      setQuantityActionErr("Class not found in current graph.");
+      return;
+    }
+
+    const targetClass = umlState?.classes.find((c) => c.id === classId);
+    const before: UmlClassNode = targetClass ?? {
+      id: target.id,
+      name: target.label,
+      doc: target.doc ?? null,
+      module: target.module ?? current.package,
+      path: target.path ?? null,
+      line: typeof target.line === "number" ? target.line : null,
+      quantities: [],
+      parentId: null,
+      parentRelation: null,
+      parentCard: null,
+    };
+    const after: UmlClassNode = {
+      ...before,
+      doc: updates.docstring || null,
+    };
+    const parentName =
+      before.parentId
+        ? umlState?.classes.find((c) => c.id === before.parentId)?.name ||
+          before.parentId.split(".").pop() ||
+          before.parentId
+        : null;
+
+    try {
+      const res = await api.post(
+        "/schema/custom-class",
+        {
+          package: before.module || current.package || pkg,
+          name: before.name,
+          parent: parentName,
+          relation: before.parentId ? before.parentRelation || "inherits" : "inherits",
+          card: before.parentRelation === "hasSubSection" ? before.parentCard ?? null : null,
+          docstring: updates.docstring || null,
+          update_existing: true,
+        },
+        {
+          params: {
+            root,
+            include_quantities: includeQuantities,
+            include_subsections: includeSubsections,
+            include_inheritance: includeInheritance,
+            allow_cross_module: crossModules,
+            base_namespace: normalizedNamespace || undefined,
+            empty: startEmpty ? true : undefined,
+          },
+        }
+      );
+      const updated = ensureGraphResponse(res.data);
+      syncWorkspaceFromResponse(updated);
+    } catch (e: unknown) {
+      const message = formatApiError(e);
+      setQuantityActionErr(message);
+      throw new Error(message);
+    }
+
+    const nextGraph = {
+      ...current,
+      nodes: current.nodes.map((n) => (
+        n.id === classId && n.kind === "section"
+          ? { ...n, doc: updates.docstring || null }
+          : n
+      )),
+    };
+
+    setGraph(nextGraph);
+    setQuantityActionErr(null);
+    appendAudit(
+      { type: "edit-class", before, after },
+      `Edited class ${before.name} docstring`
+    );
+
+    if (selected?.kind === "class" && selected.id === classId) {
+      setSelected({
+        ...selected,
+        doc: updates.docstring || "",
+      });
+    }
+  };
 
   const editQuantity = (quantityId: string, updates: QuantityFormData) => {
     const current = ensureEditableReady();
@@ -2909,6 +3017,7 @@ export default function App() {
                 editableMode={editableMode}
                 onRemoveQuantity={removeQuantity}
                 onEditQuantity={editQuantity}
+                onEditClass={editClassDoc}
                 blockedReason={addBlockedReason}
                 actionError={quantityActionErr}
                 clearActionError={clearQuantityActionError}
