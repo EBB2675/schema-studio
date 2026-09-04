@@ -64,6 +64,15 @@ const cleanType = (t?: string | null) => {
 
 const editableCardWidth = (box: CardBox) => Math.max(box.w + 24, 200);
 
+const sameCardBox = (a: CardBox | undefined, b: CardBox) =>
+  a !== undefined && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+
+const sameCardBoxMap = (a: Record<string, CardBox>, b: Record<string, CardBox>) => {
+  const ids = Object.keys(a);
+  if (ids.length !== Object.keys(b).length) return false;
+  return ids.every((id) => sameCardBox(a[id], b[id]));
+};
+
 const connectionPoints = (source: CardBox, target: CardBox) => {
   const sx = source.x + source.w / 2;
   const sy = source.y + source.h / 2;
@@ -143,7 +152,7 @@ export default function GraphView({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
-  const [cardBoxes, setCardBoxes] = useState<Record<string, { x: number; y: number; w: number; h: number }>>({});
+  const [cardBoxes, setCardBoxes] = useState<Record<string, CardBox>>({});
   const [viewport, setViewport] = useState<{ pan: { x: number; y: number }; zoom: number }>({
     pan: { x: 0, y: 0 },
     zoom: 1,
@@ -816,43 +825,43 @@ export default function GraphView({
     const cy = cyRef.current;
     if (!cy) return;
 
-    let rafId: number | null = null;
-
-    const updateBoxes = () => {
-      const boxes: Record<string, { x: number; y: number; w: number; h: number }> = {};
+    // Viewport synchronization: the overlay wrapper is translated/scaled to
+    // follow Cytoscape pan/zoom. Node model positions and model-space bounding
+    // boxes do not change when the user pans or zooms, so this path stays cheap
+    // and must never re-measure node geometry.
+    const syncViewport = () => {
       const pan = cy.pan();
       const zoom = cy.zoom();
+      setViewport((prev) =>
+        prev.pan.x === pan.x && prev.pan.y === pan.y && prev.zoom === zoom
+          ? prev
+          : { pan: { x: pan.x, y: pan.y }, zoom }
+      );
+    };
 
+    // Full geometry synchronization: measure every node's model-space bounding
+    // box and rebuild the card-box map. Only needed when the graph geometry
+    // actually changes (initial overlay geometry, and when layout finishes).
+    const syncAllCardBoxes = () => {
+      const boxes: Record<string, CardBox> = {};
       cy.nodes().forEach((n) => {
         const box = n.boundingBox({ includeLabels: true });
         boxes[n.id()] = { x: box.x1, y: box.y1, w: box.w, h: box.h };
       });
-
-      setViewport((prev) => {
-        const samePan = prev.pan.x === pan.x && prev.pan.y === pan.y;
-        const sameZoom = prev.zoom === zoom;
-        if (samePan && sameZoom) return prev;
-        return { pan, zoom };
-      });
-      setCardBoxes(boxes);
+      setCardBoxes((prev) => (sameCardBoxMap(prev, boxes) ? prev : boxes));
     };
 
-    const scheduleUpdate = () => {
-      if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        updateBoxes();
-      });
-    };
+    // Establish initial geometry now, in case layout already completed before
+    // this effect registered its listener.
+    syncViewport();
+    syncAllCardBoxes();
 
-    updateBoxes();
-    cy.on("render", scheduleUpdate);
-    cy.on("pan zoom", scheduleUpdate);
+    cy.on("pan zoom", syncViewport);
+    cy.on("layoutstop", syncAllCardBoxes);
 
     return () => {
-      if (rafId !== null) cancelAnimationFrame(rafId);
-      cy.off("render", scheduleUpdate);
-      cy.off("pan zoom", scheduleUpdate);
+      cy.off("pan zoom", syncViewport);
+      cy.off("layoutstop", syncAllCardBoxes);
     };
   }, [umlState, theme, umlEdges, graphNodes, showQuantityMetadata, diff]);
 
@@ -901,7 +910,14 @@ export default function GraphView({
       const dx = (e.clientX - state.startX) / viewport.zoom;
       const dy = (e.clientY - state.startY) / viewport.zoom;
       node.position({ x: state.nodeX + dx, y: state.nodeY + dy });
-      cy.emit("render");
+
+      // Only the dragged node's model position changed: update just its card
+      // box instead of re-measuring every node in the graph.
+      const box = node.boundingBox({ includeLabels: true });
+      const next: CardBox = { x: box.x1, y: box.y1, w: box.w, h: box.h };
+      setCardBoxes((prev) =>
+        sameCardBox(prev[state.id], next) ? prev : { ...prev, [state.id]: next }
+      );
     },
     [viewport.zoom]
   );
