@@ -38,7 +38,7 @@ function makeFakeCy(nodeIds: string[]) {
     };
   };
 
-  const nodes = nodeIds.map(makeNode);
+  let nodes = nodeIds.map(makeNode);
 
   const coll = (arr: ReturnType<typeof makeNode>[]) => ({
     forEach: (f: (n: ReturnType<typeof makeNode>) => void) => arr.forEach(f),
@@ -86,12 +86,24 @@ function makeFakeCy(nodeIds: string[]) {
         (listeners[name] || []).slice().forEach((cb) => cb(evt ?? { target: cy }));
       });
     },
+    __setNodes(ids: string[]) {
+      nodes = ids.map(makeNode);
+    },
   };
 
   return cy;
 }
 
 let fakeCy: ReturnType<typeof makeFakeCy>;
+
+// Controllable requestAnimationFrame: GraphView coalesces viewport syncs into
+// one frame, so the tests queue the callbacks and flush them explicitly.
+let rafQueue: FrameRequestCallback[] = [];
+const flushRaf = () => {
+  const queued = rafQueue;
+  rafQueue = [];
+  queued.forEach((cb) => cb(0));
+};
 
 vi.mock('cytoscape', () => ({ __esModule: true, default: vi.fn(() => fakeCy) }));
 vi.mock('cytoscape-elk', () => ({ __esModule: true, default: vi.fn() }));
@@ -129,11 +141,15 @@ function renderGraph() {
 describe('GraphView overlay geometry vs. viewport synchronization', () => {
   beforeEach(() => {
     boundingBoxCalls = [];
+    rafQueue = [];
     fakeCy = makeFakeCy([CLASS_A, CLASS_B]);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => rafQueue.push(cb));
+    vi.stubGlobal('cancelAnimationFrame', () => {});
   });
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
   it('measures initial geometry and renders overlay cards', () => {
@@ -151,17 +167,49 @@ describe('GraphView overlay geometry vs. viewport synchronization', () => {
     boundingBoxCalls = [];
 
     fakeCy.__pan = { x: 30, y: 40 };
-    act(() => fakeCy.emit('pan'));
+    act(() => {
+      fakeCy.emit('pan');
+      flushRaf();
+    });
     expect(boundingBoxCalls).toEqual([]);
     expect(wrapper.style.transform).toContain('translate(30px, 40px)');
 
     fakeCy.__zoom = 2;
-    act(() => fakeCy.emit('zoom'));
+    act(() => {
+      fakeCy.emit('zoom');
+      flushRaf();
+    });
     expect(boundingBoxCalls).toEqual([]);
     expect(wrapper.style.transform).toContain('scale(2)');
 
-    act(() => fakeCy.emit('render'));
+    act(() => {
+      fakeCy.emit('render');
+      flushRaf();
+    });
     expect(boundingBoxCalls).toEqual([]);
+  });
+
+  it('coalesces multiple pan/zoom events in a frame into a single viewport sync', () => {
+    const { container } = renderGraph();
+    const wrapper = container.querySelector('div[style*="translate"]') as HTMLElement;
+
+    rafQueue = [];
+    fakeCy.__pan = { x: 12, y: 8 };
+    fakeCy.__zoom = 1.5;
+
+    act(() => {
+      fakeCy.emit('pan');
+      fakeCy.emit('zoom');
+      fakeCy.emit('pan');
+    });
+
+    // One scheduled callback for three events, and no transform update yet.
+    expect(rafQueue).toHaveLength(1);
+    expect(wrapper.style.transform).not.toContain('translate(12px, 8px)');
+
+    act(() => flushRaf());
+    expect(wrapper.style.transform).toContain('translate(12px, 8px)');
+    expect(wrapper.style.transform).toContain('scale(1.5)');
   });
 
   it('re-measures all nodes when the layout finishes', () => {
@@ -171,6 +219,19 @@ describe('GraphView overlay geometry vs. viewport synchronization', () => {
     act(() => fakeCy.emit('layoutstop'));
 
     expect(new Set(boundingBoxCalls)).toEqual(new Set([CLASS_A, CLASS_B]));
+  });
+
+  it('rebuilds the card-box map without crashing when node ids change but the count does not', () => {
+    renderGraph();
+    boundingBoxCalls = [];
+
+    // Same node count, entirely different ids (e.g. switching packages).
+    fakeCy.__setNodes(['pkg.other.Gamma', 'pkg.other.Delta']);
+
+    expect(() => act(() => fakeCy.emit('layoutstop'))).not.toThrow();
+    expect(new Set(boundingBoxCalls)).toEqual(
+      new Set(['pkg.other.Gamma', 'pkg.other.Delta'])
+    );
   });
 
   it('measures only the dragged node while dragging, not every node', () => {

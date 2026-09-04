@@ -64,8 +64,9 @@ const cleanType = (t?: string | null) => {
 
 const editableCardWidth = (box: CardBox) => Math.max(box.w + 24, 200);
 
-const sameCardBox = (a: CardBox | undefined, b: CardBox) =>
-  a !== undefined && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+const sameCardBox = (a: CardBox | undefined, b: CardBox | undefined) =>
+  a !== undefined && b !== undefined &&
+  a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 
 const sameCardBoxMap = (a: Record<string, CardBox>, b: Record<string, CardBox>) => {
   const ids = Object.keys(a);
@@ -825,11 +826,13 @@ export default function GraphView({
     const cy = cyRef.current;
     if (!cy) return;
 
+    let viewportRaf: number | null = null;
+
     // Viewport synchronization: the overlay wrapper is translated/scaled to
     // follow Cytoscape pan/zoom. Node model positions and model-space bounding
     // boxes do not change when the user pans or zooms, so this path stays cheap
     // and must never re-measure node geometry.
-    const syncViewport = () => {
+    const applyViewport = () => {
       const pan = cy.pan();
       const zoom = cy.zoom();
       setViewport((prev) =>
@@ -837,6 +840,16 @@ export default function GraphView({
           ? prev
           : { pan: { x: pan.x, y: pan.y }, zoom }
       );
+    };
+
+    // A single interaction (wheel input, cy.animate()) can emit several
+    // pan/zoom events per frame; coalesce them into one state update.
+    const scheduleViewportSync = () => {
+      if (viewportRaf !== null) return;
+      viewportRaf = requestAnimationFrame(() => {
+        viewportRaf = null;
+        applyViewport();
+      });
     };
 
     // Full geometry synchronization: measure every node's model-space bounding
@@ -853,14 +866,15 @@ export default function GraphView({
 
     // Establish initial geometry now, in case layout already completed before
     // this effect registered its listener.
-    syncViewport();
+    applyViewport();
     syncAllCardBoxes();
 
-    cy.on("pan zoom", syncViewport);
+    cy.on("pan zoom", scheduleViewportSync);
     cy.on("layoutstop", syncAllCardBoxes);
 
     return () => {
-      cy.off("pan zoom", syncViewport);
+      if (viewportRaf !== null) cancelAnimationFrame(viewportRaf);
+      cy.off("pan zoom", scheduleViewportSync);
       cy.off("layoutstop", syncAllCardBoxes);
     };
   }, [umlState, theme, umlEdges, graphNodes, showQuantityMetadata, diff]);
