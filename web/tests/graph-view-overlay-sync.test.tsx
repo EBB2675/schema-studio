@@ -13,21 +13,30 @@ let boundingBoxCalls: string[] = [];
 function makeFakeCy(nodeIds: string[]) {
   const listeners: Record<string, Array<(evt: unknown) => void>> = {};
 
-  const makeNode = (id: string) => ({
-    id: () => id,
-    data: (key?: string) => {
-      const d: Record<string, string> = { id, label: id, rawName: id, module: '' };
-      return key ? d[key] : d;
-    },
-    position: (pos?: { x: number; y: number }) => (pos ? undefined : { x: 0, y: 0 }),
-    empty: () => false,
-    select: () => {},
-    addClass: () => {},
-    boundingBox: () => {
-      boundingBoxCalls.push(id);
-      return { x1: 0, y1: 0, x2: 120, y2: 60, w: 120, h: 60 };
-    },
-  });
+  const makeNode = (id: string) => {
+    let pos = { x: 0, y: 0 };
+    return {
+      id: () => id,
+      data: (key?: string) => {
+        const d: Record<string, string> = { id, label: id, rawName: id, module: '' };
+        return key ? d[key] : d;
+      },
+      position: (next?: { x: number; y: number }) => {
+        if (next) {
+          pos = { ...next };
+          return undefined;
+        }
+        return pos;
+      },
+      empty: () => false,
+      select: () => {},
+      addClass: () => {},
+      boundingBox: () => {
+        boundingBoxCalls.push(id);
+        return { x1: pos.x, y1: pos.y, x2: pos.x + 120, y2: pos.y + 60, w: 120, h: 60 };
+      },
+    };
+  };
 
   const nodes = nodeIds.map(makeNode);
 
@@ -98,7 +107,7 @@ const umlState: UmlGraphState = {
     { id: CLASS_A, name: 'Alpha', module: 'pkg.custom_schema', quantities: [] },
     { id: CLASS_B, name: 'Beta', module: 'pkg.custom_schema', quantities: [] },
   ],
-  edges: [],
+  edges: [{ source: CLASS_A, target: CLASS_B, type: 'inherits' }],
 };
 
 function renderGraph() {
@@ -180,5 +189,21 @@ describe('GraphView overlay geometry vs. viewport synchronization', () => {
 
     expect(boundingBoxCalls.length).toBeGreaterThan(0);
     expect(new Set(boundingBoxCalls)).toEqual(new Set([CLASS_A]));
+  });
+
+  it('keeps connector lines following the dragged card (edges are driven by cardBoxes)', () => {
+    const { container } = renderGraph();
+    const line = () => container.querySelector('.uml-edit-edges line') as SVGLineElement;
+    expect(line()).toBeTruthy();
+    const before = line().getAttribute('x1');
+
+    const card = screen.getByText('Alpha').closest('.uml-card') as HTMLElement;
+    fireEvent.mouseDown(card, { button: 0, clientX: 0, clientY: 0 });
+    act(() => {
+      fireEvent.mouseMove(window, { clientX: 140, clientY: 90 });
+    });
+    fireEvent.mouseUp(window);
+
+    expect(line().getAttribute('x1')).not.toEqual(before);
   });
 });
