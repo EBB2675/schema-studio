@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from api.custom_graph_edits import attach_custom_quantity
+from api.custom_graph_edits import attach_custom_class, attach_custom_quantity
 
 
 def test_flattened_inherited_quantity_prefers_inherited_error():
@@ -49,3 +49,135 @@ def test_flattened_inherited_quantity_prefers_inherited_error():
 
     assert exc_info.value.status_code == 400
     assert "inherited" in str(exc_info.value.detail)
+
+
+def test_custom_subsection_preserves_cardinality():
+    graph = {
+        "nodes": [
+            {"id": "pkg.Parent", "kind": "section", "label": "Parent", "module": "pkg"},
+        ],
+        "edges": [],
+    }
+
+    req = SimpleNamespace(
+        package="pkg",
+        name="Child",
+        parent="pkg.Parent",
+        relation="hasSubSection",
+        card="0..*",
+        docstring=None,
+    )
+
+    updated = attach_custom_class(graph, req)
+
+    assert {
+        "source": "pkg.Parent",
+        "target": "pkg.Child",
+        "type": "hasSubSection",
+        "card": "0..*",
+    } in updated["edges"]
+
+
+def test_custom_inheritance_ignores_cardinality():
+    graph = {
+        "nodes": [
+            {"id": "pkg.Parent", "kind": "section", "label": "Parent", "module": "pkg"},
+        ],
+        "edges": [],
+    }
+
+    req = SimpleNamespace(
+        package="pkg",
+        name="Child",
+        parent="pkg.Parent",
+        relation="inherits",
+        card="0..*",
+        docstring=None,
+    )
+
+    updated = attach_custom_class(graph, req)
+
+    assert {
+        "source": "pkg.Child",
+        "target": "pkg.Parent",
+        "type": "inherits",
+        "card": None,
+    } in updated["edges"]
+
+
+def test_custom_class_update_existing_changes_docstring():
+    graph = {
+        "nodes": [
+            {"id": "pkg.Child", "kind": "section", "label": "Child", "module": "pkg", "doc": "old"},
+        ],
+        "edges": [],
+    }
+
+    req = SimpleNamespace(
+        package="pkg",
+        name="Child",
+        parent=None,
+        relation="inherits",
+        card=None,
+        docstring="new",
+        update_existing=True,
+    )
+
+    updated = attach_custom_class(graph, req)
+
+    assert updated["nodes"] == [
+        {"id": "pkg.Child", "kind": "section", "label": "Child", "module": "pkg", "doc": "new"}
+    ]
+
+
+def test_custom_class_update_existing_uses_module_to_disambiguate_label():
+    graph = {
+        "nodes": [
+            {"id": "pkg.a.Child", "kind": "section", "label": "Child", "module": "pkg.a", "doc": "a"},
+            {"id": "pkg.b.Child", "kind": "section", "label": "Child", "module": "pkg.b", "doc": "b"},
+        ],
+        "edges": [],
+    }
+
+    req = SimpleNamespace(
+        package="pkg.b",
+        name="Child",
+        parent=None,
+        relation="inherits",
+        card=None,
+        docstring="new b",
+        update_existing=True,
+    )
+
+    updated = attach_custom_class(graph, req)
+
+    assert updated["nodes"] == [
+        {"id": "pkg.a.Child", "kind": "section", "label": "Child", "module": "pkg.a", "doc": "a"},
+        {"id": "pkg.b.Child", "kind": "section", "label": "Child", "module": "pkg.b", "doc": "new b"},
+    ]
+
+
+def test_custom_class_update_existing_rejects_ambiguous_label():
+    graph = {
+        "nodes": [
+            {"id": "pkg.a.Child", "kind": "section", "label": "Child", "module": "pkg.a", "doc": "a"},
+            {"id": "pkg.b.Child", "kind": "section", "label": "Child", "module": "pkg.b", "doc": "b"},
+        ],
+        "edges": [],
+    }
+
+    req = SimpleNamespace(
+        package="pkg.c",
+        name="Child",
+        parent=None,
+        relation="inherits",
+        card=None,
+        docstring="new",
+        update_existing=True,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        attach_custom_class(graph, req)
+
+    assert exc_info.value.status_code == 400
+    assert "ambiguous" in str(exc_info.value.detail)

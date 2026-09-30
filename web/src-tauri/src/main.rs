@@ -71,7 +71,7 @@ impl ModeDescriptor {
     fn sidecar_filename(self) -> String {
         let triple = env::var("TAURI_ENV_TARGET_TRIPLE")
             .or_else(|_| env::var("TARGET"))
-            .unwrap_or_else(|_| "x86_64-pc-windows-msvc".to_string());
+            .unwrap_or_else(|_| env!("SCHEMA_STUDIO_BUILD_TARGET").to_string());
         if cfg!(target_os = "windows") {
             return format!("{}-{triple}.exe", self.sidecar_basename);
         }
@@ -79,18 +79,34 @@ impl ModeDescriptor {
     }
 
     fn packaged_backend_candidates(self, repo_root: &Path) -> Vec<PathBuf> {
-        let sidecar_name = self.sidecar_filename();
-        let mut candidates = vec![repo_root
-            .join("web")
-            .join("src-tauri")
-            .join("binaries")
-            .join(&sidecar_name)];
+        let runtime_sidecar_name = if cfg!(target_os = "windows") {
+            format!("{}.exe", self.sidecar_basename)
+        } else {
+            self.sidecar_basename.to_string()
+        };
+        let sidecar_names = [self.sidecar_filename(), runtime_sidecar_name];
+        let mut candidates = Vec::new();
+
+        for sidecar_name in &sidecar_names {
+            candidates.push(
+                repo_root
+                    .join("web")
+                    .join("src-tauri")
+                    .join("binaries")
+                    .join(sidecar_name),
+            );
+        }
 
         if let Ok(current_exe) = env::current_exe() {
             if let Some(exe_dir) = current_exe.parent() {
-                candidates.push(exe_dir.join(&sidecar_name));
-                candidates.push(exe_dir.join("resources").join(&sidecar_name));
-                candidates.push(exe_dir.join("Resources").join(&sidecar_name));
+                for sidecar_name in &sidecar_names {
+                    candidates.push(exe_dir.join(sidecar_name));
+                    candidates.push(exe_dir.join("resources").join(sidecar_name));
+                    candidates.push(exe_dir.join("Resources").join(sidecar_name));
+                    if let Some(contents_dir) = exe_dir.parent() {
+                        candidates.push(contents_dir.join("Resources").join(sidecar_name));
+                    }
+                }
             }
         }
 

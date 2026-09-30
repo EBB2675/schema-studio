@@ -65,6 +65,7 @@ export type AppliedEdit = {
   docstring?: string | null;
   parent_name?: string | null;
   parent_relation?: string | null;
+  card?: string | null;
   edit_type: "class" | "quantity";
   base_sha?: string | null;
   created_at?: string | null;
@@ -99,6 +100,7 @@ const ensureAppliedEdit = (value: unknown): AppliedEdit => {
     docstring: typeof value.docstring === "string" ? value.docstring : null,
     parent_name: typeof value.parent_name === "string" ? value.parent_name : null,
     parent_relation: typeof value.parent_relation === "string" ? value.parent_relation : null,
+    card: typeof value.card === "string" ? value.card : null,
     edit_type,
     base_sha: typeof value.base_sha === "string" ? value.base_sha : null,
     created_at: typeof value.created_at === "string" ? value.created_at : null,

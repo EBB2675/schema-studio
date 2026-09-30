@@ -100,7 +100,7 @@ export const buildUmlStateFromGraph = (g: ApiGraph | null): UmlGraphState | null
     });
 
   const parentsByChild = new Map<string, string[]>();
-  const parentInfoByChild = new Map<string, { id: string; relation: "inherits" | "hasSubSection" }>();
+  const parentInfoByChild = new Map<string, { id: string; relation: "inherits" | "hasSubSection"; card: string | null }>();
 
   normalizedEdges.forEach((e) => {
     const relation = asRelation(e.type);
@@ -112,7 +112,7 @@ export const buildUmlStateFromGraph = (g: ApiGraph | null): UmlGraphState | null
 
     const existing = parentInfoByChild.get(childId);
     if (!existing || (relation === "inherits" && existing.relation !== "inherits")) {
-      parentInfoByChild.set(childId, { id: parentId, relation });
+      parentInfoByChild.set(childId, { id: parentId, relation, card: e.card ?? null });
     }
 
     if (relation === "inherits") {
@@ -236,6 +236,7 @@ export const buildUmlStateFromGraph = (g: ApiGraph | null): UmlGraphState | null
       quantities: effectiveQuantitiesFor(id),
       parentId: parentInfo?.id ?? null,
       parentRelation: parentInfo?.relation ?? null,
+      parentCard: parentInfo?.card ?? null,
     };
   });
 

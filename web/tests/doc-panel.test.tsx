@@ -37,6 +37,7 @@ describe('DocPanel', () => {
         editableMode
         onRemoveQuantity={vi.fn()}
         onEditQuantity={vi.fn()}
+        onEditClass={vi.fn()}
         clearActionError={clearActionError}
       />
     );
@@ -66,6 +67,7 @@ describe('DocPanel', () => {
         editableMode
         onRemoveQuantity={onRemoveQuantity}
         onEditQuantity={vi.fn()}
+        onEditClass={vi.fn()}
         clearActionError={() => {}}
       />
     );
@@ -74,5 +76,29 @@ describe('DocPanel', () => {
 
     expect(confirmSpy).toHaveBeenCalled();
     expect(onRemoveQuantity).toHaveBeenCalledWith('pkg.Class.a');
+  });
+
+  it('edits class docstrings from the class view', async () => {
+    setSelection(classSelection);
+    const onEditClass = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <DocPanel
+        editableMode
+        onRemoveQuantity={vi.fn()}
+        onEditQuantity={vi.fn()}
+        onEditClass={onEditClass}
+        clearActionError={() => {}}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /edit class docstring/i }));
+    const doc = screen.getByRole('textbox', { name: /class docstring/i });
+    await user.clear(doc);
+    await user.type(doc, 'updated class docs');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(onEditClass).toHaveBeenCalledWith('pkg.Class', { docstring: 'updated class docs' });
   });
 });
