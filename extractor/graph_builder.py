@@ -515,7 +515,7 @@ def _module_allowed(module: str, base_namespace: str, exclude_prefixes: Tuple[st
     if any(module.startswith(p) for p in exclude_prefixes):
         return False
     if allow_cross_module:
-        return module.startswith(base_namespace)
+        return True
     return module.startswith(base_namespace)
 
 

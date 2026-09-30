@@ -539,6 +539,8 @@ async def test_git_packages_auto_bootstraps_schema_when_unavailable_once(
     monkeypatch.setattr(light_mode_module, "current_schema_info", flaky_current)
     monkeypatch.setattr(light_mode_module, "update_schema", one_update)
     monkeypatch.setattr(light_mode_module, "_bootstrap_attempted", False)
+    # Auto-bootstrap is opt-in since runtime profile selection; enable it for this test.
+    monkeypatch.setattr(light_mode_module, "AUTO_BOOTSTRAP_SCHEMA", True)
 
     first = await client.get("/git/packages", params={"base_package": "pkg.base"})
     assert first.status_code == 200
