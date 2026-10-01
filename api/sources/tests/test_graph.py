@@ -192,6 +192,59 @@ def test_nodes_and_edges_are_sorted_like_the_graph_builder():
     assert build() == result
 
 
+def edited(change):
+    schema = json.loads(json.dumps(SCHEMA))
+    change(schema["classes"])
+    return graph.build_graph(schema, EXTRACTION, "pkg.app.main")
+
+
+def test_edits_show_although_the_source_attribute_list_is_older():
+    # The source list only orders the attributes; the current schema decides which there are.
+    def add(classes):
+        classes[BASE]["attributes"]["added"] = attribute("added", "quantity", display_dtype="m_str(str)")
+    shown = nodes(edited(add))
+    assert {f"{BASE}.added", f"{CHILD}.added", f"{GRANDCHILD}.added"} <= set(shown)
+
+    def remove(classes):
+        del classes[BASE]["attributes"]["name"]
+    shown = nodes(edited(remove))
+    assert not {f"{BASE}.name", f"{CHILD}.name", f"{GRANDCHILD}.name"} & set(shown)
+
+    def move(classes):  # `size` now declared on Mixin only
+        del classes[BASE]["attributes"]["size"]
+        del classes[CHILD]["attributes"]["size"]
+        classes[MIXIN]["attributes"]["size"] = attribute("size", "quantity", display_dtype="moved")
+    assert nodes(edited(move))[f"{GRANDCHILD}.size"]["dtype"] == "moved"
+
+    def override(classes):  # the redeclaration is dropped: Base's `size` shows again
+        del classes[CHILD]["attributes"]["size"]
+    assert nodes(edited(override))[f"{CHILD}.size"]["dtype"] == "m_float64(float64)"
+
+    def rebase(classes):  # Child no longer inherits Mixin, so its `far` subsection goes
+        del classes[CHILD]["mixins"]
+    result = edited(rebase)
+    assert (CHILD, FAR, "hasSubSection") not in edges(result)
+    assert (CHILD, MIXIN, "inherits") not in edges(result)
+
+    def retarget(classes):  # a subsection pointed elsewhere
+        classes[CHILD]["attributes"]["parts"]["range"] = FAR
+    found = edges(edited(retarget))
+    assert found[(CHILD, FAR, "hasSubSection")] == "0..1"  # `far` comes first in the source order
+    assert found[(CHILD, PART, "hasSubSection")] == "0..1"  # only `best_part` still leads to Part
+
+
+def test_source_order_comes_first_and_new_attributes_follow():
+    classes = json.loads(json.dumps(SCHEMA))["classes"]
+    classes[CHILD]["attributes"]["zeta"] = attribute("zeta", "subsection", range_=FAR, display_card="0..*")
+    classes[BASE]["attributes"]["alpha"] = attribute("alpha", "subsection", range_=FAR, display_card="1..1")
+    members = [slot["name"] for _, slot in graph.effective_attributes(CHILD, classes, {})]
+    # New ones after the known ones, base classes first.
+    assert members == ["name", "size", "part", "far", "parts", "best_part", "alpha", "zeta"]
+    # So `far` (0..1) still sets the card of the single Child -> Far edge.
+    found = edges(graph.build_graph({"classes": classes}, EXTRACTION, "pkg.app.main"))
+    assert found[(CHILD, FAR, "hasSubSection")] == "0..1"
+
+
 def test_classes_without_source_effective_attributes_inherit_along_the_resolution_order():
     # For example classes added by an edit: their own attributes override inherited ones.
     schema = {"classes": {
@@ -203,6 +256,20 @@ def test_classes_without_source_effective_attributes_inherit_along_the_resolutio
     shown = nodes(graph.build_graph(schema, extraction, "m", root="C"))
     assert shown["m.C.x"]["dtype"] == "A"  # Python order: C, A, B
     assert shown["m.C.y"]["dtype"] == "C"
+
+
+def test_without_source_attribute_list_the_first_declared_subsection_sets_the_card():
+    # `parts` is declared before `best_part`; sorting by name would let `best_part` win.
+    schema = {"classes": {
+        "m.Part": cls("m.Part"),
+        "m.Holder": cls("m.Holder", attributes=[
+            attribute("parts", "subsection", range_="m.Part", display_card="0..*"),
+            attribute("best_part", "subsection", range_="m.Part", display_card="0..1"),
+        ]),
+    }}
+    extraction = {"modules": [{"name": "m", "classes": ["m.Holder"]}]}
+    found = edges(graph.build_graph(schema, extraction, "m", root="Holder"))
+    assert found[("m.Holder", "m.Part", "hasSubSection")] == "0..*"
 
 
 def test_linkml_annotation_objects_are_read_too():

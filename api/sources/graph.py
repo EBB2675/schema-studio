@@ -5,7 +5,8 @@ browser. The graph follows the conventions of `extractor/graph_builder.py`:
 
 - each class is a `section` node; its id is the class name (the source id),
   its label the class title, its doc the class description;
-- each attribute a class has, declared or inherited, with `source_kind`
+- each attribute a class has in the current schema, declared or inherited
+  (the source's attribute list only sets their order), with `source_kind`
   `quantity` is a `quantity` node owned by that class (id `<class>.<name>`)
   with a `hasQuantity` edge; with `source_kind` `subsection` it is a
   `hasSubSection` edge to its range;
@@ -99,25 +100,22 @@ def effective_attributes(
 ) -> list[tuple[str, dict[str, Any]]]:
     """(declaring class, attribute) for every attribute a class has, declared or inherited.
 
-    Uses the source's own list (`source_effective_attributes`) when the class
-    has one; otherwise the class's own attributes override inherited ones
-    along the resolution order.
+    The current schema decides which attributes a class has: its own ones
+    override inherited ones along the resolution order, so edits (added,
+    removed or moved attributes, changed bases) show up. The source's list
+    (`source_effective_attributes`) only gives the order of the attributes it
+    still names, which is NOMAD's own order; any others follow, base classes
+    first and in declaration order.
     """
-    cls = classes[name]
-    listed = _json_annotation(cls, "source_effective_attributes")
-    if listed is not None:
-        found = []
-        for ref in listed:
-            declaring = classes.get(ref["declaring_class_id"])
-            slot = ((declaring or {}).get("attributes") or {}).get(ref["name"])
-            if slot is not None:
-                found.append((ref["declaring_class_id"], slot))
-        return found
     collected: dict[str, tuple[str, dict[str, Any]]] = {}
     for ancestor in reversed(_mro(name, classes, memo)):
         for attribute_name, slot in (classes[ancestor].get("attributes") or {}).items():
             collected[attribute_name] = (ancestor, slot)
-    return [collected[key] for key in sorted(collected)]
+    hint = _json_annotation(classes[name], "source_effective_attributes") or []
+    rank = {ref["name"]: index for index, ref in enumerate(hint)}
+    natural = {key: index for index, key in enumerate(collected)}
+    ordered = sorted(natural, key=lambda key: (0, rank[key]) if key in rank else (1, natural[key]))
+    return [collected[key] for key in ordered]
 
 
 def _methods(record: Mapping[str, Any] | None, base_namespace: str) -> list[str] | None:
