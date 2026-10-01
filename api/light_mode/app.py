@@ -11,20 +11,25 @@ import logging
 import mimetypes
 import os
 from pathlib import Path
-from threading import Lock
 from typing import Literal
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from extractor.graph_builder import _root_namespace, build_graph, list_sections
-from extractor.usage_index import get_usage_for_section
 from ..custom_graph_edits import (
     attach_custom_class as _attach_custom_class_impl,
     attach_custom_quantity as _attach_custom_quantity_impl,
+)
+from ..sources.legacy import (
+    build_graph,
+    get_usage_for_section,
+    list_schema_modules,
+    list_sections,
+    root_namespace as _root_namespace,
 )
 from .schema_source import (
     DEFAULT_BASE_NAMESPACE as LIGHT_DEFAULT_BASE_NS,
@@ -33,7 +38,6 @@ from .schema_source import (
     active_profile,
     current_schema_info,
     list_schema_profiles,
-    list_modules_for_base,
     schema_available,
     schema_profile_for_key,
     schema_profile_for_package,
@@ -49,7 +53,6 @@ DEFAULT_HOST = os.getenv("SCHEMA_STUDIO_HOST", "127.0.0.1")
 DEFAULT_PACKAGE = os.getenv("SCHEMA_STUDIO_DEFAULT_PACKAGE", LIGHT_DEFAULT_PACKAGE)
 DEFAULT_BASE_NS = os.getenv("SCHEMA_STUDIO_DEFAULT_NAMESPACE", LIGHT_DEFAULT_BASE_NS)
 LIGHT_DEFAULT_BRANCH = active_profile().default_branch
-AUTO_BOOTSTRAP_SCHEMA = os.getenv("SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA", "0").lower() not in {"0", "false", "no"}
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +97,12 @@ SUPPORTED_CUSTOM_DTYPES = {
 }
 
 
+class WorkspaceUpdate(BaseModel):
+    branch: str | None = None
+    package: str | None = None
+    base_namespace: str | None = None
+
+
 class CustomClassRequest(BaseModel):
     package: str
     name: str
@@ -128,8 +137,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_bootstrap_lock = Lock()
-_bootstrap_attempted = False
+
+@app.exception_handler(SchemaUnavailable)
+async def _schema_unavailable_handler(_request, exc: SchemaUnavailable):
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
 # ---------- helpers ----------
@@ -189,39 +200,18 @@ def _workspace() -> Workspace:
     return ws
 
 
-def _schema_info(*, auto_bootstrap: bool = True, package: str | None = None, base_namespace: str | None = None):
+def _schema_info(*, package: str | None = None, base_namespace: str | None = None):
     """
-    Return schema metadata, optionally attempting a one-time automatic bootstrap.
-    Bootstrap is used to avoid first-run empty package lists when the schema package
-    is not yet installed or violates Light Mode policy.
+    Return schema metadata for the profile that owns the package.
+    The profile environment is never created or updated here; that only
+    happens through POST /schema/update.
     """
-    global _bootstrap_attempted
-    profile = schema_profile_for_package(package, base_namespace)
-    try:
-        return current_schema_info(profile)
-    except SchemaUnavailable as exc:
-        if not auto_bootstrap:
-            raise
-        with _bootstrap_lock:
-            try:
-                # Another request may have fixed this while we were waiting.
-                return current_schema_info(profile)
-            except SchemaUnavailable:
-                if _bootstrap_attempted:
-                    raise exc
-                _bootstrap_attempted = True
-                logger.info("Light Mode schema not ready for profile '%s'; attempting one-time bootstrap via update_schema()", profile.key)
-                try:
-                    info = update_schema(profile)
-                    logger.info("Light Mode schema bootstrap completed (%s)", info.version)
-                    return info
-                except SchemaUnavailable:
-                    raise exc
+    return current_schema_info(schema_profile_for_package(package, base_namespace))
 
 
-def _schema_info_or_503(*, auto_bootstrap: bool = True, package: str | None = None, base_namespace: str | None = None):
+def _schema_info_or_503(*, package: str | None = None, base_namespace: str | None = None):
     try:
-        return _schema_info(auto_bootstrap=auto_bootstrap, package=package, base_namespace=base_namespace)
+        return _schema_info(package=package, base_namespace=base_namespace)
     except SchemaUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
 
@@ -237,7 +227,7 @@ def _schema_status_payload(ws: Workspace) -> dict:
         "schema_error": None,
     }
     try:
-        info = _schema_info(auto_bootstrap=False, package=ws.package, base_namespace=ws.base_namespace)
+        info = _schema_info(package=ws.package, base_namespace=ws.base_namespace)
     except SchemaUnavailable as exc:
         payload["schema_error"] = str(exc)
         return payload
@@ -394,33 +384,7 @@ def _missing_requested_package(exc: ModuleNotFoundError, package: str) -> bool:
     return exc.name == package or (bool(exc.name) and package.startswith(f"{exc.name}."))
 
 
-def _schema_modules_with_sections(modules: list[str]) -> list[str]:
-    valid: list[str] = []
-    for module in modules:
-        try:
-            if list_sections(module):
-                valid.append(module)
-        except ImportError:
-            continue
-        except Exception:
-            logger.exception("Unexpected error while listing sections for module '%s'", module)
-            continue
-    return sorted(valid)
-
-
 # ---------- routes ----------
-
-
-@app.on_event("startup")
-async def _bootstrap_schema_on_startup():
-    if not AUTO_BOOTSTRAP_SCHEMA:
-        return
-    try:
-        ws = _workspace()
-        _schema_info(auto_bootstrap=True, package=ws.package, base_namespace=ws.base_namespace)
-    except SchemaUnavailable as exc:
-        # Keep server up; user can still call /schema/update manually.
-        logger.warning("Light Mode schema bootstrap failed on startup: %s", exc)
 
 
 @app.get("/schema/profiles")
@@ -447,7 +411,7 @@ async def schema_profiles():
             info = current_schema_info(profile)
             entry["version"] = info.version
             entry["source"] = info.source
-            entry["packaged"] = info.source == "bundled"
+            entry["package_version"] = info.package_version
         except SchemaUnavailable as exc:
             entry["error"] = str(exc)
         profiles.append(entry)
@@ -464,7 +428,6 @@ async def schema_version():
     ws = _workspace()
     profile = _profile_for_workspace(ws)
     info = _schema_info_or_503(
-        auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA,
         package=ws.package,
         base_namespace=ws.base_namespace,
     )
@@ -481,7 +444,8 @@ async def schema_update(profile: str | None = Query(None)):
     ws = _workspace()
     selected = schema_profile_for_key(profile) if profile else _profile_for_workspace(ws)
     try:
-        info = update_schema(selected)
+        # Creating or updating an environment can take minutes; keep the server responsive.
+        info = await run_in_threadpool(update_schema, selected)
     except SchemaUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     return {"version": info.version, "source": info.source, "schema_profile": selected.key}
@@ -509,7 +473,17 @@ async def get_workspace():
 
 
 @app.put("/workspace")
-async def update_workspace(branch: str | None = None, package: str | None = None, base_namespace: str | None = None):
+async def update_workspace(
+    req: WorkspaceUpdate | None = None,
+    branch: str | None = Query(None),
+    package: str | None = Query(None),
+    base_namespace: str | None = Query(None),
+):
+    # The web app sends a JSON body (as in Dev Mode); query parameters keep working.
+    if req is not None:
+        branch = branch or req.branch
+        package = package or req.package
+        base_namespace = base_namespace or req.base_namespace
     current = _workspace()
     target_package = package or current.package
     target_base_namespace = base_namespace or current.base_namespace
@@ -531,12 +505,14 @@ async def roots(package: str | None = Query(None)):
     ws = _workspace()
     pkg = package or ws.package
     _ = _schema_info_or_503(
-        auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA,
         package=pkg,
         base_namespace=ws.base_namespace,
     )
     try:
-        return {"package": pkg, "sections": sorted(list_sections(pkg)), "workspace": _workspace_payload(ws)}
+        sections = await run_in_threadpool(list_sections, pkg)
+        return {"package": pkg, "sections": sorted(sections), "workspace": _workspace_payload(ws)}
+    except SchemaUnavailable:
+        raise
     except ModuleNotFoundError as exc:
         if pkg.endswith(".custom_schema") and _missing_requested_package(exc, pkg):
             return {"package": pkg, "sections": [], "workspace": _workspace_payload(ws)}
@@ -561,7 +537,6 @@ async def schema(
     ns = base_namespace or ws.base_namespace or _root_namespace(pkg)
     branch = _expected_light_branch(package=pkg, base_namespace=ns)
     _ = _schema_info_or_503(
-        auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA,
         package=pkg,
         base_namespace=ns,
     )
@@ -572,7 +547,8 @@ async def schema(
         graph = _empty_graph(pkg, root)
     else:
         try:
-            graph = build_graph(
+            graph = await run_in_threadpool(
+                build_graph,
                 package=pkg,
                 root=root,
                 include_quantities=include_quantities,
@@ -621,7 +597,6 @@ async def add_custom_class(
         update_existing=update_existing,
     )
     _ = _schema_info_or_503(
-        auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA,
         package=req.package,
         base_namespace=base_namespace or _root_namespace(req.package),
     )
@@ -637,7 +612,8 @@ async def add_custom_class(
     if empty:
         graph = {"package": req.package, "root": root, "nodes": [], "edges": []}
     else:
-        graph = build_graph(
+        graph = await run_in_threadpool(
+            build_graph,
             package=req.package,
             root=root,
             include_quantities=include_quantities,
@@ -714,7 +690,6 @@ async def add_custom_quantity(
         parent_relation=parent_relation,
     )
     _ = _schema_info_or_503(
-        auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA,
         package=req.package,
         base_namespace=base_namespace or _root_namespace(req.package),
     )
@@ -730,7 +705,8 @@ async def add_custom_quantity(
     if empty:
         graph = {"package": req.package, "root": root, "nodes": [], "edges": []}
     else:
-        graph = build_graph(
+        graph = await run_in_threadpool(
+            build_graph,
             package=req.package,
             root=root,
             include_quantities=True,
@@ -832,12 +808,11 @@ async def git_packages(base_package: str | None = Query(None), branch: str | Non
     base = base_package or ws.base_namespace
     expected_branch = _enforce_light_branch(branch, package=ws.package, base_namespace=base)
     _ = _schema_info_or_503(
-        auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA,
         package=ws.package,
         base_namespace=base,
     )
-    modules = list_modules_for_base(base)
-    packages = _schema_modules_with_sections(modules) if modules else [ws.package]
+    modules = await run_in_threadpool(list_schema_modules, base)
+    packages = sorted(module["package"] for module in modules) if modules else [ws.package]
     return {
         "packages": packages,
         "base_package": base,
@@ -850,13 +825,12 @@ async def git_packages(base_package: str | None = Query(None), branch: str | Non
 async def overview(branch: str | None = Query(None), base: str | None = Query(None)):
     """
     Bird's-eye overview: list packages under `base` with their top-level classes.
-    Light Mode version: uses the local worktree only (no git checkout per branch).
+    Light Mode version: reads the installed schema of the profile (no git checkout per branch).
     """
     ws = _workspace()
     base_to_use = base or ws.base_namespace or DEFAULT_BASE_NS
     branch_to_use = _enforce_light_branch(branch, package=ws.package, base_namespace=base_to_use)
     _ = _schema_info_or_503(
-        auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA,
         package=ws.package,
         base_namespace=base_to_use,
     )
@@ -864,15 +838,14 @@ async def overview(branch: str | None = Query(None), base: str | None = Query(No
     bases = [b.strip() for b in base_to_use.split(",") if b.strip()]
     items: list[dict] = []
     for base_pkg in bases:
-        modules = list_modules_for_base(base_pkg)
-        for mod in modules:
-            try:
-                classes = list_sections(mod)
-            except Exception:
-                continue
-            if not classes:
-                continue
-            items.append({"package": mod, "classes": sorted(classes)})
+        try:
+            modules = await run_in_threadpool(list_schema_modules, base_pkg)
+        except Exception:
+            # One namespace that cannot be read must not hide the others.
+            logger.info("Overview skipped namespace '%s'", base_pkg, exc_info=True)
+            continue
+        for module in modules:
+            items.append({"package": module["package"], "classes": sorted(module["sections"])})
 
     return {"branch": branch_to_use, "base": base_to_use, "items": items, "workspace": _workspace_payload(ws)}
 
@@ -880,7 +853,7 @@ async def overview(branch: str | None = Query(None), base: str | None = Query(No
 @app.get("/usage")
 async def usage(section_id: str = Query(..., description="Fully qualified section class name")):
     ws = _workspace()
-    entries = get_usage_for_section(section_id)
+    entries = await run_in_threadpool(get_usage_for_section, section_id)
     payload = [
         {
             "kind": e.kind,
@@ -902,7 +875,6 @@ async def send_design(payload: dict):
 
     ws = _workspace()
     info = _schema_info_or_503(
-        auto_bootstrap=AUTO_BOOTSTRAP_SCHEMA,
         package=ws.package,
         base_namespace=ws.base_namespace,
     )

@@ -28,6 +28,12 @@ import { buildUmlStateFromGraph } from "./utils/umlState";
 
 type WorkspaceEnvelope = { workspace?: WorkspaceState };
 
+// Responses carry the workspace the server had when the request was handled.
+// A response that was requested before the user's latest workspace change must
+// not overwrite that change, however late it arrives.
+const WORKSPACE_EPOCH = "__workspaceEpoch";
+type EpochConfig = { workspaceEpoch?: number };
+
 type TaskStatusResponse = {
   task_id: string;
   status: string;
@@ -137,6 +143,7 @@ export default function App() {
   const appShellRef = useRef<HTMLElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const workspaceStateRef = useRef<WorkspaceState | null>(null);
+  const workspaceEpochRef = useRef(0);
   const importFileRef = useRef<HTMLInputElement | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === "undefined") return 360;
@@ -268,10 +275,24 @@ export default function App() {
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
+      (config as EpochConfig).workspaceEpoch = workspaceEpochRef.current;
       return config;
+    });
+    instance.interceptors.response.use((response) => {
+      const epoch = (response.config as EpochConfig).workspaceEpoch;
+      if (typeof epoch === "number" && response.data && typeof response.data === "object") {
+        Object.defineProperty(response.data, WORKSPACE_EPOCH, { value: epoch, enumerable: false });
+      }
+      return response;
     });
     return instance;
   }, [apiBase, token]);
+
+  const isStaleResponse = useCallback((payload: unknown): boolean => {
+    if (!payload || typeof payload !== "object") return false;
+    const epoch = (payload as Record<string, unknown>)[WORKSPACE_EPOCH];
+    return typeof epoch === "number" && epoch < workspaceEpochRef.current;
+  }, []);
   const normalizedNamespace = useMemo(() => {
     const parts = namespace.split(",").map((p: string) => p.trim()).filter(Boolean);
     return parts.length > 0 ? parts.join(",") : DEFAULT_NAMESPACE;
@@ -345,24 +366,34 @@ export default function App() {
     }
   }, [applyWorkspaceInStore]);
 
+  // Build-time defaults only fill in until the server reports the workspace.
+  // Re-applying them later would undo a schema the user has just selected.
+  const applyDefaultWorkspace = useCallback(() => {
+    if (workspaceStateRef.current) return;
+    applyWorkspace({ branch: DEFAULT_BRANCH, package: DEFAULT_PACKAGE, base_namespace: DEFAULT_NAMESPACE });
+  }, [applyWorkspace]);
+
   const syncWorkspaceFromResponse = useCallback(
     (payload: WorkspaceEnvelope | null | undefined) => {
+      if (isStaleResponse(payload)) return;
       if (payload?.workspace) applyWorkspace(payload.workspace);
     },
-    [applyWorkspace]
+    [applyWorkspace, isStaleResponse]
   );
 
   const updateWorkspaceOnServer = useCallback(
     async (updates: Partial<WorkspaceState>) => {
       if (!token) return;
+      // From here on, answers to earlier requests describe an outdated workspace.
+      workspaceEpochRef.current += 1;
       try {
         const res = await api.put("/workspace", updates);
-        applyWorkspace(res.data.workspace as WorkspaceState);
+        syncWorkspaceFromResponse(res.data);
       } catch (error: unknown) {
         console.error("Failed to update workspace", error);
       }
     },
-    [api, applyWorkspace, token]
+    [api, syncWorkspaceFromResponse, token]
   );
 
   const pollTaskStatus = useCallback(
@@ -478,9 +509,11 @@ export default function App() {
 
   const inferProfileKey = useCallback((value?: string | null) => {
     const normalized = normalizePackageName(value);
-    if (normalized.startsWith("bam_masterdata")) return "bam";
-    if (normalized.startsWith("nomad_simulations")) return "nomad";
-    return null;
+    const preset = WORKSPACE_PRESETS.find((entry) => {
+      const top = entry.namespace.split(".")[0];
+      return normalized === top || normalized.startsWith(`${top}.`);
+    });
+    return preset?.key ?? null;
   }, [normalizePackageName]);
 
   const currentSchemaProfile = useMemo(
@@ -540,6 +573,7 @@ export default function App() {
   ): Promise<boolean> => {
     try {
       const res = await api.get("/schema/version");
+      if (isStaleResponse(res.data)) return true;
       setSchemaVersion(res.data?.version || null);
       setSchemaSource(res.data?.source || null);
       setSchemaProfileKey(typeof res.data?.schema_profile === "string" ? res.data.schema_profile : null);
@@ -550,7 +584,7 @@ export default function App() {
         setToken("light");
         setUserName("local");
         setSessionChecked(true);
-        applyWorkspace({ branch: DEFAULT_BRANCH, package: DEFAULT_PACKAGE, base_namespace: DEFAULT_NAMESPACE });
+        applyDefaultWorkspace();
       }
       return true;
     } catch (error) {
@@ -562,7 +596,7 @@ export default function App() {
       }
       return false;
     }
-  }, [api, applyWorkspace, isLightMode]);
+  }, [api, applyDefaultWorkspace, isLightMode, isStaleResponse]);
 
   const loadSchemaProfiles = useCallback(async () => {
     if (!token) return;
@@ -587,13 +621,14 @@ export default function App() {
         }))
         .filter((entry: SchemaProfileSummary) => Boolean(entry.key));
       setSchemaProfiles(parsed);
+      if (isStaleResponse(res.data)) return;
       const current = typeof res.data?.current_profile === "string" ? res.data.current_profile : null;
       setSchemaProfileKey(current || parsed.find((entry: SchemaProfileSummary) => entry.current)?.key || inferProfileKey(pkg));
       syncWorkspaceFromResponse(res.data);
     } catch (error) {
       console.error("Failed to load schema profiles", error);
     }
-  }, [api, inferProfileKey, pkg, syncWorkspaceFromResponse, token]);
+  }, [api, inferProfileKey, isStaleResponse, pkg, syncWorkspaceFromResponse, token]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -607,7 +642,7 @@ export default function App() {
   useEffect(() => {
     if (isLightMode) {
       setSessionChecked(true);
-      applyWorkspace({ branch: DEFAULT_BRANCH, package: DEFAULT_PACKAGE, base_namespace: DEFAULT_NAMESPACE });
+      applyDefaultWorkspace();
       loadSchemaVersion({ promoteLight: true });
       loadSchemaProfiles();
       return;
@@ -651,7 +686,7 @@ export default function App() {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [api, applyWorkspace, isLightMode, loadSchemaProfiles, loadSchemaVersion, logout, token]);
+  }, [api, applyDefaultWorkspace, applyWorkspace, isLightMode, loadSchemaProfiles, loadSchemaVersion, logout, token]);
 
   useEffect(() => {
     if (!sessionChecked) return;
@@ -2674,7 +2709,7 @@ export default function App() {
                           {profile.available
                             ? profile.source === "bundled"
                               ? "bundled"
-                              : profile.version || "ready"
+                              : profile.version?.slice(0, 9) || "ready"
                             : "not loaded"}
                         </span>
                       </button>

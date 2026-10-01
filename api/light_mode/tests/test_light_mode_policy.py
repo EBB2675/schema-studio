@@ -33,13 +33,20 @@ def light_mode_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     import api.light_mode.app as app_mod
 
     app_mod = importlib.reload(app_mod)
-    info = SimpleNamespace(package_root=tmp_path, version="deadbeef", source="remote-develop")
+    info = SimpleNamespace(version="deadbeef", source="remote-develop", package_version="1.0")
 
     monkeypatch.setattr(app_mod, "current_schema_info", lambda *args, **kwargs: info)
     monkeypatch.setattr(app_mod, "update_schema", lambda *args, **kwargs: info)
     monkeypatch.setattr(app_mod, "build_graph", lambda **kwargs: {"package": kwargs["package"], "root": kwargs.get("root"), "nodes": [], "edges": []})
     monkeypatch.setattr(app_mod, "list_sections", lambda _package: ["RootSection"])
-    monkeypatch.setattr(app_mod, "list_modules_for_base", lambda base: [f"{base}.alpha", f"{base}.beta"])
+    monkeypatch.setattr(
+        app_mod,
+        "list_schema_modules",
+        lambda base: [
+            {"package": f"{base}.alpha", "sections": ["RootSection"]},
+            {"package": f"{base}.beta", "sections": ["RootSection"]},
+        ],
+    )
     return app_mod
 
 
@@ -68,6 +75,32 @@ async def test_workspace_branch_is_fixed_and_cannot_switch(client: httpx.AsyncCl
 
 
 @pytest.mark.anyio
+async def test_workspace_update_accepts_json_body_and_switches_profile(client: httpx.AsyncClient):
+    updated = await client.put(
+        "/workspace",
+        json={"package": "bam_masterdata.datamodel.object_types", "base_namespace": "bam_masterdata.datamodel"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["workspace"] == {
+        "branch": "main",
+        "package": "bam_masterdata.datamodel.object_types",
+        "base_namespace": "bam_masterdata.datamodel",
+    }
+
+    stored = await client.get("/workspace")
+    assert stored.json()["workspace"]["package"] == "bam_masterdata.datamodel.object_types"
+    assert stored.json()["schema_profile"] == "bam-masterdata"
+
+    # The branch sent along by the web app must match the profile of the new package.
+    rejected = await client.put(
+        "/workspace",
+        json={"branch": "develop", "package": "nomad_measurements.xrd.schema", "base_namespace": "nomad_measurements"},
+    )
+    assert rejected.status_code == 400
+    assert "only 'main'" in rejected.json()["detail"]
+
+
+@pytest.mark.anyio
 async def test_git_branches_is_hard_disabled(client: httpx.AsyncClient):
     resp = await client.get("/git/branches")
     assert resp.status_code == 410
@@ -88,42 +121,24 @@ async def test_git_packages_enforces_develop_only(client: httpx.AsyncClient):
 
 
 @pytest.mark.anyio
-async def test_git_packages_filters_modules_without_schema_sections(
+async def test_git_packages_falls_back_to_workspace_package_without_schema_modules(
     client: httpx.AsyncClient,
     light_mode_module,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(
-        light_mode_module,
-        "list_modules_for_base",
-        lambda base: [
-            f"{base}.alpha",
-            f"{base}.schema_package",
-            f"{base}.support",
-            f"{base}.broken",
-        ],
-    )
-
-    def sections_for(module: str):
-        if module.endswith(".broken"):
-            raise ModuleNotFoundError("No module named support_dep", name="support_dep")
-        if module.endswith(".alpha"):
-            return ["SchemaClass"]
-        return []
-
-    monkeypatch.setattr(light_mode_module, "list_sections", sections_for)
+    monkeypatch.setattr(light_mode_module, "list_schema_modules", lambda base: [])
 
     resp = await client.get("/git/packages", params={"base_package": "pkg.base"})
     assert resp.status_code == 200
-    assert resp.json()["packages"] == ["pkg.base.alpha"]
+    assert resp.json()["packages"] == ["pkg.default"]
 
 
 @pytest.mark.anyio
 async def test_overview_enforces_develop_only(client: httpx.AsyncClient, light_mode_module, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         light_mode_module,
-        "list_sections",
-        lambda module: ["ClassA"] if module.endswith(".alpha") else [],
+        "list_schema_modules",
+        lambda base: [{"package": f"{base}.alpha", "sections": ["ClassA"]}],
     )
 
     rejected = await client.get("/overview", params={"base": "pkg.base", "branch": "feature-y"})
@@ -135,6 +150,22 @@ async def test_overview_enforces_develop_only(client: httpx.AsyncClient, light_m
     payload = resp.json()
     assert payload["branch"] == "develop"
     assert payload["items"] == [{"package": "pkg.base.alpha", "classes": ["ClassA"]}]
+
+
+@pytest.mark.anyio
+async def test_overview_skips_namespaces_that_cannot_be_read(
+    client: httpx.AsyncClient, light_mode_module, monkeypatch: pytest.MonkeyPatch
+):
+    def modules_for(base: str):
+        if base == "pkg.missing":
+            raise light_mode_module.SchemaUnavailable("environment is not set up")
+        return [{"package": f"{base}.alpha", "sections": ["ClassA"]}]
+
+    monkeypatch.setattr(light_mode_module, "list_schema_modules", modules_for)
+
+    resp = await client.get("/overview", params={"base": "pkg.missing,pkg.base"})
+    assert resp.status_code == 200
+    assert resp.json()["items"] == [{"package": "pkg.base.alpha", "classes": ["ClassA"]}]
 
 
 @pytest.mark.anyio
@@ -156,12 +187,14 @@ async def test_health_reports_light_mode_schema_metadata(client: httpx.AsyncClie
 
 
 @pytest.mark.anyio
-async def test_schema_profiles_reports_nomad_and_bam(client: httpx.AsyncClient):
+async def test_schema_profiles_reports_all_three_profiles(client: httpx.AsyncClient):
     resp = await client.get("/schema/profiles")
     assert resp.status_code == 200
     payload = resp.json()
     keys = [entry["key"] for entry in payload["profiles"]]
-    assert keys == ["nomad", "bam"]
+    assert keys == ["nomad-simulations", "nomad-measurements", "bam-masterdata"]
+    assert payload["current_profile"] == "nomad-simulations"
+    assert all(entry["version"] == "deadbeef" for entry in payload["profiles"])
 
 
 @pytest.mark.anyio
@@ -518,58 +551,56 @@ async def test_delete_custom_edit_endpoint_removes_single_persisted_edit(client:
     assert delete_class.json()["deleted"] == 1
 
 @pytest.mark.anyio
-async def test_git_packages_auto_bootstraps_schema_when_unavailable_once(
+async def test_unavailable_schema_returns_503_and_never_installs(
     client: httpx.AsyncClient,
     light_mode_module,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    info = SimpleNamespace(package_root=Path("."), version="feedbeef", source="remote-develop")
-    calls = {"current": 0, "update": 0}
+    calls = {"update": 0}
 
-    def flaky_current(*args, **kwargs):
-        calls["current"] += 1
-        if calls["update"] == 0:
-            raise light_mode_module.SchemaUnavailable("schema missing before bootstrap")
-        return info
+    def unavailable(*args, **kwargs):
+        raise light_mode_module.SchemaUnavailable("schema environment is not set up")
 
-    def one_update(*args, **kwargs):
+    def count_update(*args, **kwargs):
         calls["update"] += 1
-        return info
+        return SimpleNamespace(version="feedbeef", source="remote-develop", package_version="1.0")
 
-    monkeypatch.setattr(light_mode_module, "current_schema_info", flaky_current)
-    monkeypatch.setattr(light_mode_module, "update_schema", one_update)
-    monkeypatch.setattr(light_mode_module, "_bootstrap_attempted", False)
-    # Auto-bootstrap is opt-in since runtime profile selection; enable it for this test.
-    monkeypatch.setattr(light_mode_module, "AUTO_BOOTSTRAP_SCHEMA", True)
+    monkeypatch.setattr(light_mode_module, "current_schema_info", unavailable)
+    monkeypatch.setattr(light_mode_module, "update_schema", count_update)
 
-    first = await client.get("/git/packages", params={"base_package": "pkg.base"})
-    assert first.status_code == 200
-    assert first.json()["packages"] == ["pkg.base.alpha", "pkg.base.beta"]
-    assert calls["update"] == 1
+    for path, params in (
+        ("/git/packages", {"base_package": "pkg.base"}),
+        ("/roots", {"package": "pkg.base.alpha"}),
+        ("/schema", {"package": "pkg.base.alpha"}),
+        ("/overview", {"base": "pkg.base"}),
+        ("/schema/version", {}),
+    ):
+        resp = await client.get(path, params=params)
+        assert resp.status_code == 503, path
+        assert "not set up" in resp.json()["detail"]
 
-    second = await client.get("/git/packages", params={"base_package": "pkg.base"})
-    assert second.status_code == 200
+    # Setting up an environment only happens when it is asked for explicitly.
+    assert calls["update"] == 0
+    profiles = await client.get("/schema/profiles")
+    assert all(entry["error"] for entry in profiles.json()["profiles"])
+
+    updated = await client.post("/schema/update", params={"profile": "bam-masterdata"})
+    assert updated.status_code == 200
+    assert updated.json() == {"version": "feedbeef", "source": "remote-develop", "schema_profile": "bam-masterdata"}
     assert calls["update"] == 1
 
 
 @pytest.mark.anyio
-async def test_git_packages_returns_503_when_schema_still_unavailable_after_bootstrap(
+async def test_usage_reports_unavailable_schema(
     client: httpx.AsyncClient,
     light_mode_module,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    monkeypatch.setattr(
-        light_mode_module,
-        "current_schema_info",
-        lambda *args, **kwargs: (_ for _ in ()).throw(light_mode_module.SchemaUnavailable("schema unavailable")),
-    )
-    monkeypatch.setattr(
-        light_mode_module,
-        "update_schema",
-        lambda *args, **kwargs: (_ for _ in ()).throw(light_mode_module.SchemaUnavailable("bootstrap failed")),
-    )
-    monkeypatch.setattr(light_mode_module, "_bootstrap_attempted", False)
+    def unavailable(_section_id):
+        raise light_mode_module.SchemaUnavailable("schema environment is not set up")
 
-    resp = await client.get("/git/packages", params={"base_package": "pkg.base"})
+    monkeypatch.setattr(light_mode_module, "get_usage_for_section", unavailable)
+
+    resp = await client.get("/usage", params={"section_id": "pkg.section.Section"})
     assert resp.status_code == 503
-    assert "schema unavailable" in resp.json()["detail"]
+    assert "not set up" in resp.json()["detail"]

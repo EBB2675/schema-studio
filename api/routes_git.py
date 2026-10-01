@@ -149,6 +149,7 @@ async def api_graph(
                 wt,
                 pkg,
                 req.extractor,
+                sha=sha,
                 base_namespace=namespace,
                 root=root,
                 include_quantities=include_quantities,
@@ -191,8 +192,8 @@ async def api_diff(
             "base_namespace": namespace,
         }
 
-        gA = build_graph_in_subprocess(wtb, pkg, req.extractor, **opts)
-        gB = build_graph_in_subprocess(wth, pkg, req.extractor, **opts)
+        gA = build_graph_in_subprocess(wtb, pkg, req.extractor, sha=shab, **opts)
+        gB = build_graph_in_subprocess(wth, pkg, req.extractor, sha=shah, **opts)
         diff = diff_graphs(gA, gB)
         return {
             "base": {"branch": req.base, "sha": shab, "graph": gA},

@@ -150,6 +150,9 @@ def test_build_graph_extracts_bam_object_types_and_controlled_vocab(monkeypatch,
         "inherits",
     ) in edge_types
 
+    # The openBIS framework base classes are not part of the schema, also with cross-modules on.
+    assert not any(node_id.startswith("bam_masterdata.metadata.") for node_id in nodes_by_id)
+
 
 def test_build_graph_extracts_bam_vocabulary_terms(monkeypatch, tmp_path: Path):
     """BAM vocabulary terms should be extracted as quantity-like term nodes."""

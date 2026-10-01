@@ -86,7 +86,8 @@ def build_graph(
     include_inheritance: bool = True,
     allow_cross_module: bool = True,
     base_namespace: Optional[str] = None,
-    exclude_prefixes: Tuple[str, ...] = ("nomad.metainfo.",),
+    # Framework base classes (NOMAD metainfo, openBIS entity types) are not part of a schema.
+    exclude_prefixes: Tuple[str, ...] = ("nomad.metainfo.", "bam_masterdata.metadata."),
     max_nodes: int = 8000,
     max_depth: int = 20,
 ) -> Dict[str, Any]:

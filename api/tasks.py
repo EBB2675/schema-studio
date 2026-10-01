@@ -54,6 +54,7 @@ def build_graph_task(
         wt,
         pkg,
         extractor,
+        sha=sha,
         base_namespace=namespace,
         root=root,
         include_quantities=include_quantities,
@@ -103,8 +104,8 @@ def diff_graph_task(
         allow_cross_module=allow_cross_module,
         base_namespace=namespace,
     )
-    gA = build_graph_in_subprocess(wtb, pkg, extractor, **opts)
-    gB = build_graph_in_subprocess(wth, pkg, extractor, **opts)
+    gA = build_graph_in_subprocess(wtb, pkg, extractor, sha=shab, **opts)
+    gB = build_graph_in_subprocess(wth, pkg, extractor, sha=shah, **opts)
     diff = diff_graphs(gA, gB)
     return {
         "base": {"branch": base, "sha": shab, "graph": gA},

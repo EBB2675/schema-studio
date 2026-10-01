@@ -71,6 +71,20 @@ def clean_state():
     _reset_dbs_sync()
 
 
+@pytest.fixture(autouse=True)
+def in_process_extraction(monkeypatch):
+    """
+    The app reads schemas by running the extractor in a schema environment.
+    These tests use small dummy packages on their own import path instead, so
+    the same extractor code runs in-process here.
+    """
+    import api.main as main
+    from extractor import graph_builder
+
+    monkeypatch.setattr(main, "build_graph", graph_builder.build_graph)
+    monkeypatch.setattr(main, "list_sections", graph_builder.list_sections)
+
+
 @pytest.fixture()
 def client():
     with TestClient(app) as base_client:

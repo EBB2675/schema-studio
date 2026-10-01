@@ -1,21 +1,31 @@
-"""Schema sourcing for Light Mode.
+"""Schema profiles and their environments.
 
 Policy:
-- Always use an installed schema package selected by profile.
+- Each profile has its own environment under `environments/<profile>/`, a uv
+  project that installs only that schema package from its tracked branch.
+- The app never installs or imports a schema package. It reads a schema by
+  running a script from `extractor/scripts/` with the environment's interpreter.
+- Creating or updating an environment is an explicit action (`update_schema`).
 - Light mode branch is fixed by profile (for example develop/main).
 - Never use local checkouts/worktrees.
 """
 from __future__ import annotations
 
-import importlib
-import importlib.metadata
-import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Lock
+
+from extractor.runner import EnvironmentMissing, ExtractorEnvironment, ExtractorError, run_script
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+LEGACY_SCRIPT = REPO_ROOT / "extractor" / "scripts" / "legacy.py"
+INFO_TIMEOUT_SECONDS = 60
+UPDATE_TIMEOUT_SECONDS = int(os.getenv("SCHEMA_STUDIO_UPDATE_TIMEOUT_SECONDS", "1800"))
 
 
 @dataclass(frozen=True)
@@ -31,15 +41,25 @@ class SchemaProfile:
     default_base_namespace: str
     default_package: str
     default_root: str
+    # How schema modules are found inside the environment: "entry-points"
+    # (NOMAD schema package entry points) and/or "walk" (every module under the
+    # base namespace).
+    discovery: tuple[str, ...] = ("walk",)
+
+    @property
+    def environment(self) -> ExtractorEnvironment:
+        """The uv project that holds this profile's schema package."""
+        return ExtractorEnvironment(name=self.key, directory=environments_root() / self.key)
 
 
 @dataclass
 class SchemaInfo:
-    """Runtime metadata about the installed schema package source/version."""
+    """Runtime metadata about the schema package installed in a profile environment."""
 
-    package_root: Path
-    version: str
-    source: str  # "installed" | "remote-<branch>" | "bundled"
+    version: str  # commit SHA when installed from git, otherwise the package version
+    source: str  # "installed" | "remote-<branch>"
+    package_version: str | None = None
+    commit: str | None = None
 
 
 class SchemaUnavailable(RuntimeError):
@@ -49,8 +69,8 @@ class SchemaUnavailable(RuntimeError):
 
 
 SCHEMA_PROFILES: dict[str, SchemaProfile] = {
-    "nomad": SchemaProfile(
-        key="nomad",
+    "nomad-simulations": SchemaProfile(
+        key="nomad-simulations",
         label="nomad-simulations",
         package_import="nomad_simulations",
         package_dist="nomad-simulations",
@@ -59,9 +79,25 @@ SCHEMA_PROFILES: dict[str, SchemaProfile] = {
         default_base_namespace="nomad_simulations.schema_packages",
         default_package="nomad_simulations.schema_packages.model_method",
         default_root="ModelMethod",
+        # The single entry point only loads `general`; the other schema modules
+        # are found by walking the namespace.
+        discovery=("entry-points", "walk"),
     ),
-    "bam": SchemaProfile(
-        key="bam",
+    "nomad-measurements": SchemaProfile(
+        key="nomad-measurements",
+        label="nomad-measurements",
+        package_import="nomad_measurements",
+        package_dist="nomad-measurements",
+        default_branch="main",
+        default_remote_repo="https://github.com/FAIRmat-NFDI/nomad-measurements.git",
+        default_base_namespace="nomad_measurements",
+        default_package="nomad_measurements.xrd.schema",
+        default_root="ELNXRayDiffraction",
+        # One entry point per technique; walking would also import parsers and helpers.
+        discovery=("entry-points",),
+    ),
+    "bam-masterdata": SchemaProfile(
+        key="bam-masterdata",
         label="bam-masterdata",
         package_import="bam_masterdata",
         package_dist="bam-masterdata",
@@ -70,8 +106,25 @@ SCHEMA_PROFILES: dict[str, SchemaProfile] = {
         default_base_namespace="bam_masterdata.datamodel",
         default_package="bam_masterdata.datamodel.object_types",
         default_root="SearchQuery",
+        # bam-masterdata declares no schema entry point yet.
+        discovery=("walk",),
     ),
 }
+DEFAULT_PROFILE_KEY = "nomad-simulations"
+
+
+def environments_root() -> Path:
+    """Folder that holds one uv project per profile."""
+    override = os.getenv("SCHEMA_STUDIO_ENVIRONMENTS_DIR")
+    return Path(override) if override else REPO_ROOT / "environments"
+
+
+def _profile_for_hint(hint: str) -> SchemaProfile | None:
+    """Match a package or namespace name to the profile that owns it."""
+    for profile in SCHEMA_PROFILES.values():
+        if hint == profile.package_import or hint.startswith(f"{profile.package_import}."):
+            return profile
+    return None
 
 
 def _select_profile() -> SchemaProfile:
@@ -85,11 +138,8 @@ def _select_profile() -> SchemaProfile:
             if requested in {profile.package_import, profile.package_dist}:
                 return profile
 
-    package_hint = os.getenv("SCHEMA_STUDIO_DEFAULT_PACKAGE", "")
-    if package_hint.startswith("bam_masterdata"):
-        return SCHEMA_PROFILES["bam"]
-
-    return SCHEMA_PROFILES["nomad"]
+    hinted = _profile_for_hint(os.getenv("SCHEMA_STUDIO_DEFAULT_PACKAGE", ""))
+    return hinted or SCHEMA_PROFILES[DEFAULT_PROFILE_KEY]
 
 
 ACTIVE_PROFILE = _select_profile()
@@ -111,11 +161,11 @@ def active_profile() -> SchemaProfile:
 
 def list_schema_profiles() -> list[SchemaProfile]:
     """Return supported schema profiles in display order."""
-    return [SCHEMA_PROFILES["nomad"], SCHEMA_PROFILES["bam"]]
+    return list(SCHEMA_PROFILES.values())
 
 
 def schema_profile_for_key(key: str | None) -> SchemaProfile:
-    """Resolve a profile by short key or package identifier."""
+    """Resolve a profile by key or package identifier."""
     if not key:
         return ACTIVE_PROFILE
 
@@ -132,12 +182,10 @@ def schema_profile_for_key(key: str | None) -> SchemaProfile:
 
 def schema_profile_for_package(package: str | None, base_namespace: str | None = None) -> SchemaProfile:
     """Infer a profile from the selected package or base namespace."""
-    hints = [package or "", base_namespace or ""]
-    for hint in hints:
-        if hint.startswith("bam_masterdata"):
-            return SCHEMA_PROFILES["bam"]
-        if hint.startswith("nomad_simulations"):
-            return SCHEMA_PROFILES["nomad"]
+    for hint in (package or "", base_namespace or ""):
+        profile = _profile_for_hint(hint)
+        if profile:
+            return profile
     return ACTIVE_PROFILE
 
 
@@ -154,80 +202,50 @@ def _is_packaged_backend() -> bool:
     return getattr(sys, "frozen", False) or os.getenv("SCHEMA_STUDIO_PACKAGED_BACKEND") == "1"
 
 
-def _distribution(profile: SchemaProfile) -> importlib.metadata.Distribution:
-    """Return installed package distribution metadata for the selected profile."""
-    try:
-        return importlib.metadata.distribution(profile.package_dist)
-    except importlib.metadata.PackageNotFoundError as exc:
-        raise SchemaUnavailable(
-            f"{profile.package_dist} is not installed. Load the schema while online or reinstall Light Mode with the required package."
-        ) from exc
-
-
-def _package_root(profile: SchemaProfile) -> Path:
-    """Resolve filesystem location of the selected schema package."""
-    spec = importlib.util.find_spec(profile.package_import)
-    if spec is None:
-        raise SchemaUnavailable(
-            f"Could not import {profile.package_import}. Load the schema while online or reinstall Light Mode."
-        )
-    location = spec.submodule_search_locations
-    if location:
-        return Path(next(iter(location))).resolve()
-    if spec.origin:
-        return Path(spec.origin).resolve().parent
-    raise SchemaUnavailable(f"Could not determine install location for {profile.package_import}.")
-
-
-def _direct_url_payload(dist: importlib.metadata.Distribution) -> dict | None:
-    """Parse PEP 610 `direct_url.json` metadata when available."""
-    try:
-        raw = dist.read_text("direct_url.json")
-    except Exception:
-        raw = None
-    if not raw:
-        return None
-    try:
-        parsed = json.loads(raw)
-    except Exception:
-        return None
-    return parsed if isinstance(parsed, dict) else None
-
-
 def _normalize_repo(url: str) -> str:
     """Normalize git URL for comparisons by trimming trailing slash and `.git` suffix."""
     base = url.rstrip("/")
     return base[:-4] if base.endswith(".git") else base
 
 
+def setup_hint(profile: SchemaProfile) -> str:
+    """One sentence that tells the user how to create the profile environment."""
+    return (
+        f"Load it from the schema selection in the app, or run `uv sync --project {profile.environment.directory}`."
+    )
+
+
 def schema_available(profile: SchemaProfile | str | None = None, *, package: str | None = None, base_namespace: str | None = None) -> bool:
-    """Return whether the selected profile is importable in the current runtime."""
+    """Return whether the environment of the selected profile exists."""
     resolved = _resolve_profile(profile, package=package, base_namespace=base_namespace)
-    return importlib.util.find_spec(resolved.package_import) is not None
+    return resolved.environment.python.is_file()
 
 
-def _schema_info_from_install(profile: SchemaProfile) -> SchemaInfo:
-    """Validate installed package provenance and return source/version metadata."""
-    package_root = _package_root(profile)
-    if str(package_root.parent) not in sys.path:
-        sys.path.insert(0, str(package_root.parent))
+def _environment_stamp(profile: SchemaProfile) -> tuple:
+    """Cheap fingerprint that changes when packages in the environment change."""
+    directory = profile.environment.directory
+    candidates = [directory / "uv.lock", profile.environment.python]
+    candidates += sorted((directory / ".venv").glob("lib/python*/site-packages"))
+    candidates.append(directory / ".venv" / "Lib" / "site-packages")
+    stamp = []
+    for path in candidates:
+        try:
+            stamp.append((str(path), path.stat().st_mtime_ns))
+        except OSError:
+            continue
+    return tuple(stamp)
 
-    if _is_packaged_backend():
-        # Frozen desktop builds ship a bundled schema snapshot rather than a
-        # pip-managed install, so importlib.metadata is not a reliable source.
-        version = os.getenv("SCHEMA_STUDIO_SCHEMA_VERSION", "") or ""
-        if not version:
-            try:
-                package = importlib.import_module(profile.package_import)
-            except Exception:
-                package = None
-            version = getattr(package, "__version__", None) or "bundled"
-        return SchemaInfo(package_root=package_root, version=version, source="bundled")
 
-    dist = _distribution(profile)
-    direct_url = _direct_url_payload(dist)
-    if not direct_url:
-        return SchemaInfo(package_root=package_root, version=dist.version, source="installed")
+_info_lock = Lock()
+_info_cache: dict[str, tuple[tuple, SchemaInfo]] = {}
+
+
+def _schema_info_from_payload(profile: SchemaProfile, payload: dict) -> SchemaInfo:
+    """Check where the schema package was installed from and return its version."""
+    package_version = str(payload.get("version") or "")
+    direct_url = payload.get("direct_url")
+    if not isinstance(direct_url, dict):
+        return SchemaInfo(version=package_version, source="installed", package_version=package_version)
 
     source_url = direct_url.get("url")
     if not isinstance(source_url, str) or source_url.startswith("file://"):
@@ -240,7 +258,7 @@ def _schema_info_from_install(profile: SchemaProfile) -> SchemaInfo:
 
     vcs_info = direct_url.get("vcs_info")
     if not isinstance(vcs_info, dict):
-        return SchemaInfo(package_root=package_root, version=dist.version, source="installed")
+        return SchemaInfo(version=package_version, source="installed", package_version=package_version)
 
     requested = vcs_info.get("requested_revision")
     if requested and requested != profile.default_branch:
@@ -249,75 +267,102 @@ def _schema_info_from_install(profile: SchemaProfile) -> SchemaInfo:
         )
 
     commit = vcs_info.get("commit_id")
-    version = commit if isinstance(commit, str) and commit else dist.version
-    return SchemaInfo(package_root=package_root, version=version, source=f"remote-{profile.default_branch}")
+    commit = commit if isinstance(commit, str) and commit else None
+    return SchemaInfo(
+        version=commit or package_version,
+        source=f"remote-{profile.default_branch}",
+        package_version=package_version,
+        commit=commit,
+    )
+
+
+def _schema_info_from_environment(profile: SchemaProfile) -> SchemaInfo:
+    """Ask the profile environment which schema package version it holds."""
+    if _is_packaged_backend():
+        raise SchemaUnavailable(
+            f"The {profile.label} schema is not bundled with this desktop build."
+        )
+
+    stamp = _environment_stamp(profile)
+    with _info_lock:
+        cached = _info_cache.get(profile.key)
+        if cached and cached[0] == stamp:
+            return cached[1]
+
+    try:
+        payload = run_script(
+            profile.environment,
+            LEGACY_SCRIPT,
+            arguments=("info", json.dumps({"dist": profile.package_dist})),
+            timeout=INFO_TIMEOUT_SECONDS,
+        )
+    except EnvironmentMissing as exc:
+        raise SchemaUnavailable(
+            f"The {profile.label} schema environment is not set up. {setup_hint(profile)}"
+        ) from exc
+    except ExtractorError as exc:
+        raise SchemaUnavailable(
+            f"Could not read {profile.package_dist} from its environment. {setup_hint(profile)} ({exc})"
+        ) from exc
+
+    if not isinstance(payload, dict) or not payload.get("ok") or not isinstance(payload.get("result"), dict):
+        raise SchemaUnavailable(f"Unexpected answer from the {profile.label} schema environment.")
+    info = _schema_info_from_payload(profile, payload["result"])
+    with _info_lock:
+        _info_cache[profile.key] = (stamp, info)
+    return info
 
 
 def ensure_schema_ready(profile: SchemaProfile | str | None = None, *, package: str | None = None, base_namespace: str | None = None) -> SchemaInfo:
-    """Validate that the selected schema package is available."""
-    return _schema_info_from_install(_resolve_profile(profile, package=package, base_namespace=base_namespace))
+    """Validate that the environment of the selected profile is usable."""
+    return _schema_info_from_environment(_resolve_profile(profile, package=package, base_namespace=base_namespace))
 
 
 def current_schema_info(profile: SchemaProfile | str | None = None, *, package: str | None = None, base_namespace: str | None = None) -> SchemaInfo:
-    """Return current installed schema metadata for the selected profile."""
-    return _schema_info_from_install(_resolve_profile(profile, package=package, base_namespace=base_namespace))
+    """Return current schema metadata for the selected profile."""
+    return _schema_info_from_environment(_resolve_profile(profile, package=package, base_namespace=base_namespace))
+
+
+def _run_uv(arguments: list[str], profile: SchemaProfile) -> None:
+    uv = shutil.which("uv")
+    if not uv:
+        raise SchemaUnavailable(
+            "Schema environments are managed with `uv`, which was not found on PATH. "
+            "Install it (https://docs.astral.sh/uv/) and try again."
+        )
+    # The environment is selected by --project; do not let the app's own
+    # virtual environment leak into the command.
+    env = {k: v for k, v in os.environ.items() if k not in {"VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT", "PYTHONPATH"}}
+    try:
+        proc = subprocess.run(
+            [uv, *arguments, "--project", str(profile.environment.directory)],
+            capture_output=True, text=True, env=env, timeout=UPDATE_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise SchemaUnavailable(f"Schema update timed out after {UPDATE_TIMEOUT_SECONDS}s.") from exc
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip()
+        raise SchemaUnavailable(f"Schema update failed: {detail or 'uv failed'}")
 
 
 def update_schema(profile: SchemaProfile | str | None = None, *, package: str | None = None, base_namespace: str | None = None) -> SchemaInfo:
     """
-    Upgrade or install the selected profile package from its configured remote.
-    Keeps local Light Mode edits in SQLite.
+    Create the profile environment, or move it to the latest commit of its
+    tracked branch. Keeps local Light Mode edits in SQLite.
     """
     resolved = _resolve_profile(profile, package=package, base_namespace=base_namespace)
     if _is_packaged_backend():
         raise SchemaUnavailable(
             "Schema updates are disabled in the packaged desktop build. Reinstall a newer desktop release to get a newer bundled schema."
         )
+    if not (resolved.environment.directory / "pyproject.toml").is_file():
+        raise SchemaUnavailable(
+            f"No environment definition found for profile '{resolved.key}' in {resolved.environment.directory}."
+        )
 
-    upgrade_target = f"git+{resolved.default_remote_repo}@{resolved.default_branch}"
-    cmd = [sys.executable, "-m", "pip", "install", "--upgrade", upgrade_target]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "").strip()
-        raise SchemaUnavailable(f"Schema update failed: {detail or 'pip install failed'}")
+    _run_uv(["lock", "--upgrade-package", resolved.package_dist], resolved)
+    _run_uv(["sync"], resolved)
 
-    importlib.invalidate_caches()
-    prefix = f"{resolved.package_import}."
-    for name in list(sys.modules.keys()):
-        if name == resolved.package_import or name.startswith(prefix):
-            sys.modules.pop(name, None)
-
-    return _schema_info_from_install(resolved)
-
-
-def list_modules_for_base(base_package: str) -> list[str]:
-    """
-    List module names under an installed package without importing submodules.
-    This avoids side effects from module-level registration code.
-    """
-    try:
-        pkg = importlib.import_module(base_package)
-    except Exception:
-        return []
-
-    modules: set[str] = {base_package}
-    pkg_paths = getattr(pkg, "__path__", None)
-    if not pkg_paths:
-        return sorted(modules)
-
-    for raw_root in pkg_paths:
-        root = Path(raw_root)
-        if not root.exists():
-            continue
-        for py_file in root.rglob("*.py"):
-            rel = py_file.relative_to(root)
-            if py_file.name == "__init__.py":
-                if rel.parts[:-1]:
-                    mod_name = ".".join((base_package, *rel.parts[:-1]))
-                else:
-                    mod_name = base_package
-            else:
-                mod_name = ".".join((base_package, *rel.with_suffix("").parts))
-            modules.add(mod_name)
-
-    return sorted(modules)
+    with _info_lock:
+        _info_cache.pop(resolved.key, None)
+    return _schema_info_from_environment(resolved)

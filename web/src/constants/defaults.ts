@@ -12,7 +12,7 @@ export const DEFAULT_BRANCH = import.meta.env.VITE_DEFAULT_BRANCH ?? "develop";
 
 export const WORKSPACE_PRESETS = [
   {
-    key: "nomad",
+    key: "nomad-simulations",
     label: "nomad-simulations",
     namespace: "nomad_simulations.schema_packages",
     branch: "develop",
@@ -20,7 +20,15 @@ export const WORKSPACE_PRESETS = [
     root: "ModelMethod",
   },
   {
-    key: "bam",
+    key: "nomad-measurements",
+    label: "nomad-measurements",
+    namespace: "nomad_measurements",
+    branch: "main",
+    pkg: "nomad_measurements.xrd.schema",
+    root: "ELNXRayDiffraction",
+  },
+  {
+    key: "bam-masterdata",
     label: "bam-masterdata",
     namespace: "bam_masterdata.datamodel",
     branch: "main",

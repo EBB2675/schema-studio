@@ -5,12 +5,18 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Query, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel
 
-from extractor.graph_builder import build_graph, list_sections, _root_namespace
-from extractor.usage_index import UsageEntry, get_usage_for_section
+from .light_mode.schema_source import SchemaUnavailable
+from .sources.legacy import (
+    build_graph,
+    get_usage_for_section,
+    list_sections,
+    root_namespace as _root_namespace,
+)
 
 from .routes_git import router as git_router
 from .routes_tasks import router as tasks_router
@@ -100,6 +106,11 @@ app.include_router(git_router)
 app.include_router(tasks_router)
 
 
+@app.exception_handler(SchemaUnavailable)
+async def _schema_unavailable_handler(_request, exc: SchemaUnavailable):
+    return ORJSONResponse(status_code=503, content={"detail": str(exc)})
+
+
 @app.post("/auth/login")
 async def login(req: LoginRequest, db=Depends(db_dep)):
     user = await authenticate_user(db, req.username, req.password)
@@ -153,7 +164,10 @@ async def roots(package: str | None = Query(None), user_ws=Depends(get_user_and_
     _, workspace = user_ws
     pkg = package or workspace.get("package") or DEFAULT_BASE_PACKAGE
     try:
-        return {"package": pkg, "sections": sorted(list_sections(pkg)), "workspace": workspace_payload(workspace)}
+        sections = await run_in_threadpool(list_sections, pkg)
+        return {"package": pkg, "sections": sorted(sections), "workspace": workspace_payload(workspace)}
+    except SchemaUnavailable:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
 
@@ -180,7 +194,8 @@ async def schema(
     if empty:
         data = {"package": pkg, "root": root, "nodes": [], "edges": []}
     else:
-        data = build_graph(
+        data = await run_in_threadpool(
+            build_graph,
             package=pkg,
             root=root,
             include_quantities=include_quantities,
@@ -535,7 +550,8 @@ async def add_custom_quantity(
         if empty:
             graph = {"package": req.package, "root": root, "nodes": [], "edges": []}
         else:
-            graph = build_graph(
+            graph = await run_in_threadpool(
+                build_graph,
                 package=req.package,
                 root=root,
                 include_quantities=True,
@@ -599,7 +615,8 @@ async def add_custom_class(
         if empty:
             graph = {"package": req.package, "root": root, "nodes": [], "edges": []}
         else:
-            graph = build_graph(
+            graph = await run_in_threadpool(
+                build_graph,
                 package=req.package,
                 root=root,
                 include_quantities=include_quantities,

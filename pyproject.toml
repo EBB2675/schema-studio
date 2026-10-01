@@ -44,3 +44,9 @@ dev = [
     "pyinstaller>=6.19.0",
     "pytest>=7",
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: needs the real schema environments under environments/ (run with `pytest -m slow`)",
+]
+addopts = "-m 'not slow'"
