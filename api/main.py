@@ -11,12 +11,8 @@ from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel
 
 from .light_mode.schema_source import SchemaUnavailable
-from .sources.legacy import (
-    build_graph,
-    get_usage_for_section,
-    list_sections,
-    root_namespace as _root_namespace,
-)
+from .sources.extraction import build_graph, get_usage_for_section, list_sections
+from .sources.legacy import root_namespace as _root_namespace
 from .sources.linkml_routes import linkml_download, linkml_report
 
 from .routes_git import router as git_router
@@ -794,7 +790,7 @@ def get_usage(
     e.g. "nomad_simulations.schema_packages.model_method.ModelMethod".
     """
     _, workspace = user_ws
-    entries = get_usage_for_section(section_id)
+    entries = get_usage_for_section(section_id, workspace.get("package"))
     usage = [
         UsageEntryModel(
             kind=e.kind,

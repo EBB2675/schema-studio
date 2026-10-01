@@ -128,6 +128,7 @@ def test_shape_errors_are_reported_with_their_path(change, message):
         (lambda d: _child(d)["methods"].append({"name": "check", "module": "elsewhere"}), r"methods\[1\]: duplicate"),
         (lambda d: d["modules"][0]["classes"].append("example.alpha.Missing"), r"\$\.modules\[0\]\.classes\[1\]: unknown class"),
         (lambda d: d["modules"].append(copy.deepcopy(d["modules"][0])), r"\$\.modules\[1\]: duplicate"),
+        (lambda d: d["modules"][0].update(aliases={"Kid": "example.alpha.Parent"}), r"\$\.modules\[0\]\.aliases\.Kid: .* is not a class of the module"),
         (lambda d: d["usage"].update({"example.alpha.Missing": []}), r"\$\.usage: unknown class"),
     ],
 )

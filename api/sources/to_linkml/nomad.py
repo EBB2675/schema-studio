@@ -214,7 +214,8 @@ def convert_nomad(document: dict[str, Any], *, prefix: str | None = None) -> Con
             cls["attributes"] = {raw["name"]: _attribute(prefix, name, raw, report) for raw in row["attributes"]}
         annotations = {
             "source_bases": json_text(row["bases"]),
-            "source_effective_attributes": json_text(sorted(row["effective_attributes"], key=lambda ref: ref["name"])),
+            # In source order: the graph follows it.
+            "source_effective_attributes": json_text(row["effective_attributes"]),
         }
         if row.get("annotations"):
             annotations["source_annotations"] = json_text(row["annotations"])

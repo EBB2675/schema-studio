@@ -7,7 +7,11 @@ df3839b. Changes from that file:
   the distribution and the modules to read are arguments, and modules can be
   found through NOMAD schema entry points or by walking a package;
 - several modules in one run, each listed under `modules` with the classes it
-  exposes at module level;
+  exposes at module level, in module order, and the other names it binds
+  them to (`aliases`, for example `Symmetry = GlobalCrystalSymmetry`);
+- `effective_attributes` keep NOMAD's order (inherited members first, then in
+  declaration order) instead of being sorted by name, because the graph
+  follows that order;
 - the display values the graph shows today, as attribute annotations
   `display_dtype`, `display_card` and `display_shape`, computed with the rules
   of `extractor/graph_builder.py` (`_dtype_from`, `_cardinality_from`,
@@ -93,6 +97,15 @@ def members(value: Any) -> list[tuple[str, Any]]:
         return sorted(value.items())
     if isinstance(value, (list, tuple)):
         return sorted(((item.name, item) for item in value), key=lambda pair: pair[0])
+    raise ValueError("expected metainfo definition collection")
+
+
+def in_source_order(value: Any) -> list[tuple[str, Any]]:
+    """Members in NOMAD's own order: inherited ones first, then in declaration order."""
+    if isinstance(value, dict):
+        return list(value.items())
+    if isinstance(value, (list, tuple)):
+        return [(item.name, item) for item in value]
     raise ValueError("expected metainfo definition collection")
 
 
@@ -314,8 +327,9 @@ def module_sections(module: ModuleType, roots: tuple[str, ...] = ()) -> list[typ
                 raise ValueError(f"Root section '{root}' not found in {module.__name__}")
             found.append(value)
     else:
+        # Module order, which is the order the graph starts from them.
         found = [
-            value for _, value in sorted(vars(module).items())
+            value for value in vars(module).values()
             if inspect.isclass(value) and hasattr(value, "m_def")
         ]
     return [cls for cls in found if not identifier(cls).startswith(FRAMEWORK_PREFIX)]
@@ -336,6 +350,7 @@ def extract(
     visited: set[str] = set()
     definitions: dict[str, Any] = {}
     exposed: dict[str, list[str]] = {}
+    aliases: dict[str, dict[str, str]] = {}
 
     def warn(path: str, reason: str, status: str = "skipped") -> None:
         report.append({"path": path, "status": status, "reason": reason})
@@ -357,6 +372,12 @@ def extract(
             warn(module.__name__, "module defines no sections", "warning")
             continue
         exposed[module.__name__] = [identifier(cls) for cls in sections]
+        if not roots:
+            # Names the app offers as roots, besides each class's own name.
+            aliases[module.__name__] = {
+                name: identifier(value) for name, value in vars(module).items()
+                if any(value is cls for cls in sections) and name != value.__name__
+            }
         for cls in sections:
             pending.append((identifier(cls), cls))
 
@@ -512,7 +533,7 @@ def extract(
                 raise ValueError("metainfo extending sections are unsupported")
             for kind, properties in (("quantity", definition.all_quantities),
                                      ("subsection", definition.all_sub_sections)):
-                for name, prop in members(properties):
+                for name, prop in in_source_order(properties):
                     owner = identifier(section_class(prop.m_parent))
                     if declarations.get((owner, name)) != kind:
                         # The declaration itself could not be read (reported
@@ -527,13 +548,15 @@ def extract(
         except Exception as error:
             record["effective_attributes"] = []
             warn(path, f"incomplete effective definitions: {type(error).__name__}: {error}")
-        record["effective_attributes"].sort(key=lambda ref: ref["name"])
 
     document: dict[str, Any] = {
         "contract_version": CONTRACT_VERSION,
         "source": source,
         "modules": [
-            {"name": name, "classes": sorted({cid for cid in ids if cid in classes})}
+            {"name": name, "classes": list(dict.fromkeys(cid for cid in ids if cid in classes)),
+             **({"aliases": found} if (found := {
+                 alias: cid for alias, cid in aliases.get(name, {}).items() if cid in classes
+             }) else {})}
             for name, ids in sorted(exposed.items())
         ],
         "classes": [classes[key] for key in sorted(classes)],

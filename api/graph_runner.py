@@ -4,7 +4,7 @@ from typing import Dict, Any
 
 from .repo_utils import python_root
 from .settings import EXTRACTOR_ENTRY
-from .sources.legacy import build_graph
+from .sources.extraction import build_graph
 
 
 def build_graph_in_subprocess(

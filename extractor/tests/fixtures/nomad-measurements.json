@@ -106,6 +106,11 @@
    "description": "An action that has a temporal extension and for some time depends on some entity.",
    "effective_attributes": [
     {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
      "kind": "quantity",
      "name": "datetime"
@@ -113,17 +118,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "description"
+     "name": "lab_id"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "lab_id"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
-     "kind": "quantity",
-     "name": "location"
+     "name": "description"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
@@ -131,9 +131,9 @@
      "name": "method"
     },
     {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
      "kind": "quantity",
-     "name": "name"
+     "name": "location"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
@@ -248,17 +248,17 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
      "kind": "quantity",
-     "name": "comment"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
-     "kind": "quantity",
      "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
      "kind": "quantity",
      "name": "start_time"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
+     "kind": "quantity",
+     "name": "comment"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
@@ -345,12 +345,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "datetime"
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "description"
+     "name": "datetime"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
@@ -360,7 +360,7 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "name"
+     "name": "description"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
@@ -430,17 +430,17 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Component",
      "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Component",
+     "kind": "quantity",
      "name": "mass"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Component",
      "kind": "quantity",
      "name": "mass_fraction"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Component",
-     "kind": "quantity",
-     "name": "name"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v1.Component",
@@ -478,14 +478,19 @@
    "description": "A base section for a material systems composed of components. Each component of the composite system is of a (sub)type of `System`.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem",
-     "kind": "subsection",
-     "name": "components"
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
      "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
@@ -498,14 +503,9 @@
      "name": "elemental_composition"
     },
     {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
-     "kind": "quantity",
-     "name": "lab_id"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
-     "kind": "quantity",
-     "name": "name"
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem",
+     "kind": "subsection",
+     "name": "components"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem",
@@ -544,11 +544,6 @@
    "description": "A section used for referencing a CompositeSystem.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
-     "kind": "quantity",
-     "name": "lab_id"
-    },
-    {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
      "kind": "quantity",
      "name": "name"
@@ -557,6 +552,11 @@
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference",
      "kind": "quantity",
      "name": "reference"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+     "kind": "quantity",
+     "name": "lab_id"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference",
@@ -626,12 +626,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition",
      "kind": "quantity",
-     "name": "atomic_fraction"
+     "name": "element"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition",
      "kind": "quantity",
-     "name": "element"
+     "name": "atomic_fraction"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition",
@@ -662,12 +662,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "datetime"
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "description"
+     "name": "datetime"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
@@ -677,7 +677,7 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "name"
+     "name": "description"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v1.Entity",
@@ -730,11 +730,6 @@
    "description": "A section used for referencing an Entity.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
-     "kind": "quantity",
-     "name": "lab_id"
-    },
-    {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
      "kind": "quantity",
      "name": "name"
@@ -743,6 +738,11 @@
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
      "kind": "quantity",
      "name": "reference"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+     "kind": "quantity",
+     "name": "lab_id"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
@@ -768,12 +768,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "datetime"
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "description"
+     "name": "datetime"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
@@ -783,7 +783,7 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "name"
+     "name": "description"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v1.Instrument",
@@ -822,11 +822,6 @@
    "description": "A section used for referencing an Instrument.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
-     "kind": "quantity",
-     "name": "lab_id"
-    },
-    {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
      "kind": "quantity",
      "name": "name"
@@ -835,6 +830,11 @@
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference",
      "kind": "quantity",
      "name": "reference"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+     "kind": "quantity",
+     "name": "lab_id"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference",
@@ -898,6 +898,11 @@
    "description": "A planned process with the objective to produce information about the material entity that is the evaluant, by physically examining it or its proxies. [ obi : pppb ]",
    "effective_attributes": [
     {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
      "kind": "quantity",
      "name": "datetime"
@@ -905,17 +910,17 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "description"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
-     "kind": "subsection",
-     "name": "instruments"
+     "name": "lab_id"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "lab_id"
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "method"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
@@ -924,18 +929,8 @@
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
-     "kind": "quantity",
-     "name": "method"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
      "kind": "subsection",
-     "name": "results"
+     "name": "steps"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
@@ -943,9 +938,14 @@
      "name": "samples"
     },
     {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
      "kind": "subsection",
-     "name": "steps"
+     "name": "instruments"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+     "kind": "subsection",
+     "name": "results"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
@@ -1049,6 +1049,11 @@
    "description": "A planned process which results in physical changes in a specified input material. [ obi : prs obi : mc obi : fg obi : jf obi : bp ]\n\nSynonyms:\n - preparative method\n - sample preparation\n - sample preparative method\n - material transformations",
    "effective_attributes": [
     {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
      "kind": "quantity",
      "name": "datetime"
@@ -1056,7 +1061,22 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
      "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "method"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "location"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Process",
@@ -1066,37 +1086,17 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Process",
      "kind": "subsection",
+     "name": "steps"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Process",
+     "kind": "subsection",
      "name": "instruments"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
-     "kind": "quantity",
-     "name": "lab_id"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
-     "kind": "quantity",
-     "name": "location"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
-     "kind": "quantity",
-     "name": "method"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
-     "kind": "quantity",
-     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Process",
      "kind": "subsection",
      "name": "samples"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Process",
-     "kind": "subsection",
-     "name": "steps"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v1.Process",
@@ -1138,22 +1138,22 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
      "kind": "quantity",
-     "name": "comment"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ProcessStep",
-     "kind": "quantity",
-     "name": "duration"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
-     "kind": "quantity",
      "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
      "kind": "quantity",
      "name": "start_time"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
+     "kind": "quantity",
+     "name": "comment"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ProcessStep",
+     "kind": "quantity",
+     "name": "duration"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v1.ProcessStep",
@@ -1254,17 +1254,7 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
      "kind": "quantity",
-     "name": "datetime"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
-     "kind": "quantity",
      "name": "institute"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
-     "kind": "quantity",
-     "name": "lab_id"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
@@ -1274,7 +1264,17 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
      "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
+     "kind": "quantity",
      "name": "short_name"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
+     "kind": "quantity",
+     "name": "lab_id"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
@@ -1374,7 +1374,17 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
      "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
@@ -1385,16 +1395,6 @@
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.System",
      "kind": "subsection",
      "name": "elemental_composition"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
-     "kind": "quantity",
-     "name": "lab_id"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
-     "kind": "quantity",
-     "name": "name"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v1.System",
@@ -1460,12 +1460,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.plot.Figure",
      "kind": "quantity",
-     "name": "index"
+     "name": "label"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.plot.Figure",
      "kind": "quantity",
-     "name": "label"
+     "name": "index"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.plot.Figure",
@@ -1541,9 +1541,9 @@
    ],
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad.datamodel.metainfo.plot.PlotlyFigure",
+     "declaring_class_id": "nomad.datamodel.metainfo.plot.Figure",
      "kind": "quantity",
-     "name": "figure"
+     "name": "label"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.plot.Figure",
@@ -1553,12 +1553,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.plot.Figure",
      "kind": "quantity",
-     "name": "label"
+     "name": "open"
     },
     {
-     "declaring_class_id": "nomad.datamodel.metainfo.plot.Figure",
+     "declaring_class_id": "nomad.datamodel.metainfo.plot.PlotlyFigure",
      "kind": "quantity",
-     "name": "open"
+     "name": "figure"
     }
    ],
    "id": "nomad.datamodel.metainfo.plot.PlotlyFigure",
@@ -1605,11 +1605,6 @@
    "description": "A section used for referencing an Activity.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_measurements.general.ActivityReference",
-     "kind": "quantity",
-     "name": "lab_id"
-    },
-    {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
      "kind": "quantity",
      "name": "name"
@@ -1618,6 +1613,11 @@
      "declaring_class_id": "nomad_measurements.general.ActivityReference",
      "kind": "quantity",
      "name": "reference"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.general.ActivityReference",
+     "kind": "quantity",
+     "name": "lab_id"
     }
    ],
    "id": "nomad_measurements.general.ActivityReference",
@@ -1655,6 +1655,11 @@
    "description": "A section used for a measurement performed in-situ during a process.",
    "effective_attributes": [
     {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
      "kind": "quantity",
      "name": "datetime"
@@ -1662,17 +1667,17 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "description"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
-     "kind": "subsection",
-     "name": "instruments"
+     "name": "lab_id"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "lab_id"
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "method"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
@@ -1681,23 +1686,8 @@
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
-     "kind": "quantity",
-     "name": "method"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.general.InSituMeasurement",
      "kind": "subsection",
-     "name": "process"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
-     "kind": "subsection",
-     "name": "results"
+     "name": "steps"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
@@ -1705,9 +1695,19 @@
      "name": "samples"
     },
     {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
      "kind": "subsection",
-     "name": "steps"
+     "name": "instruments"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+     "kind": "subsection",
+     "name": "results"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.general.InSituMeasurement",
+     "kind": "subsection",
+     "name": "process"
     }
    ],
    "id": "nomad_measurements.general.InSituMeasurement",
@@ -1746,11 +1746,6 @@
    "description": "A section used for referencing a Process.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_measurements.general.ActivityReference",
-     "kind": "quantity",
-     "name": "lab_id"
-    },
-    {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
      "kind": "quantity",
      "name": "name"
@@ -1759,6 +1754,11 @@
      "declaring_class_id": "nomad_measurements.general.ProcessReference",
      "kind": "quantity",
      "name": "reference"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.general.ActivityReference",
+     "kind": "quantity",
+     "name": "lab_id"
     }
    ],
    "id": "nomad_measurements.general.ProcessReference",
@@ -1813,12 +1813,12 @@
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.Accessory",
      "kind": "quantity",
-     "name": "description"
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.Accessory",
      "kind": "quantity",
-     "name": "name"
+     "name": "description"
     }
    ],
    "id": "nomad_measurements.transmission.schema.Accessory",
@@ -1860,17 +1860,17 @@
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.Accessory",
      "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Accessory",
+     "kind": "quantity",
      "name": "description"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.Aperture",
      "kind": "quantity",
      "name": "diameter"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.Accessory",
-     "kind": "quantity",
-     "name": "name"
     }
    ],
    "id": "nomad_measurements.transmission.schema.Aperture",
@@ -1927,12 +1927,12 @@
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.AttenuatorSettings",
      "kind": "quantity",
-     "name": "reference_beam_attenuation"
+     "name": "sample_beam_attenuation"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.AttenuatorSettings",
      "kind": "quantity",
-     "name": "sample_beam_attenuation"
+     "name": "reference_beam_attenuation"
     }
    ],
    "id": "nomad_measurements.transmission.schema.AttenuatorSettings",
@@ -1971,21 +1971,6 @@
    "description": "Reference to the sample used in the transmission measurement. Additionally, it includes specific properties for crystallographic samples.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_measurements.transmission.schema.CrystallographicTransmissionSampleReference",
-     "kind": "quantity",
-     "name": "crystal_orientation"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.TransmissionSampleReference",
-     "kind": "quantity",
-     "name": "geometric_path_length"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
-     "kind": "quantity",
-     "name": "lab_id"
-    },
-    {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
      "kind": "quantity",
      "name": "name"
@@ -1994,6 +1979,21 @@
      "declaring_class_id": "nomad_measurements.transmission.schema.TransmissionSampleReference",
      "kind": "quantity",
      "name": "reference"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.TransmissionSampleReference",
+     "kind": "quantity",
+     "name": "geometric_path_length"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.CrystallographicTransmissionSampleReference",
+     "kind": "quantity",
+     "name": "crystal_orientation"
     }
    ],
    "id": "nomad_measurements.transmission.schema.CrystallographicTransmissionSampleReference",
@@ -2034,12 +2034,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "datetime"
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "description"
+     "name": "datetime"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
@@ -2049,7 +2049,7 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "name"
+     "name": "description"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.Detector",
@@ -2094,11 +2094,6 @@
    "description": "Gain factor of the detector used in transmission spectrophotometry over a range of wavelength.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_measurements.transmission.schema.DetectorGain",
-     "kind": "quantity",
-     "name": "gain"
-    },
-    {
      "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
      "kind": "quantity",
      "name": "name"
@@ -2112,6 +2107,11 @@
      "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
      "kind": "quantity",
      "name": "wavelength_upper_limit"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.DetectorGain",
+     "kind": "quantity",
+     "name": "gain"
     }
    ],
    "id": "nomad_measurements.transmission.schema.DetectorGain",
@@ -2151,11 +2151,6 @@
    "description": "Integration time of the detector used in transmission spectrophotometry over a wavelength range.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_measurements.transmission.schema.DetectorIntegrationTime",
-     "kind": "quantity",
-     "name": "integration_time"
-    },
-    {
      "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
      "kind": "quantity",
      "name": "name"
@@ -2169,6 +2164,11 @@
      "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
      "kind": "quantity",
      "name": "wavelength_upper_limit"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.DetectorIntegrationTime",
+     "kind": "quantity",
+     "name": "integration_time"
     }
    ],
    "id": "nomad_measurements.transmission.schema.DetectorIntegrationTime",
@@ -2207,11 +2207,6 @@
    "description": "Settings of the detector used in transmission spectrophotometry instruments.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_measurements.transmission.schema.DetectorSettings",
-     "kind": "quantity",
-     "name": "detector"
-    },
-    {
      "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
      "kind": "quantity",
      "name": "name"
@@ -2225,6 +2220,11 @@
      "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
      "kind": "quantity",
      "name": "wavelength_upper_limit"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.DetectorSettings",
+     "kind": "quantity",
+     "name": "detector"
     }
    ],
    "id": "nomad_measurements.transmission.schema.DetectorSettings",
@@ -2277,9 +2277,9 @@
    "description": "Entry section for UVVisNirTransmission. Handles the population of the schema and plotting. Data is added either through manual input in the GUI or by parsing\nthe measurement files coming from the instrument.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_measurements.transmission.schema.ELNUVVisNirTransmission",
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "data_file"
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
@@ -2289,32 +2289,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "description"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.plot.PlotSection",
-     "kind": "subsection",
-     "name": "figures"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
-     "kind": "subsection",
-     "name": "instruments"
+     "name": "lab_id"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "lab_id"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
-     "kind": "quantity",
-     "name": "location"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.ELNUVVisNirTransmission",
-     "kind": "subsection",
-     "name": "measurement_identifiers"
+     "name": "description"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
@@ -2322,19 +2302,19 @@
      "name": "method"
     },
     {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
      "kind": "quantity",
-     "name": "name"
+     "name": "location"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
-     "kind": "subsection",
-     "name": "results"
+     "kind": "quantity",
+     "name": "user"
     },
     {
-     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
-     "kind": "subsection",
-     "name": "samples"
+     "declaring_class_id": "nomad_measurements.transmission.schema.ELNUVVisNirTransmission",
+     "kind": "quantity",
+     "name": "data_file"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
@@ -2344,12 +2324,32 @@
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
      "kind": "subsection",
-     "name": "transmission_settings"
+     "name": "samples"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+     "kind": "subsection",
+     "name": "instruments"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
-     "kind": "quantity",
-     "name": "user"
+     "kind": "subsection",
+     "name": "results"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
+     "kind": "subsection",
+     "name": "transmission_settings"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.plot.PlotSection",
+     "kind": "subsection",
+     "name": "figures"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.ELNUVVisNirTransmission",
+     "kind": "subsection",
+     "name": "measurement_identifiers"
     }
    ],
    "id": "nomad_measurements.transmission.schema.ELNUVVisNirTransmission",
@@ -2411,7 +2411,17 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
      "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
@@ -2422,16 +2432,6 @@
      "declaring_class_id": "nomad_measurements.transmission.schema.GratingMonochromator",
      "kind": "quantity",
      "name": "groove_density"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
-     "kind": "quantity",
-     "name": "lab_id"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
-     "kind": "quantity",
-     "name": "name"
     }
    ],
    "id": "nomad_measurements.transmission.schema.GratingMonochromator",
@@ -2472,12 +2472,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "datetime"
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "description"
+     "name": "datetime"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
@@ -2487,7 +2487,7 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "name"
+     "name": "description"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.LightSource",
@@ -2536,11 +2536,6 @@
    "description": "Settings of the lamp used in transmission spectrophotometry instruments.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_measurements.transmission.schema.LampSettings",
-     "kind": "quantity",
-     "name": "lamp"
-    },
-    {
      "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
      "kind": "quantity",
      "name": "name"
@@ -2554,6 +2549,11 @@
      "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
      "kind": "quantity",
      "name": "wavelength_upper_limit"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.LampSettings",
+     "kind": "quantity",
+     "name": "lamp"
     }
    ],
    "id": "nomad_measurements.transmission.schema.LampSettings",
@@ -2595,12 +2595,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "datetime"
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "description"
+     "name": "datetime"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
@@ -2610,7 +2610,7 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "name"
+     "name": "description"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.LightSource",
@@ -2641,12 +2641,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "datetime"
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "description"
+     "name": "datetime"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
@@ -2656,7 +2656,7 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "name"
+     "name": "description"
     }
    ],
    "id": "nomad_measurements.transmission.schema.Monochromator",
@@ -2695,11 +2695,6 @@
    "description": "Monochromator used over a wavelength range.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_measurements.transmission.schema.MonochromatorSettings",
-     "kind": "quantity",
-     "name": "monochromator"
-    },
-    {
      "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
      "kind": "quantity",
      "name": "name"
@@ -2713,6 +2708,11 @@
      "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
      "kind": "quantity",
      "name": "wavelength_upper_limit"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.MonochromatorSettings",
+     "kind": "quantity",
+     "name": "monochromator"
     }
    ],
    "id": "nomad_measurements.transmission.schema.MonochromatorSettings",
@@ -2771,16 +2771,6 @@
      "name": "name"
     },
     {
-     "declaring_class_id": "nomad_measurements.transmission.schema.MonochromatorSlitWidth",
-     "kind": "quantity",
-     "name": "slit_width"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.MonochromatorSlitWidth",
-     "kind": "quantity",
-     "name": "slit_width_servo"
-    },
-    {
      "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
      "kind": "quantity",
      "name": "wavelength_lower_limit"
@@ -2789,6 +2779,16 @@
      "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
      "kind": "quantity",
      "name": "wavelength_upper_limit"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.MonochromatorSlitWidth",
+     "kind": "quantity",
+     "name": "slit_width"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.MonochromatorSlitWidth",
+     "kind": "quantity",
+     "name": "slit_width_servo"
     }
    ],
    "id": "nomad_measurements.transmission.schema.MonochromatorSlitWidth",
@@ -2827,17 +2827,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "datetime"
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "description"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
-     "kind": "subsection",
-     "name": "detectors"
+     "name": "datetime"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
@@ -2845,19 +2840,9 @@
      "name": "lab_id"
     },
     {
-     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
-     "kind": "subsection",
-     "name": "light_sources"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.PerkinElmersLambdaSpectrophotometer",
-     "kind": "subsection",
-     "name": "monochromators"
-    },
-    {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "name"
+     "name": "description"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
@@ -2868,6 +2853,21 @@
      "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
      "kind": "quantity",
      "name": "software_version"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
+     "kind": "subsection",
+     "name": "detectors"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
+     "kind": "subsection",
+     "name": "light_sources"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.PerkinElmersLambdaSpectrophotometer",
+     "kind": "subsection",
+     "name": "monochromators"
     }
    ],
    "id": "nomad_measurements.transmission.schema.PerkinElmersLambdaSpectrophotometer",
@@ -2924,17 +2924,17 @@
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.Accessory",
      "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Accessory",
+     "kind": "quantity",
      "name": "description"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.PolDepol",
      "kind": "quantity",
      "name": "mode"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.Accessory",
-     "kind": "quantity",
-     "name": "name"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.PolDepol",
@@ -3152,17 +3152,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "datetime"
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "description"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
-     "kind": "subsection",
-     "name": "detectors"
+     "name": "datetime"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
@@ -3170,19 +3165,9 @@
      "name": "lab_id"
     },
     {
-     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
-     "kind": "subsection",
-     "name": "light_sources"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
-     "kind": "subsection",
-     "name": "monochromators"
-    },
-    {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "name"
+     "name": "description"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
@@ -3193,6 +3178,21 @@
      "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
      "kind": "quantity",
      "name": "software_version"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
+     "kind": "subsection",
+     "name": "detectors"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
+     "kind": "subsection",
+     "name": "light_sources"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
+     "kind": "subsection",
+     "name": "monochromators"
     }
    ],
    "id": "nomad_measurements.transmission.schema.Spectrophotometer",
@@ -3246,16 +3246,6 @@
    "description": "Reference to the sample used in the transmission measurement. Additionally, it contains specific sample properties important for transmission measurements.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_measurements.transmission.schema.TransmissionSampleReference",
-     "kind": "quantity",
-     "name": "geometric_path_length"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
-     "kind": "quantity",
-     "name": "lab_id"
-    },
-    {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
      "kind": "quantity",
      "name": "name"
@@ -3264,6 +3254,16 @@
      "declaring_class_id": "nomad_measurements.transmission.schema.TransmissionSampleReference",
      "kind": "quantity",
      "name": "reference"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.TransmissionSampleReference",
+     "kind": "quantity",
+     "name": "geometric_path_length"
     }
    ],
    "id": "nomad_measurements.transmission.schema.TransmissionSampleReference",
@@ -3354,6 +3354,11 @@
    "description": "Section for Transmission Spectroscopy measurement in UV, visible, and near IR ranges of wavelength.",
    "effective_attributes": [
     {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
      "kind": "quantity",
      "name": "datetime"
@@ -3361,17 +3366,17 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "description"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
-     "kind": "subsection",
-     "name": "instruments"
+     "name": "lab_id"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
      "kind": "quantity",
-     "name": "lab_id"
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
+     "kind": "quantity",
+     "name": "method"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
@@ -3381,22 +3386,7 @@
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
      "kind": "quantity",
-     "name": "method"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
-     "kind": "subsection",
-     "name": "results"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
-     "kind": "subsection",
-     "name": "samples"
+     "name": "user"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
@@ -3406,12 +3396,22 @@
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
      "kind": "subsection",
-     "name": "transmission_settings"
+     "name": "samples"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+     "kind": "subsection",
+     "name": "instruments"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
-     "kind": "quantity",
-     "name": "user"
+     "kind": "subsection",
+     "name": "results"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
+     "kind": "subsection",
+     "name": "transmission_settings"
     }
    ],
    "id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
@@ -3503,16 +3503,6 @@
    "description": "Section for the results of the Transmission Spectroscopy measurement in UV, visible, and near IR ranges of wavelength.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionResult",
-     "kind": "quantity",
-     "name": "absorbance"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionResult",
-     "kind": "quantity",
-     "name": "array_index"
-    },
-    {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityResult",
      "kind": "quantity",
      "name": "name"
@@ -3520,7 +3510,17 @@
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionResult",
      "kind": "quantity",
+     "name": "array_index"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionResult",
+     "kind": "quantity",
      "name": "transmittance"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionResult",
+     "kind": "quantity",
+     "name": "absorbance"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionResult",
@@ -3710,13 +3710,13 @@
    "effective_attributes": [
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
-     "kind": "subsection",
-     "name": "accessories"
+     "kind": "quantity",
+     "name": "sample_beam_position"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
-     "kind": "subsection",
-     "name": "attenuator"
+     "kind": "quantity",
+     "name": "common_beam_mask"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
@@ -3726,7 +3726,32 @@
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
      "kind": "quantity",
-     "name": "common_beam_mask"
+     "name": "detector_module"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "subsection",
+     "name": "light_sources"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "subsection",
+     "name": "attenuator"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "subsection",
+     "name": "monochromators"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "subsection",
+     "name": "monochromator_slit_width"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "subsection",
+     "name": "detectors"
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
@@ -3740,33 +3765,8 @@
     },
     {
      "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
-     "kind": "quantity",
-     "name": "detector_module"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
      "kind": "subsection",
-     "name": "detectors"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
-     "kind": "subsection",
-     "name": "light_sources"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
-     "kind": "subsection",
-     "name": "monochromator_slit_width"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
-     "kind": "subsection",
-     "name": "monochromators"
-    },
-    {
-     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
-     "kind": "quantity",
-     "name": "sample_beam_position"
+     "name": "accessories"
     }
    ],
    "id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
@@ -3935,8 +3935,8 @@
     "nomad.datamodel.metainfo.basesections.v1.Process",
     "nomad.datamodel.metainfo.basesections.v1.SectionReference",
     "nomad_measurements.general.ActivityReference",
-    "nomad_measurements.general.InSituMeasurement",
-    "nomad_measurements.general.ProcessReference"
+    "nomad_measurements.general.ProcessReference",
+    "nomad_measurements.general.InSituMeasurement"
    ],
    "name": "nomad_measurements.general"
   },
@@ -3952,33 +3952,33 @@
     "nomad.datamodel.metainfo.basesections.v1.Measurement",
     "nomad.datamodel.metainfo.basesections.v1.MeasurementResult",
     "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
-    "nomad.datamodel.metainfo.plot.PlotSection",
     "nomad.datamodel.metainfo.plot.PlotlyFigure",
-    "nomad_measurements.transmission.schema.Accessory",
-    "nomad_measurements.transmission.schema.Aperture",
-    "nomad_measurements.transmission.schema.AttenuatorSettings",
-    "nomad_measurements.transmission.schema.CrystallographicTransmissionSampleReference",
+    "nomad.datamodel.metainfo.plot.PlotSection",
     "nomad_measurements.transmission.schema.Detector",
+    "nomad_measurements.transmission.schema.LightSource",
+    "nomad_measurements.transmission.schema.Lamp",
+    "nomad_measurements.transmission.schema.Monochromator",
+    "nomad_measurements.transmission.schema.GratingMonochromator",
+    "nomad_measurements.transmission.schema.Spectrophotometer",
+    "nomad_measurements.transmission.schema.PerkinElmersLambdaSpectrophotometer",
+    "nomad_measurements.transmission.schema.TransmissionSampleReference",
+    "nomad_measurements.transmission.schema.CrystallographicTransmissionSampleReference",
+    "nomad_measurements.transmission.schema.Accessory",
+    "nomad_measurements.transmission.schema.PolDepol",
+    "nomad_measurements.transmission.schema.Aperture",
+    "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+    "nomad_measurements.transmission.schema.MonochromatorSlitWidth",
+    "nomad_measurements.transmission.schema.MonochromatorSettings",
     "nomad_measurements.transmission.schema.DetectorGain",
     "nomad_measurements.transmission.schema.DetectorIntegrationTime",
     "nomad_measurements.transmission.schema.DetectorSettings",
-    "nomad_measurements.transmission.schema.ELNUVVisNirTransmission",
-    "nomad_measurements.transmission.schema.GratingMonochromator",
-    "nomad_measurements.transmission.schema.Lamp",
     "nomad_measurements.transmission.schema.LampSettings",
-    "nomad_measurements.transmission.schema.LightSource",
-    "nomad_measurements.transmission.schema.Monochromator",
-    "nomad_measurements.transmission.schema.MonochromatorSettings",
-    "nomad_measurements.transmission.schema.MonochromatorSlitWidth",
-    "nomad_measurements.transmission.schema.PerkinElmersLambdaSpectrophotometer",
-    "nomad_measurements.transmission.schema.PolDepol",
-    "nomad_measurements.transmission.schema.RawFileTransmissionData",
-    "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
-    "nomad_measurements.transmission.schema.Spectrophotometer",
-    "nomad_measurements.transmission.schema.TransmissionSampleReference",
-    "nomad_measurements.transmission.schema.UVVisNirTransmission",
+    "nomad_measurements.transmission.schema.AttenuatorSettings",
     "nomad_measurements.transmission.schema.UVVisNirTransmissionResult",
-    "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings"
+    "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+    "nomad_measurements.transmission.schema.UVVisNirTransmission",
+    "nomad_measurements.transmission.schema.ELNUVVisNirTransmission",
+    "nomad_measurements.transmission.schema.RawFileTransmissionData"
    ],
    "name": "nomad_measurements.transmission.schema"
   }

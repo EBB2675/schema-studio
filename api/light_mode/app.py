@@ -24,13 +24,8 @@ from ..custom_graph_edits import (
     attach_custom_class as _attach_custom_class_impl,
     attach_custom_quantity as _attach_custom_quantity_impl,
 )
-from ..sources.legacy import (
-    build_graph,
-    get_usage_for_section,
-    list_schema_modules,
-    list_sections,
-    root_namespace as _root_namespace,
-)
+from ..sources.extraction import build_graph, get_usage_for_section, list_schema_modules, list_sections
+from ..sources.legacy import root_namespace as _root_namespace
 from ..sources.linkml_routes import linkml_download, linkml_report
 from ..sources.snapshots import supports_linkml
 from .schema_source import (
@@ -868,7 +863,7 @@ async def overview(branch: str | None = Query(None), base: str | None = Query(No
 @app.get("/usage")
 async def usage(section_id: str = Query(..., description="Fully qualified section class name")):
     ws = _workspace()
-    entries = await run_in_threadpool(get_usage_for_section, section_id)
+    entries = await run_in_threadpool(get_usage_for_section, section_id, ws.package)
     payload = [
         {
             "kind": e.kind,

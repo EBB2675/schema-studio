@@ -204,7 +204,7 @@ async def test_usage_endpoint_returns_under_the_hood_entries(
     monkeypatch.setattr(
         light_mode_module,
         "get_usage_for_section",
-        lambda _section_id: [
+        lambda _section_id, _package=None: [
             SimpleNamespace(
                 kind="normalize_method",
                 qualname="pkg.section.Section.normalize",
@@ -596,7 +596,7 @@ async def test_usage_reports_unavailable_schema(
     light_mode_module,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    def unavailable(_section_id):
+    def unavailable(_section_id, _package=None):
         raise light_mode_module.SchemaUnavailable("schema environment is not set up")
 
     monkeypatch.setattr(light_mode_module, "get_usage_for_section", unavailable)
