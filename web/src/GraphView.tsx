@@ -39,6 +39,8 @@ type Props = {
   onReady?: (handle: GraphExportHandle | null) => void;
   showQuantityMetadata?: boolean;
   showInheritance?: boolean;
+  // Off for profiles whose source has no methods to show (capability "methods").
+  showMethods?: boolean;
   theme?: "dark" | "light";
   umlState?: UmlGraphState | null;
   baseNamespaces?: string[];
@@ -136,6 +138,7 @@ export default function GraphView({
   onReady,
   showQuantityMetadata = true,
   showInheritance = true,
+  showMethods = true,
   theme = "dark",
   umlState,
   baseNamespaces = [],
@@ -223,6 +226,7 @@ export default function GraphView({
       inheritedFromId: q.inheritedFromId ?? null,
       inheritedFromName: q.inheritedFromName ?? null,
       sourceId: q.sourceId ?? null,
+      details: q.details ?? null,
     }),
     []
   );
@@ -240,6 +244,7 @@ export default function GraphView({
         path: cls.path || undefined,
         line: typeof cls.line === "number" ? cls.line : undefined,
         quantities: payloadQuantities,
+        details: cls.details ?? null,
       });
       setActiveQuantityTarget(null);
     },
@@ -415,7 +420,7 @@ export default function GraphView({
       if (n.kind === "section") {
         sections.set(n.id, n);
         attrs.set(n.id, attrs.get(n.id) ?? []);
-        methods.set(n.id, (n.methods ?? []) as string[]);
+        methods.set(n.id, showMethods ? ((n.methods ?? []) as string[]) : []);
         qByOwner.set(n.id, qByOwner.get(n.id) ?? []);
       }
     }
@@ -448,6 +453,7 @@ export default function GraphView({
         path: q.path ?? undefined,
         line: typeof q.line === "number" ? q.line : undefined,
         owner: q.owner,
+        details: q.details ?? null,
         diff: diffInfo
           ? {
               state: diffInfo.state,
@@ -478,6 +484,7 @@ export default function GraphView({
             doc: cls.doc ?? source?.doc ?? undefined,
             path: cls.path ?? source?.path ?? undefined,
             line: typeof cls.line === "number" ? cls.line : source?.line,
+            details: cls.details ?? source?.details ?? null,
           } as RawNode)
         );
         methods.set(cls.id, sourceMethods.get(cls.id) ?? []);
@@ -544,7 +551,7 @@ export default function GraphView({
     });
 
     return { sectionsMap: sections, attrsMap: attrs, methodsMap: methods, umlEdges, quantitiesByOwner: qByOwner };
-  }, [graphNodes, resolvedEdges, quantityDiffs, diff, showInheritance, classCards, toQtyMeta, umlState]);
+  }, [graphNodes, resolvedEdges, quantityDiffs, diff, showInheritance, classCards, toQtyMeta, umlState, showMethods]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -748,6 +755,7 @@ export default function GraphView({
         inheritedFromId: q.inheritedFromId ?? null,
         inheritedFromName: q.inheritedFromName ?? null,
         sourceId: q.sourceId ?? null,
+        details: q.details ?? null,
       }));
 
       publishClassSelection({
@@ -758,6 +766,7 @@ export default function GraphView({
         path: d.path || "",
         line: typeof d.line === "number" ? d.line : null,
         quantities,
+        details: sectionsMap.get(d.id)?.details ?? null,
       });
 
       cy.animate(

@@ -7,11 +7,18 @@ browser. The graph follows the conventions of `extractor/graph_builder.py`:
   its label the class title, its doc the class description;
 - each attribute a class has in the current schema, declared or inherited
   (the source's attribute list only sets their order), with `source_kind`
-  `quantity` is a `quantity` node owned by that class (id `<class>.<name>`)
-  with a `hasQuantity` edge; with `source_kind` `subsection` it is a
-  `hasSubSection` edge to its range;
+  `quantity` (NOMAD) or `property` (bam-masterdata) is a `quantity` node owned
+  by that class (id `<class>.<name>`) with a `hasQuantity` edge; with
+  `source_kind` `subsection` it is a `hasSubSection` edge to its range;
+- a bam-masterdata vocabulary is a class linked to its enum
+  (`source_vocabulary_enum`); each of its terms, its bases' terms included, is
+  a `quantity` node with dtype `VOCAB_TERM`, named after the term's Python
+  attribute (`source_python_name`);
 - `dtype`, `card` and `shape` are the extractor's display annotations, not
   values derived from LinkML ranges; `unit` is the source unit;
+- bam-masterdata nodes also carry the openBIS facts the doc panel shows, when
+  the source states them: `code`, `title` (property or term label), `title_de`,
+  `doc_de` (the German half of the description), `mandatory`, `section`, `iri`;
 - each class gets an `inherits` edge to every ancestor (from `is_a` and
   `mixins`, in Python's method resolution order), not only to its direct bases;
 - the query flags of the graph endpoints are applied here, with the same
@@ -29,6 +36,9 @@ from typing import Any
 
 # Framework base classes (NOMAD metainfo, openBIS entity types) are not part of a schema.
 EXCLUDE_PREFIXES = ("nomad.metainfo.", "bam_masterdata.metadata.")
+# Attribute kinds shown as quantity nodes: NOMAD quantities and bam-masterdata properties.
+QUANTITY_KINDS = ("quantity", "property")
+VOCABULARY_TERM_DTYPE = "VOCAB_TERM"
 MAX_NODES = 8000
 MAX_DEPTH = 20
 
@@ -116,6 +126,52 @@ def effective_attributes(
     natural = {key: index for index, key in enumerate(collected)}
     ordered = sorted(natural, key=lambda key: (0, rank[key]) if key in rank else (1, natural[key]))
     return [collected[key] for key in ordered]
+
+
+def vocabulary_terms(
+    name: str, schema: Mapping[str, Any], memo: dict[str, list[str]],
+) -> list[tuple[str, str, Mapping[str, Any]]]:
+    """(Python name, term code, permissible value) of every term of a vocabulary class.
+
+    Terms of base vocabularies come first, as the graph builder collects them;
+    a term a class redeclares under the same Python name replaces the base's.
+    Empty for a class that is not a vocabulary.
+    """
+    classes = schema.get("classes") or {}
+    enums = schema.get("enums") or {}
+    collected: dict[str, tuple[str, Mapping[str, Any]]] = {}
+    for ancestor in reversed(_mro(name, classes, memo)):
+        enum = enums.get(annotation(classes[ancestor], "source_vocabulary_enum") or "") or {}
+        for code, value in (enum.get("permissible_values") or {}).items():
+            value = value or {}
+            collected[annotation(value, "source_python_name") or code] = (code, value)
+    return [(python_name, code, value) for python_name, (code, value) in collected.items()]
+
+
+def _present(**fields: Any) -> dict[str, Any]:
+    return {key: value for key, value in fields.items() if value is not None}
+
+
+def _class_details(cls: Mapping[str, Any]) -> dict[str, Any]:
+    """openBIS facts of a bam-masterdata class (none for NOMAD classes)."""
+    if annotation(cls, "source_entity_code") is None:
+        return {}
+    source = _json_annotation(cls, "source_annotations") or {}
+    return _present(code=annotation(cls, "source_entity_code"), iri=source.get("iri"),
+                    doc_de=annotation(cls, "description_de"))
+
+
+def _property_details(slot: Mapping[str, Any]) -> dict[str, Any]:
+    """openBIS facts of a bam-masterdata property."""
+    source = _json_annotation(slot, "source_annotations") or {}
+    return _present(code=annotation(slot, "source_property_code"), title=slot.get("title"),
+                    title_de=annotation(slot, "title_de"), doc_de=annotation(slot, "description_de"),
+                    mandatory=bool(slot.get("required")), section=source.get("section"), iri=source.get("iri"))
+
+
+def _term_details(code: str, value: Mapping[str, Any]) -> dict[str, Any]:
+    return _present(code=code, title=value.get("title"), title_de=annotation(value, "title_de"),
+                    doc_de=annotation(value, "description_de"))
 
 
 def _methods(record: Mapping[str, Any] | None, base_namespace: str) -> list[str] | None:
@@ -222,7 +278,7 @@ def build_graph(
         nodes[name] = {
             "id": name, "kind": "section", "label": _title(name, cls),
             "doc": cls.get("description"), "module": module, "dtype": None, "shape": None, "card": None,
-            "owner": None, "methods": _methods(records.get(name), base_namespace),
+            "owner": None, "methods": _methods(records.get(name), base_namespace), **_class_details(cls),
         }
         if len(nodes) > max_nodes:
             return
@@ -230,7 +286,8 @@ def build_graph(
         members = effective_attributes(name, classes, memo)
         if include_quantities:
             for _, slot in members:
-                if annotation(slot, "source_kind") != "quantity":
+                kind = annotation(slot, "source_kind")
+                if kind not in QUANTITY_KINDS:
                     continue
                 quantity_id = f"{name}.{slot['name']}"
                 card = annotation(slot, "display_card")
@@ -240,8 +297,21 @@ def build_graph(
                         "doc": slot.get("description"), "module": module,
                         "dtype": annotation(slot, "display_dtype"), "shape": annotation(slot, "display_shape"),
                         "card": card, "owner": name, "methods": None, "unit": annotation(slot, "source_unit"),
+                        **(_property_details(slot) if kind == "property" else {}),
                     }
                 add_edge(name, quantity_id, "hasQuantity", card)
+                if len(nodes) > max_nodes:
+                    return
+            for python_name, code, value in vocabulary_terms(name, schema, memo):
+                term_id = f"{name}.{python_name}"
+                if term_id not in nodes:
+                    nodes[term_id] = {
+                        "id": term_id, "kind": "quantity", "label": python_name,
+                        "doc": value.get("description"), "module": module,
+                        "dtype": VOCABULARY_TERM_DTYPE, "shape": None, "card": None, "owner": name,
+                        "methods": None, "unit": None, **_term_details(code, value),
+                    }
+                add_edge(name, term_id, "hasQuantity", None)
                 if len(nodes) > max_nodes:
                     return
 

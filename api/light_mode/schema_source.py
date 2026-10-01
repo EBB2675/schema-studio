@@ -25,6 +25,7 @@ from extractor.runner import EnvironmentMissing, ExtractorEnvironment, Extractor
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LEGACY_SCRIPT = REPO_ROOT / "extractor" / "scripts" / "legacy.py"
 NOMAD_SCRIPT = REPO_ROOT / "extractor" / "scripts" / "nomad.py"
+BAM_SCRIPT = REPO_ROOT / "extractor" / "scripts" / "bam.py"
 INFO_TIMEOUT_SECONDS = 60
 UPDATE_TIMEOUT_SECONDS = int(os.getenv("SCHEMA_STUDIO_UPDATE_TIMEOUT_SECONDS", "1800"))
 
@@ -50,6 +51,11 @@ class SchemaProfile:
     # extraction document it is converted from (None: no LinkML conversion yet).
     linkml_prefix: str | None = None
     contract_script: Path | None = None
+    # Graph path when SCHEMA_STUDIO_EXTRACTION does not choose one: "linkml" or "legacy".
+    default_extraction: str = "linkml"
+    # What the source offers besides the schema: "usage" (the code that acts on
+    # a class, shown under the hood) and "methods" (public methods on classes).
+    capabilities: frozenset[str] = frozenset()
 
     @property
     def environment(self) -> ExtractorEnvironment:
@@ -89,6 +95,7 @@ SCHEMA_PROFILES: dict[str, SchemaProfile] = {
         discovery=("entry-points", "walk"),
         linkml_prefix="nomadsim",
         contract_script=NOMAD_SCRIPT,
+        capabilities=frozenset({"usage", "methods"}),
     ),
     "nomad-measurements": SchemaProfile(
         key="nomad-measurements",
@@ -104,6 +111,7 @@ SCHEMA_PROFILES: dict[str, SchemaProfile] = {
         discovery=("entry-points",),
         linkml_prefix="nomadmeas",
         contract_script=NOMAD_SCRIPT,
+        capabilities=frozenset({"usage", "methods"}),
     ),
     "bam-masterdata": SchemaProfile(
         key="bam-masterdata",
@@ -118,6 +126,8 @@ SCHEMA_PROFILES: dict[str, SchemaProfile] = {
         # bam-masterdata declares no schema entry point yet.
         discovery=("walk",),
         linkml_prefix="bammd",
+        contract_script=BAM_SCRIPT,
+        default_extraction="legacy",
     ),
 }
 DEFAULT_PROFILE_KEY = "nomad-simulations"

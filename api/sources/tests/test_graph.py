@@ -373,15 +373,18 @@ def test_graph_adapter_uses_the_standard_library_only():
         f"spec = importlib.util.spec_from_file_location('graph', {str(PROJECT_ROOT / 'api' / 'sources' / 'graph.py')!r}); "
         "graph = importlib.util.module_from_spec(spec); spec.loader.exec_module(graph); "
         "schema = {'classes': {'m.A': {'name': 'm.A', 'title': 'A', 'attributes': {'x': {'name': 'x', "
-        "'annotations': {'source_kind': 'quantity', 'display_dtype': 'str'}}}}}}; "
-        "result = graph.build_graph(schema, {'modules': [{'name': 'm', 'classes': ['m.A']}]}, 'm'); "
+        "'annotations': {'source_kind': 'quantity', 'display_dtype': 'str'}}, 'p': {'name': 'p', 'required': True, "
+        "'annotations': {'source_kind': 'property', 'source_property_code': 'P', 'source_annotations': '{}'}}}}, "
+        "'m.V': {'name': 'm.V', 'title': 'V', 'annotations': {'source_vocabulary_enum': 'm.V.terms'}}}, "
+        "'enums': {'m.V.terms': {'permissible_values': {'T': {'annotations': {'source_python_name': 't'}}}}}}; "
+        "result = graph.build_graph(schema, {'modules': [{'name': 'm', 'classes': ['m.A', 'm.V']}]}, 'm'); "
         "json.dumps(result); "
         "print(len(result['nodes'])); "
         "print(sorted({n.split('.')[0] for n in sys.modules} - set(sys.stdlib_module_names) - {'graph', '__main__'}))"
     )
     # -S: no site packages at all, so anything outside the standard library fails to import.
     out = subprocess.run([sys.executable, "-I", "-S", "-c", code], capture_output=True, text=True, check=True)
-    assert out.stdout.split("\n")[:2] == ["2", "[]"]
+    assert out.stdout.split("\n")[:2] == ["5", "[]"]
     source = (PROJECT_ROOT / "api" / "sources" / "graph.py").read_text(encoding="utf-8")
     for forbidden in ("fastapi", "sqlite3", "linkml_runtime", "extractor", "yaml", "pydantic"):
         assert f"import {forbidden}" not in source and f"from {forbidden}" not in source

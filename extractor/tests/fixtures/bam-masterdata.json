@@ -1,0 +1,1423 @@
+{
+ "classes": [
+  {
+   "annotations": {
+    "auto_generate_codes": true,
+    "code": "ACTION",
+    "entity_kind": "ObjectTypeDef",
+    "generated_code_prefix": "ACT"
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": false,
+      "property_code": "$NAME",
+      "property_label": "Name",
+      "section": "Device ID",
+      "show_in_edit_views": true
+     },
+     "description": "Name",
+     "kind": "property",
+     "name": "name",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "DATE",
+      "display_card": "0..1",
+      "display_dtype": "DATE",
+      "mandatory": false,
+      "property_code": "ACTION_DATE",
+      "property_label": "Monitoring Date",
+      "section": "Action Data",
+      "show_in_edit_views": true
+     },
+     "description": "Action Date//Datum der Handlung",
+     "kind": "property",
+     "name": "action_date",
+     "range": {
+      "kind": "datatype",
+      "name": "DATE"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "OBJECT",
+      "display_card": "0..1",
+      "display_dtype": "OBJECT[PERSON.BAM]",
+      "mandatory": false,
+      "object_code": "PERSON.BAM",
+      "property_code": "ACTING_PERSON",
+      "property_label": "Acting Person",
+      "section": "Action Data",
+      "show_in_edit_views": true
+     },
+     "description": "Acting Person//Handelnde Person",
+     "kind": "property",
+     "name": "acting_person",
+     "range": {
+      "kind": "class",
+      "name": "bam_masterdata.datamodel.object_types.Bam"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "XML",
+      "display_card": "0..1",
+      "display_dtype": "XML",
+      "mandatory": false,
+      "property_code": "$XMLCOMMENTS",
+      "property_label": "Comments",
+      "section": "Additional Information",
+      "show_in_edit_views": true
+     },
+     "description": "Comments log",
+     "kind": "property",
+     "name": "xmlcomments",
+     "range": {
+      "kind": "datatype",
+      "name": "XML"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "XML",
+      "display_card": "0..1",
+      "display_dtype": "XML",
+      "mandatory": false,
+      "property_code": "$ANNOTATIONS_STATE",
+      "property_label": "Annotations State",
+      "show_in_edit_views": true
+     },
+     "description": "Annotations State",
+     "kind": "property",
+     "name": "annotations_state",
+     "range": {
+      "kind": "datatype",
+      "name": "XML"
+     }
+    }
+   ],
+   "bases": [],
+   "description": "This Object allows to store information on an action by a user.//Dieses Objekt erlaubt eine Nutzer-Aktion zu beschreiben.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "kind": "property",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "kind": "property",
+     "name": "action_date"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "kind": "property",
+     "name": "acting_person"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "kind": "property",
+     "name": "xmlcomments"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "kind": "property",
+     "name": "annotations_state"
+    }
+   ],
+   "id": "bam_masterdata.datamodel.object_types.Action",
+   "name": "Action"
+  },
+  {
+   "annotations": {
+    "auto_generate_codes": true,
+    "code": "MAT_SIM_STRUCTURE.AMORPHOUS",
+    "entity_kind": "ObjectTypeDef",
+    "generated_code_prefix": "MAT_SIM_STR.AMO"
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "data_type": "CONTROLLEDVOCABULARY",
+      "display_card": "0..1",
+      "display_dtype": "CONTROLLEDVOCABULARY[SHORT_RNG_ORD]",
+      "mandatory": false,
+      "property_code": "ATOM_SHORT_RNG_ORD",
+      "property_label": "Short-range Ordering",
+      "section": "Material Information",
+      "show_in_edit_views": true,
+      "vocabulary_code": "SHORT_RNG_ORD"
+     },
+     "description": "Chains, rings, tetrahedra etc.//Ketten, Ringe, Tetraeder usw.",
+     "kind": "property",
+     "name": "atom_short_rng_ord",
+     "range": {
+      "kind": "enum",
+      "name": "bam_masterdata.datamodel.vocabulary_types.ShortRngOrd.terms"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": false,
+      "property_code": "CHEM_SPECIES_BY_N_ATOMS",
+      "property_label": "Chemical Species (number of atoms)",
+      "section": "Simulation Information",
+      "show_in_edit_views": true
+     },
+     "description": "Chemical species involved by number of atoms//Chemische Spezies nach Anzahl der Atome",
+     "kind": "property",
+     "name": "chem_species_by_n_atoms",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "INTEGER",
+      "display_card": "0..1",
+      "display_dtype": "INTEGER",
+      "mandatory": false,
+      "property_code": "N_ATOMS_TOTAL",
+      "property_label": "Total Number of Atoms",
+      "section": "Simulation Information",
+      "show_in_edit_views": true
+     },
+     "description": "Total number of atoms in sample//Gesamtzahl der Atome in der Probe",
+     "kind": "property",
+     "name": "n_atoms_total",
+     "range": {
+      "kind": "datatype",
+      "name": "INTEGER"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "REAL",
+      "display_card": "0..1",
+      "display_dtype": "REAL",
+      "mandatory": false,
+      "property_code": "ATOM_SAMPLE_TEMP_IN_K",
+      "property_label": "Sample Temperature [K]",
+      "section": "Simulation Information",
+      "show_in_edit_views": true
+     },
+     "description": "Current temperature of sample [K]//Aktuelle Temperatur der Probe [K]",
+     "kind": "property",
+     "name": "atom_sample_temp_in_k",
+     "range": {
+      "kind": "datatype",
+      "name": "REAL"
+     }
+    }
+   ],
+   "bases": [
+    "bam_masterdata.datamodel.object_types.MatSimStructure"
+   ],
+   "description": "Material simulation structure - amorphous//Material-simulationsstruktur - amorph",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "workflow_manager"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "crystal_orientation"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "sim_cell_lengths_in_a"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "sim_cell_vectors"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "sim_cell_angles_in_deg"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "sim_cell_volume_in_a3"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "notes"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "conceptual_dictionary"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "xmlcomments"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "annotations_state"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Amorphous",
+     "kind": "property",
+     "name": "atom_short_rng_ord"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Amorphous",
+     "kind": "property",
+     "name": "chem_species_by_n_atoms"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Amorphous",
+     "kind": "property",
+     "name": "n_atoms_total"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Amorphous",
+     "kind": "property",
+     "name": "atom_sample_temp_in_k"
+    }
+   ],
+   "id": "bam_masterdata.datamodel.object_types.Amorphous",
+   "name": "Amorphous"
+  },
+  {
+   "annotations": {
+    "auto_generate_codes": true,
+    "code": "PERSON.BAM",
+    "entity_kind": "ObjectTypeDef",
+    "generated_code_prefix": "S"
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "data_type": "CONTROLLEDVOCABULARY",
+      "display_card": "1..1",
+      "display_dtype": "CONTROLLEDVOCABULARY[BAM_OE]",
+      "mandatory": true,
+      "property_code": "BAM_OE",
+      "property_label": "BAM Organizational Entity",
+      "section": "BAM Information",
+      "show_in_edit_views": true,
+      "vocabulary_code": "BAM_OE"
+     },
+     "description": "BAM Organizational Entity//BAM Organisationseinheit (OE)",
+     "kind": "property",
+     "name": "bam_oe",
+     "range": {
+      "kind": "datatype",
+      "name": "CONTROLLEDVOCABULARY"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "1..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": true,
+      "property_code": "BAM_USERNAME",
+      "property_label": "BAM username",
+      "section": "BAM Information",
+      "show_in_edit_views": true
+     },
+     "description": "BAM username//BAM Benutzername",
+     "kind": "property",
+     "name": "bam_username",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "HYPERLINK",
+      "display_card": "0..1",
+      "display_dtype": "HYPERLINK",
+      "mandatory": false,
+      "property_code": "BAM_USERPROFILE",
+      "property_label": "BAM user profile link",
+      "section": "BAM Information",
+      "show_in_edit_views": true
+     },
+     "description": "BAM user profile link//BAM Link zum Benutzerprofil",
+     "kind": "property",
+     "name": "bam_userprofile",
+     "range": {
+      "kind": "datatype",
+      "name": "HYPERLINK"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "BOOLEAN",
+      "display_card": "1..1",
+      "display_dtype": "BOOLEAN",
+      "mandatory": true,
+      "property_code": "BAM_DATA_STORE_USER_STATUS",
+      "property_label": "BAM Data Store user",
+      "section": "BAM Information",
+      "show_in_edit_views": true
+     },
+     "description": "BAM Data Store user//BAM Data Store-Nutzer*in",
+     "kind": "property",
+     "name": "bam_data_store_user_status",
+     "range": {
+      "kind": "datatype",
+      "name": "BOOLEAN"
+     }
+    }
+   ],
+   "bases": [
+    "bam_masterdata.datamodel.object_types.Person"
+   ],
+   "description": "A BAM employee (is generated automatically)//Ein*e BAM-Mitarbeiter*in (wird automatisch generiert)",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "kind": "property",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "kind": "property",
+     "name": "family_name"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "kind": "property",
+     "name": "given_name"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "kind": "property",
+     "name": "alias"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "kind": "property",
+     "name": "affiliation"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "kind": "property",
+     "name": "email"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "kind": "property",
+     "name": "telephone"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "kind": "property",
+     "name": "address"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Bam",
+     "kind": "property",
+     "name": "bam_oe"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Bam",
+     "kind": "property",
+     "name": "bam_username"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Bam",
+     "kind": "property",
+     "name": "bam_userprofile"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Bam",
+     "kind": "property",
+     "name": "bam_data_store_user_status"
+    }
+   ],
+   "id": "bam_masterdata.datamodel.object_types.Bam",
+   "name": "Bam"
+  },
+  {
+   "annotations": {
+    "auto_generate_codes": true,
+    "code": "CALIBRATION",
+    "entity_kind": "ObjectTypeDef",
+    "generated_code_prefix": "CAL"
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "1..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": true,
+      "property_code": "$NAME",
+      "property_label": "Name",
+      "section": "General Information",
+      "show_in_edit_views": true
+     },
+     "description": "Name",
+     "kind": "property",
+     "name": "name",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "OBJECT",
+      "display_card": "1..1",
+      "display_dtype": "OBJECT[(ALL)]",
+      "mandatory": true,
+      "object_code": "(ALL)",
+      "property_code": "INSTRUMENT",
+      "property_label": "Testing Machine or Measurement Device",
+      "section": "General Information",
+      "show_in_edit_views": true
+     },
+     "description": "Testing machine or measurement device//Prüfmaschine oder Messgerät",
+     "kind": "property",
+     "name": "instrument",
+     "range": {
+      "kind": "datatype",
+      "name": "OBJECT"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "DATE",
+      "display_card": "1..1",
+      "display_dtype": "DATE",
+      "mandatory": true,
+      "property_code": "CALIBRATION_DATE",
+      "property_label": "Calibration date",
+      "section": "General Information",
+      "show_in_edit_views": true
+     },
+     "description": "Date of calibration//Datum der Kalibrierung",
+     "kind": "property",
+     "name": "calibration_date",
+     "range": {
+      "kind": "datatype",
+      "name": "DATE"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "CONTROLLEDVOCABULARY",
+      "display_card": "1..1",
+      "display_dtype": "CONTROLLEDVOCABULARY[CALIBRATION_PROVIDER]",
+      "mandatory": true,
+      "property_code": "CALIBRATION_PROVIDER",
+      "property_label": "Calibration provider",
+      "section": "General Information",
+      "show_in_edit_views": true,
+      "vocabulary_code": "CALIBRATION_PROVIDER"
+     },
+     "description": "Calibration provider//Kalibrierdienstleister",
+     "kind": "property",
+     "name": "calibration_provider",
+     "range": {
+      "kind": "enum",
+      "name": "bam_masterdata.datamodel.vocabulary_types.CalibrationProvider.terms"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "1..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": true,
+      "property_code": "CALIBRATION_CERTIFICATE_NUMBER",
+      "property_label": "Calibration Certificate Number",
+      "section": "General Information",
+      "show_in_edit_views": true
+     },
+     "description": "Calibration Certificate Number//Kalibrierschein-Nummer",
+     "kind": "property",
+     "name": "calibration_certificate_number",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "BOOLEAN",
+      "display_card": "1..1",
+      "display_dtype": "BOOLEAN",
+      "mandatory": true,
+      "property_code": "ACCREDITATED_CALIBRATION_LAB",
+      "property_label": "Accredited Calibration Laboratory",
+      "section": "General Information",
+      "show_in_edit_views": true
+     },
+     "description": "Accredited Calibration Laboratory//Akkreditiertes Kalibrierlabor",
+     "kind": "property",
+     "name": "accreditated_calibration_lab",
+     "range": {
+      "kind": "datatype",
+      "name": "BOOLEAN"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": false,
+      "property_code": "CALIBRATION_LAB_ACCREDITATION_NUMBER",
+      "property_label": "Calibration Laboratory Accreditation Number",
+      "section": "General Information",
+      "show_in_edit_views": true
+     },
+     "description": "Calibration Laboratory Accreditation Number//Akkreditierungszeichen des Kalibrierlabors",
+     "kind": "property",
+     "name": "calibration_lab_accreditation_number",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "MULTILINE_VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "MULTILINE_VARCHAR",
+      "mandatory": false,
+      "property_code": "NOTES",
+      "property_label": "Notes",
+      "section": "Additional Information",
+      "show_in_edit_views": true
+     },
+     "description": "Notes",
+     "kind": "property",
+     "name": "notes",
+     "range": {
+      "kind": "datatype",
+      "name": "MULTILINE_VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "XML",
+      "display_card": "0..1",
+      "display_dtype": "XML",
+      "mandatory": false,
+      "property_code": "$XMLCOMMENTS",
+      "property_label": "Comments",
+      "section": "Comments",
+      "show_in_edit_views": true
+     },
+     "description": "Comments log",
+     "kind": "property",
+     "name": "xmlcomments",
+     "range": {
+      "kind": "datatype",
+      "name": "XML"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "XML",
+      "display_card": "0..1",
+      "display_dtype": "XML",
+      "mandatory": false,
+      "property_code": "$ANNOTATIONS_STATE",
+      "property_label": "Annotations State",
+      "show_in_edit_views": true
+     },
+     "description": "Annotations State",
+     "kind": "property",
+     "name": "annotations_state",
+     "range": {
+      "kind": "datatype",
+      "name": "XML"
+     }
+    }
+   ],
+   "bases": [],
+   "description": "Calibration//Kalibrierung",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "kind": "property",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "kind": "property",
+     "name": "instrument"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "kind": "property",
+     "name": "calibration_date"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "kind": "property",
+     "name": "calibration_provider"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "kind": "property",
+     "name": "calibration_certificate_number"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "kind": "property",
+     "name": "accreditated_calibration_lab"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "kind": "property",
+     "name": "calibration_lab_accreditation_number"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "kind": "property",
+     "name": "notes"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "kind": "property",
+     "name": "xmlcomments"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "kind": "property",
+     "name": "annotations_state"
+    }
+   ],
+   "id": "bam_masterdata.datamodel.object_types.Calibration",
+   "name": "Calibration"
+  },
+  {
+   "annotations": {
+    "auto_generate_codes": true,
+    "code": "ACTION.DEVICE_TRAINING",
+    "entity_kind": "ObjectTypeDef",
+    "generated_code_prefix": "ACT.DEV_TRA"
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "data_type": "OBJECT",
+      "display_card": "0..1",
+      "display_dtype": "OBJECT[PERSON.BAM]",
+      "mandatory": false,
+      "object_code": "PERSON.BAM",
+      "property_code": "TRAINED_PERSON",
+      "property_label": "Trained Person",
+      "section": "Action Data",
+      "show_in_edit_views": true
+     },
+     "description": "Trained Person//Eingewiesene Person",
+     "kind": "property",
+     "name": "trained_person",
+     "range": {
+      "kind": "class",
+      "name": "bam_masterdata.datamodel.object_types.Bam"
+     }
+    }
+   ],
+   "bases": [
+    "bam_masterdata.datamodel.object_types.Action"
+   ],
+   "description": "This Object allows to document a device instruction.//Dieses Objekt erlaubt eine Geräte-Unterweisung zu dokumentieren.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "kind": "property",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "kind": "property",
+     "name": "action_date"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "kind": "property",
+     "name": "acting_person"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "kind": "property",
+     "name": "xmlcomments"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "kind": "property",
+     "name": "annotations_state"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.DeviceTraining",
+     "kind": "property",
+     "name": "trained_person"
+    }
+   ],
+   "id": "bam_masterdata.datamodel.object_types.DeviceTraining",
+   "name": "DeviceTraining"
+  },
+  {
+   "annotations": {
+    "auto_generate_codes": true,
+    "code": "MAT_SIM_STRUCTURE",
+    "entity_kind": "ObjectTypeDef",
+    "generated_code_prefix": "MAT_SIM_STR"
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "1..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": true,
+      "property_code": "$NAME",
+      "property_label": "Name",
+      "section": "General Information",
+      "show_in_edit_views": true
+     },
+     "description": "Name",
+     "kind": "property",
+     "name": "name",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "MULTILINE_VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "MULTILINE_VARCHAR",
+      "mandatory": false,
+      "property_code": "DESCRIPTION",
+      "property_label": "Description",
+      "section": "General Information",
+      "show_in_edit_views": true
+     },
+     "description": "Short description and/or purpose//Kurzbeschreibung und/oder Zweck",
+     "kind": "property",
+     "name": "description",
+     "range": {
+      "kind": "datatype",
+      "name": "MULTILINE_VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": false,
+      "property_code": "WORKFLOW_MANAGER",
+      "property_label": "Workflow Manager",
+      "section": "Technical Information",
+      "show_in_edit_views": true
+     },
+     "description": "Workflow manager//Workflow-Manager",
+     "kind": "property",
+     "name": "workflow_manager",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": false,
+      "property_code": "CRYSTAL_ORIENTATION",
+      "property_label": "Crystallographic Orientation",
+      "section": "Material Information",
+      "show_in_edit_views": true
+     },
+     "description": "Miller indices//Millersche Indizes",
+     "kind": "property",
+     "name": "crystal_orientation",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": false,
+      "property_code": "SIM_CELL_LENGTHS_IN_A",
+      "property_label": "Simulation Cell Lengths [Å]",
+      "section": "Simulation Information",
+      "show_in_edit_views": true
+     },
+     "description": "Simulation cell lengths [Å]//Längen der Simulationszelle [Å]",
+     "kind": "property",
+     "name": "sim_cell_lengths_in_a",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": false,
+      "property_code": "SIM_CELL_VECTORS",
+      "property_label": "Simulation Cell Vectors",
+      "section": "Simulation Information",
+      "show_in_edit_views": true
+     },
+     "description": "Simulation cell vectors//Vektoren der Simulationszelle",
+     "kind": "property",
+     "name": "sim_cell_vectors",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": false,
+      "property_code": "SIM_CELL_ANGLES_IN_DEG",
+      "property_label": "Simulation Cell Angles [Degrees]",
+      "section": "Simulation Information",
+      "show_in_edit_views": true
+     },
+     "description": "Simulation cell angles [Degrees]//Winkel der Simulationszelle [Grad]",
+     "kind": "property",
+     "name": "sim_cell_angles_in_deg",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "REAL",
+      "display_card": "0..1",
+      "display_dtype": "REAL",
+      "mandatory": false,
+      "property_code": "SIM_CELL_VOLUME_IN_A3",
+      "property_label": "Simulation Cell Volume [Å^3]",
+      "section": "Simulation Information",
+      "show_in_edit_views": true
+     },
+     "description": "Simulation cell volume [Å^3]//Volumen der Simulationszelle [Å^3]",
+     "kind": "property",
+     "name": "sim_cell_volume_in_a3",
+     "range": {
+      "kind": "datatype",
+      "name": "REAL"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "MULTILINE_VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "MULTILINE_VARCHAR",
+      "mandatory": false,
+      "property_code": "NOTES",
+      "property_label": "Notes",
+      "section": "Additional Information",
+      "show_in_edit_views": true
+     },
+     "description": "Notes",
+     "kind": "property",
+     "name": "notes",
+     "range": {
+      "kind": "datatype",
+      "name": "MULTILINE_VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "MULTILINE_VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "MULTILINE_VARCHAR",
+      "mandatory": false,
+      "property_code": "CONCEPTUAL_DICTIONARY",
+      "property_label": "Conceptual Dictionary",
+      "section": "Annotations",
+      "show_in_edit_views": true
+     },
+     "description": "Conceptual dictionary associated with pyiron job//Begriffswörterbuch zu pyiron job",
+     "kind": "property",
+     "name": "conceptual_dictionary",
+     "range": {
+      "kind": "datatype",
+      "name": "MULTILINE_VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "XML",
+      "display_card": "0..1",
+      "display_dtype": "XML",
+      "mandatory": false,
+      "property_code": "$XMLCOMMENTS",
+      "property_label": "Comments",
+      "section": "Comments",
+      "show_in_edit_views": true
+     },
+     "description": "Comments log",
+     "kind": "property",
+     "name": "xmlcomments",
+     "range": {
+      "kind": "datatype",
+      "name": "XML"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "XML",
+      "display_card": "0..1",
+      "display_dtype": "XML",
+      "mandatory": false,
+      "property_code": "$ANNOTATIONS_STATE",
+      "property_label": "Annotations State",
+      "section": "Comments",
+      "show_in_edit_views": true
+     },
+     "description": "Annotations State",
+     "kind": "property",
+     "name": "annotations_state",
+     "range": {
+      "kind": "datatype",
+      "name": "XML"
+     }
+    }
+   ],
+   "bases": [],
+   "description": "Material simulation structure // Material-Simulationsstruktur",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "workflow_manager"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "crystal_orientation"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "sim_cell_lengths_in_a"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "sim_cell_vectors"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "sim_cell_angles_in_deg"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "sim_cell_volume_in_a3"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "notes"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "conceptual_dictionary"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "xmlcomments"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "kind": "property",
+     "name": "annotations_state"
+    }
+   ],
+   "id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+   "name": "MatSimStructure"
+  },
+  {
+   "annotations": {
+    "auto_generate_codes": true,
+    "code": "PERSON",
+    "entity_kind": "ObjectTypeDef",
+    "generated_code_prefix": "PERS"
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "1..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": true,
+      "property_code": "$NAME",
+      "property_label": "Name",
+      "section": "General Information",
+      "show_in_edit_views": true
+     },
+     "description": "Name",
+     "kind": "property",
+     "name": "name",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "1..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": true,
+      "property_code": "FAMILY_NAME",
+      "property_label": "Family name",
+      "section": "General Information",
+      "show_in_edit_views": true
+     },
+     "description": "Family name//Nachname",
+     "kind": "property",
+     "name": "family_name",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": false,
+      "property_code": "GIVEN_NAME",
+      "property_label": "Given name",
+      "section": "General Information",
+      "show_in_edit_views": true
+     },
+     "description": "Given name//Nachname",
+     "kind": "property",
+     "name": "given_name",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": false,
+      "property_code": "ALIAS",
+      "property_label": "Alternative Name",
+      "section": "General Information",
+      "show_in_edit_views": true
+     },
+     "description": "e.g. abbreviation or nickname//z.B. Abkürzung oder Spitzname",
+     "kind": "property",
+     "name": "alias",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "1..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": true,
+      "property_code": "AFFILIATION",
+      "property_label": "Institute or company",
+      "section": "General Information",
+      "show_in_edit_views": true
+     },
+     "description": "Institute or company//Institut oder Unternehmen",
+     "kind": "property",
+     "name": "affiliation",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": false,
+      "property_code": "EMAIL",
+      "property_label": "Email address",
+      "section": "Contact Information",
+      "show_in_edit_views": true
+     },
+     "description": "Email address//E-Mail-Adresse",
+     "kind": "property",
+     "name": "email",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "VARCHAR",
+      "mandatory": false,
+      "property_code": "TELEPHONE",
+      "property_label": "Telephone number",
+      "section": "Contact Information",
+      "show_in_edit_views": true
+     },
+     "description": "Telephone number//Telefonnummer",
+     "kind": "property",
+     "name": "telephone",
+     "range": {
+      "kind": "datatype",
+      "name": "VARCHAR"
+     }
+    },
+    {
+     "annotations": {
+      "data_type": "MULTILINE_VARCHAR",
+      "display_card": "0..1",
+      "display_dtype": "MULTILINE_VARCHAR",
+      "mandatory": false,
+      "property_code": "ADDRESS",
+      "property_label": "Postal address",
+      "section": "Contact Information",
+      "show_in_edit_views": true
+     },
+     "description": "Postal address//Anschrift",
+     "kind": "property",
+     "name": "address",
+     "range": {
+      "kind": "datatype",
+      "name": "MULTILINE_VARCHAR"
+     }
+    }
+   ],
+   "bases": [],
+   "description": "A natural person//Eine natürliche Person",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "kind": "property",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "kind": "property",
+     "name": "family_name"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "kind": "property",
+     "name": "given_name"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "kind": "property",
+     "name": "alias"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "kind": "property",
+     "name": "affiliation"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "kind": "property",
+     "name": "email"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "kind": "property",
+     "name": "telephone"
+    },
+    {
+     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "kind": "property",
+     "name": "address"
+    }
+   ],
+   "id": "bam_masterdata.datamodel.object_types.Person",
+   "name": "Person"
+  },
+  {
+   "annotations": {
+    "code": "CALIBRATION_PROVIDER",
+    "entity_kind": "VocabularyTypeDef",
+    "vocabulary_enum": "bam_masterdata.datamodel.vocabulary_types.CalibrationProvider.terms"
+   },
+   "attributes": [],
+   "bases": [],
+   "description": "Calibration provider//Kalibrierdienstleister",
+   "effective_attributes": [],
+   "id": "bam_masterdata.datamodel.vocabulary_types.CalibrationProvider",
+   "name": "CalibrationProvider"
+  },
+  {
+   "annotations": {
+    "code": "SHORT_RNG_ORD",
+    "entity_kind": "VocabularyTypeDef",
+    "vocabulary_enum": "bam_masterdata.datamodel.vocabulary_types.ShortRngOrd.terms"
+   },
+   "attributes": [],
+   "bases": [],
+   "description": "Short range ordering in amorphous materials//Kurzstreckenordnung in amorphen Materialien",
+   "effective_attributes": [],
+   "id": "bam_masterdata.datamodel.vocabulary_types.ShortRngOrd",
+   "name": "ShortRngOrd"
+  }
+ ],
+ "contract_version": "1.0",
+ "enums": [
+  {
+   "id": "bam_masterdata.datamodel.vocabulary_types.CalibrationProvider.terms",
+   "values": [
+    {
+     "annotations": {
+      "official": true,
+      "python_name": "bam_fb8_1"
+     },
+     "description": "BAM FB 8.1",
+     "title": "BAM FB 8.1",
+     "value": "BAM_FB8_1"
+    },
+    {
+     "annotations": {
+      "official": true,
+      "python_name": "mpa_kalibrierdienst_gmbh"
+     },
+     "description": "MPA Kalibrierdienst GmbH",
+     "title": "MPA Kalibrierdienst GmbH",
+     "value": "MPA_KALIBRIERDIENST_GMBH"
+    }
+   ]
+  },
+  {
+   "id": "bam_masterdata.datamodel.vocabulary_types.ShortRngOrd.terms",
+   "values": [
+    {
+     "annotations": {
+      "official": true,
+      "python_name": "short_rng_ord_chain"
+     },
+     "description": "Chains//Ketten",
+     "title": "Chains",
+     "value": "SHORT_RNG_ORD_CHAIN"
+    },
+    {
+     "annotations": {
+      "official": true,
+      "python_name": "short_rng_ord_ring"
+     },
+     "description": "Rings//Ringe",
+     "title": "Rings",
+     "value": "SHORT_RNG_ORD_RING"
+    },
+    {
+     "annotations": {
+      "official": true,
+      "python_name": "short_rng_ord_tetra"
+     },
+     "description": "Tetrahedra//Tetraeder",
+     "title": "Tetrahedra",
+     "value": "SHORT_RNG_ORD_TETRA"
+    }
+   ]
+  }
+ ],
+ "modules": [
+  {
+   "classes": [
+    "bam_masterdata.datamodel.object_types.Amorphous",
+    "bam_masterdata.datamodel.object_types.DeviceTraining",
+    "bam_masterdata.datamodel.object_types.Calibration"
+   ],
+   "name": "bam_masterdata.datamodel.object_types"
+  }
+ ],
+ "report": [
+  {
+   "path": "bam_masterdata.datamodel.object_types.Bam.bam_oe",
+   "reason": "unresolved vocabulary_code 'BAM_OE' for CONTROLLEDVOCABULARY property",
+   "status": "partial"
+  },
+  {
+   "path": "bam_masterdata.datamodel.object_types.Calibration.instrument",
+   "reason": "unresolved object_code '(ALL)' for OBJECT property",
+   "status": "partial"
+  }
+ ],
+ "source": {
+  "commit": "9e2b29a18c15f4e1f8898b52ae1d7d10a2992fef",
+  "dependencies": {
+   "pint": "0.26.1",
+   "pydantic": "2.13.5"
+  },
+  "module": "bam_masterdata.datamodel",
+  "name": "bam-masterdata",
+  "version": "0.14.0"
+ }
+}

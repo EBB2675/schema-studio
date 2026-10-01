@@ -54,10 +54,11 @@ def profile(key):
 @pytest.mark.parametrize("setting,expected", [
     ("", {"nomad-simulations": "linkml", "nomad-measurements": "linkml", "bam-masterdata": "legacy"}),
     ("legacy", {"nomad-simulations": "legacy", "nomad-measurements": "legacy", "bam-masterdata": "legacy"}),
-    ("linkml", {"nomad-simulations": "linkml", "nomad-measurements": "linkml", "bam-masterdata": "legacy"}),
+    ("linkml", {"nomad-simulations": "linkml", "nomad-measurements": "linkml", "bam-masterdata": "linkml"}),
     ("nomad-measurements=legacy", {"nomad-simulations": "linkml", "nomad-measurements": "legacy", "bam-masterdata": "legacy"}),
-    ("linkml, nomad-simulations=legacy", {"nomad-simulations": "legacy", "nomad-measurements": "linkml", "bam-masterdata": "legacy"}),
-    ("LINKML", {"nomad-simulations": "linkml", "nomad-measurements": "linkml", "bam-masterdata": "legacy"}),
+    ("bam-masterdata=linkml", {"nomad-simulations": "linkml", "nomad-measurements": "linkml", "bam-masterdata": "linkml"}),
+    ("linkml, nomad-simulations=legacy", {"nomad-simulations": "legacy", "nomad-measurements": "linkml", "bam-masterdata": "linkml"}),
+    ("LINKML", {"nomad-simulations": "linkml", "nomad-measurements": "linkml", "bam-masterdata": "linkml"}),
     ("fast", {"nomad-simulations": "linkml", "nomad-measurements": "linkml", "bam-masterdata": "legacy"}),
 ])
 def test_setting_chooses_the_path_per_profile(extraction, monkeypatch, setting, expected):
@@ -70,7 +71,7 @@ def test_linkml_is_the_default_and_legacy_can_be_chosen(extraction, monkeypatch)
     assert extraction.calls[0][0] == "snapshot"
     monkeypatch.setenv(extraction.EXTRACTION_SETTING, "legacy")
     assert extraction.build_graph(MODEL_METHOD, root="ModelMethod")["from"] == "legacy"
-    # bam-masterdata has no LinkML conversion yet.
+    # bam-masterdata stays on the legacy path unless the setting names it.
     monkeypatch.delenv(extraction.EXTRACTION_SETTING)
     extraction.build_graph("bam_masterdata.datamodel.object_types")
     assert extraction.calls[-1][0] == "legacy-graph"

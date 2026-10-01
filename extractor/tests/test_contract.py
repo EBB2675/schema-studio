@@ -102,6 +102,10 @@ def test_the_added_fields_are_optional():
         (lambda d: d["usage"]["example.alpha.Child"][0].update(kind="other"), "other"),
         (lambda d: d["usage"]["example.alpha.Child"][0].update(doc=None), "doc"),
         (lambda d: _child(d)["methods"][0].pop("module"), "module"),
+        # Identical enum values, plain or with metadata (uniqueItems).
+        (lambda d: d["enums"][0]["values"].append(copy.deepcopy(d["enums"][0]["values"][0])), "non-unique elements"),
+        (lambda d: d["enums"][0]["values"].extend([{"value": "z", "annotations": {"b": 1, "a": True}},
+                                                   {"value": "z", "annotations": {"a": True, "b": 1}}]), "non-unique elements"),
     ],
 )
 def test_shape_errors_are_reported_with_their_path(change, message):

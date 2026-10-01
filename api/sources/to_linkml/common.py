@@ -135,9 +135,11 @@ def permissible_values(values: Iterable[str | Mapping[str, Any]]) -> dict[str, d
 
 # -------- units and shapes --------
 
-def unit(slot: dict[str, Any], source_unit: str, path: str, report: Report) -> None:
-    """Set the UCUM unit for an exact known spelling; otherwise report it."""
-    code = UNIT_CODES.get(source_unit)
+def unit(
+    slot: dict[str, Any], source_unit: str, path: str, report: Report, codes: Mapping[str, str] = UNIT_CODES,
+) -> None:
+    """Set the UCUM unit for an exact known spelling (from `codes`); otherwise report it."""
+    code = codes.get(source_unit)
     if source_unit in REFUSED_UNITS:
         report.partial(path, f"refused source unit: {source_unit}; source registries disagree about this spelling")
     elif code is None:

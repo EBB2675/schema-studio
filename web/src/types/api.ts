@@ -1,5 +1,18 @@
 import type { WorkspaceState } from "./workspace";
 
+// Source facts about a node beyond the graph itself, shown in the doc panel.
+// bam-masterdata nodes carry them (openBIS code, label, German texts, ...).
+export type NodeDetails = {
+  code?: string;
+  title?: string;
+  titleDe?: string;
+  docDe?: string;
+  mandatory?: boolean;
+  section?: string;
+  iri?: string;
+  unit?: string;
+};
+
 export type ApiNode = {
   id: string;
   kind: "section" | "quantity";
@@ -15,6 +28,7 @@ export type ApiNode = {
   methods?: string[] | null;
   path?: string | null;
   line?: number | null;
+  details?: NodeDetails | null;
 };
 
 export type ApiEdge = {
@@ -117,6 +131,25 @@ const ensureWorkspace = (value: unknown): WorkspaceState | undefined => {
   return { branch, package: pkg, base_namespace };
 };
 
+const optionalString = (v: unknown) => (typeof v === "string" && v ? v : undefined);
+
+// Only nodes with an openBIS code have details; units alone (NOMAD quantities) are not shown yet.
+const ensureDetails = (node: Record<string, unknown>): NodeDetails | null => {
+  const code = optionalString(node.code);
+  if (!code) return null;
+  const details: NodeDetails = {
+    code,
+    title: optionalString(node.title),
+    titleDe: optionalString(node.title_de),
+    docDe: optionalString(node.doc_de),
+    mandatory: typeof node.mandatory === "boolean" ? node.mandatory : undefined,
+    section: optionalString(node.section),
+    iri: optionalString(node.iri),
+    unit: optionalString(node.unit),
+  };
+  return Object.fromEntries(Object.entries(details).filter(([, value]) => value !== undefined)) as NodeDetails;
+};
+
 const ensureNode = (node: unknown): ApiNode => {
   if (!isRecord(node)) throw new Error("Node is not an object");
   const kind = node.kind;
@@ -151,6 +184,7 @@ const ensureNode = (node: unknown): ApiNode => {
     methods: Array.isArray(node.methods) ? node.methods.map(asString) : null,
     path,
     line,
+    details: ensureDetails(node),
   };
 };
 

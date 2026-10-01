@@ -101,4 +101,45 @@ describe('DocPanel', () => {
 
     expect(onEditClass).toHaveBeenCalledWith('pkg.Class', { docstring: 'updated class docs' });
   });
+
+  it('shows the source details of a bam-masterdata property', () => {
+    setSelection({
+      id: 'bam.C.p',
+      kind: 'quantity',
+      name: 'p',
+      doc: 'English text',
+      owner: 'bam.C',
+      dtype: 'REAL',
+      details: { code: 'P_CODE', title: 'P label', mandatory: true, section: 'General', unit: 'mm', docDe: 'Deutscher Text' },
+    });
+    render(
+      <DocPanel
+        editableMode={false}
+        onRemoveQuantity={vi.fn()}
+        onEditQuantity={vi.fn()}
+        onEditClass={vi.fn()}
+        clearActionError={vi.fn()}
+      />
+    );
+    expect(screen.getByText('P_CODE')).toBeInTheDocument();
+    expect(screen.getByText('P label')).toBeInTheDocument();
+    expect(screen.getByText('Mandatory')).toBeInTheDocument();
+    expect(screen.getByText('yes')).toBeInTheDocument();
+    expect(screen.getByText('mm')).toBeInTheDocument();
+    expect(screen.getByText('Deutscher Text')).toBeInTheDocument();
+  });
+
+  it('shows no source details block without details', () => {
+    setSelection(classSelection);
+    render(
+      <DocPanel
+        editableMode={false}
+        onRemoveQuantity={vi.fn()}
+        onEditQuantity={vi.fn()}
+        onEditClass={vi.fn()}
+        clearActionError={vi.fn()}
+      />
+    );
+    expect(screen.queryByLabelText('Source details')).toBeNull();
+  });
 });

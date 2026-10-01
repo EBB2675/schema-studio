@@ -16,13 +16,30 @@ import math
 from pathlib import Path
 from typing import Any
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, ValidationError, validators
 
 CONTRACT_VERSION = "1.0"
 SCHEMA_PATH = Path(__file__).with_name("contract.schema.json")
 
 _SCHEMA = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-_VALIDATOR = Draft202012Validator(_SCHEMA)
+
+
+def _unique_items(validator, unique, instance, schema):
+    """`uniqueItems` in linear time: jsonschema compares every pair, which takes
+    minutes for vocabularies with thousands of terms. Items are JSON data, so
+    their sorted JSON text identifies them."""
+    if not unique or not validator.is_type(instance, "array"):
+        return
+    seen: set[str] = set()
+    for item in instance:
+        key = json.dumps(item, sort_keys=True)
+        if key in seen:
+            yield ValidationError(f"{instance!r} has non-unique elements")
+            return
+        seen.add(key)
+
+
+_VALIDATOR = validators.extend(Draft202012Validator, {"uniqueItems": _unique_items})(_SCHEMA)
 
 
 class ContractError(ValueError):
