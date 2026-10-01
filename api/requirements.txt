@@ -8,6 +8,7 @@ httpx
 PyJWT
 motor>=3.3.1
 platformdirs
+jsonschema>=4.0
 pytest>=7
 celery[redis]>=5.3,<6
 redis>=5,<6

@@ -17,6 +17,7 @@ dependencies = [
   "orjson",
   "httpx",
   "platformdirs",
+  "jsonschema>=4.0",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +39,7 @@ include = ["api", "api.*", "extractor", "extractor.*"]
 
 [tool.setuptools.package-data]
 "api" = ["light_mode/static/**", "../web/dist/**"]
+"extractor" = ["contract.schema.json"]
 
 [dependency-groups]
 dev = [

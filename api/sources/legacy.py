@@ -1,10 +1,10 @@
 """Existing graph extraction, run inside the profile environments.
 
-The functions here keep the signatures of `extractor.graph_builder` and
-`extractor.usage_index`, but each call starts `extractor/scripts/legacy.py`
-with the interpreter of the matching profile environment. Results are cached
-on disk per profile, schema commit, command and arguments, because importing
-the schema packages is slow.
+The functions here keep the signatures of `extractor/graph_builder.py` and
+`extractor/scripts/usage_index.py`, but each call starts
+`extractor/scripts/legacy.py` with the interpreter of the matching profile
+environment. Results are cached on disk per profile, schema commit, command
+and arguments, because importing the schema packages is slow.
 """
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ class ExtractionFailed(RuntimeError):
 
 @dataclass(frozen=True)
 class UsageEntry:
-    """One "under the hood" code path acting on a section (see extractor/usage_index.py)."""
+    """One "under the hood" code path acting on a section (see extractor/scripts/usage_index.py)."""
 
     kind: str
     qualname: str

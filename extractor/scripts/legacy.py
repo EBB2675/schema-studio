@@ -1,7 +1,7 @@
 """Run the existing graph extraction inside a schema environment.
 
 Temporary bridge: it calls `extractor/graph_builder.py` and
-`extractor/usage_index.py` unchanged, but with the interpreter of
+`extractor/scripts/usage_index.py` unchanged, but with the interpreter of
 `environments/<profile>/` instead of the app's. Standard library only.
 
 Usage (always started by `extractor/runner.py`, in isolated mode):
@@ -23,104 +23,31 @@ import importlib
 import importlib.metadata
 import importlib.util
 import json
-import re
 import sys
 import traceback
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-EXTRACTOR_DIR = Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = Path(__file__).resolve().parent
+EXTRACTOR_DIR = SCRIPTS_DIR.parent
 DEFAULT_EXTRACTOR = "extractor.graph_builder:build_graph"
-NOMAD_ENTRY_POINT_GROUP = "nomad.plugin"
 
 
-def _load_sibling(name: str):
+def _load_sibling(name: str, directory: Path = SCRIPTS_DIR):
     """Load an extractor module by file path, without touching the import path."""
     module_name = f"_schema_studio_{name}"
     if module_name in sys.modules:
         return sys.modules[module_name]
-    spec = importlib.util.spec_from_file_location(module_name, EXTRACTOR_DIR / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(module_name, directory / f"{name}.py")
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
 
 
-def _normalize_dist(name: str) -> str:
-    return re.sub(r"[-_.]+", "-", name).lower()
-
-
-# -------- module discovery --------
-
-def list_modules_for_base(base_package: str) -> list[str]:
-    """
-    List module names under an installed package without importing submodules.
-    This avoids side effects from module-level registration code.
-    """
-    try:
-        pkg = importlib.import_module(base_package)
-    except Exception:
-        return []
-
-    modules: set[str] = {base_package}
-    pkg_paths = getattr(pkg, "__path__", None)
-    if not pkg_paths:
-        return sorted(modules)
-
-    for raw_root in pkg_paths:
-        root = Path(raw_root)
-        if not root.exists():
-            continue
-        for py_file in root.rglob("*.py"):
-            rel = py_file.relative_to(root)
-            if py_file.name == "__init__.py":
-                if rel.parts[:-1]:
-                    mod_name = ".".join((base_package, *rel.parts[:-1]))
-                else:
-                    mod_name = base_package
-            else:
-                mod_name = ".".join((base_package, *rel.with_suffix("").parts))
-            modules.add(mod_name)
-
-    return sorted(modules)
-
-
-def nomad_schema_modules(dist: str | None) -> tuple[list[str], list[dict]]:
-    """
-    Modules that the distribution registers as NOMAD schema package entry points.
-    Parser, normalizer, app and example-upload entry points are skipped.
-    """
-    modules: set[str] = set()
-    skipped: list[dict] = []
-    wanted = _normalize_dist(dist) if dist else None
-    for entry_point in importlib.metadata.entry_points(group=NOMAD_ENTRY_POINT_GROUP):
-        owner = getattr(getattr(entry_point, "dist", None), "name", None)
-        if wanted and (not owner or _normalize_dist(owner) != wanted):
-            continue
-        try:
-            plugin = entry_point.load()
-            if not any(cls.__name__ == "SchemaPackageEntryPoint" for cls in type(plugin).__mro__):
-                continue
-            schema_package = plugin.load()
-            module = _module_of_schema_package(schema_package)
-        except Exception as exc:
-            skipped.append({"module": entry_point.value, "error": f"{type(exc).__name__}: {exc}"})
-            continue
-        if module:
-            modules.add(module)
-    return sorted(modules), skipped
-
-
-def _module_of_schema_package(schema_package: Any) -> str | None:
-    """The Python module that defines a NOMAD schema package."""
-    for definition in getattr(schema_package, "section_definitions", None) or []:
-        section_cls = getattr(definition, "section_cls", None)
-        module = getattr(section_cls, "__module__", None)
-        if module:
-            return module
-    name = getattr(schema_package, "name", None)
-    return name if isinstance(name, str) and name else None
+def _load_graph_builder():
+    return _load_sibling("graph_builder", EXTRACTOR_DIR)
 
 
 # -------- commands --------
@@ -146,21 +73,11 @@ def command_info(dist: str) -> dict:
 
 def command_catalog(base: str, dist: str | None = None, discovery: list[str] | None = None) -> dict:
     """Schema modules under `base` together with their section names."""
-    graph_builder = _load_sibling("graph_builder")
-    discovery = discovery or ["walk"]
-    candidates: set[str] = set()
-    skipped: list[dict] = []
-    if "entry-points" in discovery:
-        found, failed = nomad_schema_modules(dist)
-        candidates.update(found)
-        skipped.extend(failed)
-    if "walk" in discovery:
-        candidates.update(list_modules_for_base(base))
+    graph_builder = _load_graph_builder()
+    candidates, skipped = _load_sibling("discovery").candidate_modules(base, dist, discovery or ["walk"])
 
     modules: list[dict] = []
-    for module in sorted(candidates):
-        if module != base and not module.startswith(f"{base}."):
-            continue
+    for module in candidates:
         try:
             sections = graph_builder.list_sections(module)
         except Exception as exc:
@@ -172,7 +89,7 @@ def command_catalog(base: str, dist: str | None = None, discovery: list[str] | N
 
 
 def command_sections(package: str) -> list[str]:
-    return sorted(_load_sibling("graph_builder").list_sections(package))
+    return sorted(_load_graph_builder().list_sections(package))
 
 
 def command_graph(package: str, extractor: str | None = None, **options: Any) -> dict:
@@ -183,7 +100,7 @@ def command_graph(package: str, extractor: str | None = None, **options: Any) ->
         module_name, function_name = extractor.split(":", 1)
         build = getattr(importlib.import_module(module_name), function_name)
     else:
-        build = _load_sibling("graph_builder").build_graph
+        build = _load_graph_builder().build_graph
     return build(package, **{key: value for key, value in options.items() if value is not None})
 
 

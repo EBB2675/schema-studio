@@ -1,0 +1,4573 @@
+{
+ "classes": [
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/data.py",
+    "source_line": 46
+   },
+   "attributes": [],
+   "bases": [],
+   "description": "Base class for sections in a NOMAD archive. Provides a framework for custom section normalization via the `normalize` function.",
+   "effective_attributes": [],
+   "id": "nomad.datamodel.data.ArchiveSection",
+   "methods": [
+    {
+     "module": "nomad.datamodel.data",
+     "name": "normalize"
+    }
+   ],
+   "name": "ArchiveSection"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/data.py",
+    "source_line": 96
+   },
+   "attributes": [],
+   "bases": [
+    "nomad.datamodel.data.ArchiveSection"
+   ],
+   "description": "An empty base section definition. This can be used to add new top-level sections to an entry.",
+   "effective_attributes": [],
+   "id": "nomad.datamodel.data.EntryData",
+   "methods": [
+    {
+     "module": "nomad.datamodel.data",
+     "name": "normalize"
+    }
+   ],
+   "name": "EntryData"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 363
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "Datetime",
+      "display_shape": "[]"
+     },
+     "description": "The date and time when this activity was started.",
+     "kind": "quantity",
+     "name": "datetime",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"nomad.metainfo.data_type.Datetime\", \"type_kind\": \"custom\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "location of the experiment.",
+     "kind": "quantity",
+     "name": "location",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "A short consistent handle for the applied method.",
+     "kind": "quantity",
+     "name": "method",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "description": "An ordered list of all the dependant steps that make up this activity.",
+     "kind": "subsection",
+     "name": "steps",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.basesections.v1.ActivityStep"
+     },
+     "repeats": true
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.BaseSection"
+   ],
+   "description": "An action that has a temporal extension and for some time depends on some entity.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "location"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "method"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "subsection",
+     "name": "steps"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "Activity"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 1215
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "A short and descriptive name for the result.",
+     "kind": "quantity",
+     "name": "name",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.data.ArchiveSection"
+   ],
+   "description": "A section for the results of an `Activity`.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityResult",
+     "kind": "quantity",
+     "name": "name"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.ActivityResult",
+   "methods": [
+    {
+     "module": "nomad.datamodel.data",
+     "name": "normalize"
+    }
+   ],
+   "name": "ActivityResult"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 318
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "Any additional information about the step not captured by the other fields.",
+     "kind": "quantity",
+     "name": "comment",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "A short and descriptive name for this step.",
+     "kind": "quantity",
+     "name": "name",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "Datetime",
+      "display_shape": "[]"
+     },
+     "description": "Optionally, the starting time of the activity step. If omitted, it is assumed to\nfollow directly after the previous step.",
+     "kind": "quantity",
+     "name": "start_time",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"nomad.metainfo.data_type.Datetime\", \"type_kind\": \"custom\"}"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.data.ArchiveSection"
+   ],
+   "description": "Any dependant step of an `Activity`.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
+     "kind": "quantity",
+     "name": "comment"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
+     "kind": "quantity",
+     "name": "start_time"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
+   "methods": [
+    {
+     "module": "nomad.datamodel.data",
+     "name": "normalize"
+    },
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "to_task"
+    }
+   ],
+   "name": "ActivityStep"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 204
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "Datetime",
+      "display_shape": "[]"
+     },
+     "description": "The date and time associated with this section.",
+     "kind": "quantity",
+     "name": "datetime",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"nomad.metainfo.data_type.Datetime\", \"type_kind\": \"custom\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "Any information that cannot be captured in the other fields.",
+     "kind": "quantity",
+     "name": "description",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+     "kind": "quantity",
+     "name": "lab_id",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "A short human readable and descriptive name.",
+     "kind": "quantity",
+     "name": "name",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.data.ArchiveSection"
+   ],
+   "description": "A generic abstract base section that provides a few commonly used properties. If you inherit from this section, but do not need some quantities, list those\nquantities in the `eln.hide` annotation of your inheriting section definition.\n\nBesides predefining some quantities, these base sections will add some metadata\nto NOMAD's search. A particular example are `tags`, if you define a string\nor enum quantity in your sections named `tags`, its values will be searchable.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "BaseSection"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 770
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float64)",
+      "display_shape": "[]"
+     },
+     "description": "The mass of the component.",
+     "kind": "quantity",
+     "name": "mass",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float64\", \"type_kind\": \"numpy\"}"
+     },
+     "shape": [],
+     "unit": "kilogram"
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float64)",
+      "display_shape": "[]"
+     },
+     "description": "The mass fraction of the component in the composite system.",
+     "kind": "quantity",
+     "name": "mass_fraction",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float64\", \"type_kind\": \"numpy\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "A short name for the component.",
+     "kind": "quantity",
+     "name": "name",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.data.ArchiveSection"
+   ],
+   "description": "A section for describing a component and its role in a composite system.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Component",
+     "kind": "quantity",
+     "name": "mass"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Component",
+     "kind": "quantity",
+     "name": "mass_fraction"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Component",
+     "kind": "quantity",
+     "name": "name"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.Component",
+   "methods": [
+    {
+     "module": "nomad.datamodel.data",
+     "name": "normalize"
+    }
+   ],
+   "name": "Component"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 957
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "description": "A list of all the components of the composite system containing a name, reference\nto the system section and mass of that component.",
+     "kind": "subsection",
+     "name": "components",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.basesections.v1.Component"
+     },
+     "repeats": true
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.System"
+   ],
+   "description": "A base section for a material systems composed of components. Each component of the composite system is of a (sub)type of `System`.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem",
+     "kind": "subsection",
+     "name": "components"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.System",
+     "kind": "subsection",
+     "name": "elemental_composition"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "CompositeSystem"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 1116
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "Reference[v1.CompositeSystem]",
+      "display_shape": "[]"
+     },
+     "description": "A reference to a NOMAD `CompositeSystem` entry.",
+     "kind": "quantity",
+     "name": "reference",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.EntityReference"
+   ],
+   "description": "A section used for referencing a CompositeSystem.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference",
+     "kind": "quantity",
+     "name": "reference"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "CompositeSystemReference"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 577
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float64)",
+      "display_shape": "[]"
+     },
+     "description": "The atomic fraction of the element in the system it is contained within.\nPer definition a positive value less than or equal to 1.",
+     "kind": "quantity",
+     "name": "atomic_fraction",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float64\", \"type_kind\": \"numpy\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "Enum",
+      "display_shape": "[]",
+      "source_type": "{\"type_data\": [\"Ac\", \"Ag\", \"Al\", \"Am\", \"Ar\", \"As\", \"At\", \"Au\", \"B\", \"Ba\", \"Be\", \"Bh\", \"Bi\", \"Bk\", \"Br\", \"C\", \"Ca\", \"Cd\", \"Ce\", \"Cf\", \"Cl\", \"Cm\", \"Cn\", \"Co\", \"Cr\", \"Cs\", \"Cu\", \"Db\", \"Ds\", \"Dy\", \"Er\", \"Es\", \"Eu\", \"F\", \"Fe\", \"Fl\", \"Fm\", \"Fr\", \"Ga\", \"Gd\", \"Ge\", \"H\", \"He\", \"Hf\", \"Hg\", \"Ho\", \"Hs\", \"I\", \"In\", \"Ir\", \"K\", \"Kr\", \"La\", \"Li\", \"Lr\", \"Lu\", \"Lv\", \"Mc\", \"Md\", \"Mg\", \"Mn\", \"Mo\", \"Mt\", \"N\", \"Na\", \"Nb\", \"Nd\", \"Ne\", \"Nh\", \"Ni\", \"No\", \"Np\", \"O\", \"Og\", \"Os\", \"P\", \"Pa\", \"Pb\", \"Pd\", \"Pm\", \"Po\", \"Pr\", \"Pt\", \"Pu\", \"Ra\", \"Rb\", \"Re\", \"Rf\", \"Rg\", \"Rh\", \"Rn\", \"Ru\", \"S\", \"Sb\", \"Sc\", \"Se\", \"Sg\", \"Si\", \"Sm\", \"Sn\", \"Sr\", \"Ta\", \"Tb\", \"Tc\", \"Te\", \"Th\", \"Ti\", \"Tl\", \"Tm\", \"Ts\", \"U\", \"V\", \"W\", \"Xe\", \"Y\", \"Yb\", \"Zn\", \"Zr\"], \"type_kind\": \"enum\"}"
+     },
+     "description": "The symbol of the element, e.g. 'Pb'.",
+     "kind": "quantity",
+     "name": "element",
+     "range": {
+      "kind": "enum",
+      "name": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition.element"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float64)",
+      "display_shape": "[]"
+     },
+     "description": "The mass fraction of the element in the system it is contained within.\nPer definition a positive value less than or equal to 1.",
+     "kind": "quantity",
+     "name": "mass_fraction",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float64\", \"type_kind\": \"numpy\"}"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.data.ArchiveSection"
+   ],
+   "description": "A section for describing the elemental composition of a system, i.e. the element and its atomic fraction.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition",
+     "kind": "quantity",
+     "name": "atomic_fraction"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition",
+     "kind": "quantity",
+     "name": "element"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition",
+     "kind": "quantity",
+     "name": "mass_fraction"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "ElementalComposition"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 307
+   },
+   "attributes": [],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.BaseSection"
+   ],
+   "description": "An object that persists, endures, or continues to exist through time while maintaining its identity.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.Entity",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "Entity"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 433
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "The readable identifier for the entity.",
+     "kind": "quantity",
+     "name": "lab_id",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "Reference[v1.Entity]",
+      "display_shape": "[]"
+     },
+     "description": "A reference to a NOMAD `Entity` entry.",
+     "kind": "quantity",
+     "name": "reference",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.basesections.v1.Entity"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.SectionReference"
+   ],
+   "description": "A section used for referencing an Entity.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+     "kind": "quantity",
+     "name": "reference"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "EntityReference"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 738
+   },
+   "attributes": [],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.Entity"
+   ],
+   "description": "A base section that can be used for instruments.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.Instrument",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "Instrument"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 755
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "Reference[v1.Instrument]",
+      "display_shape": "[]"
+     },
+     "description": "A reference to a NOMAD `Instrument` entry.",
+     "kind": "quantity",
+     "name": "reference",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.basesections.v1.Instrument"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.EntityReference"
+   ],
+   "description": "A section used for referencing an Instrument.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference",
+     "kind": "quantity",
+     "name": "reference"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "InstrumentReference"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 1288
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "description": "A list of all the instruments and their role in this process.",
+     "kind": "subsection",
+     "name": "instruments",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference"
+     },
+     "repeats": true
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "description": "The result of the measurement.",
+     "kind": "subsection",
+     "name": "results",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.basesections.v1.MeasurementResult"
+     },
+     "repeats": true
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "description": "A list of all the samples measured during the measurement.",
+     "kind": "subsection",
+     "name": "samples",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+     },
+     "repeats": true
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.Activity"
+   ],
+   "description": "A planned process with the objective to produce information about the material entity that is the evaluant, by physically examining it or its proxies. [ obi : pppb ]",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+     "kind": "subsection",
+     "name": "instruments"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "location"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "method"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+     "kind": "subsection",
+     "name": "results"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+     "kind": "subsection",
+     "name": "samples"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "subsection",
+     "name": "steps"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "Measurement"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 1280
+   },
+   "attributes": [],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.ActivityResult"
+   ],
+   "description": "A section for the results of an `Measurement` process.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityResult",
+     "kind": "quantity",
+     "name": "name"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.MeasurementResult",
+   "methods": [
+    {
+     "module": "nomad.datamodel.data",
+     "name": "normalize"
+    }
+   ],
+   "name": "MeasurementResult"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 1149
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "Datetime",
+      "display_shape": "[]"
+     },
+     "description": "The date and time when this process was finished.",
+     "kind": "quantity",
+     "name": "end_time",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"nomad.metainfo.data_type.Datetime\", \"type_kind\": \"custom\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "description": "A list of all the instruments and their role in this process.",
+     "kind": "subsection",
+     "name": "instruments",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference"
+     },
+     "repeats": true
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "description": "The samples as that have undergone the process.",
+     "kind": "subsection",
+     "name": "samples",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+     },
+     "repeats": true
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "description": "An ordered list of all the dependant steps that make up this activity.",
+     "kind": "subsection",
+     "name": "steps",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.basesections.v1.ProcessStep"
+     },
+     "repeats": true
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.Activity"
+   ],
+   "description": "A planned process which results in physical changes in a specified input material. [ obi : prs obi : mc obi : fg obi : jf obi : bp ]\n\nSynonyms:\n - preparative method\n - sample preparation\n - sample preparative method\n - material transformations",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Process",
+     "kind": "quantity",
+     "name": "end_time"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Process",
+     "kind": "subsection",
+     "name": "instruments"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "location"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "method"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Process",
+     "kind": "subsection",
+     "name": "samples"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Process",
+     "kind": "subsection",
+     "name": "steps"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.Process",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "Process"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 1131
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float)",
+      "display_shape": "[]"
+     },
+     "description": "The duration time of the process step.",
+     "kind": "quantity",
+     "name": "duration",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float\", \"type_kind\": \"python\"}"
+     },
+     "shape": [],
+     "unit": "second"
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.ActivityStep"
+   ],
+   "description": "Any dependant step of a `Process`.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
+     "kind": "quantity",
+     "name": "comment"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ProcessStep",
+     "kind": "quantity",
+     "name": "duration"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
+     "kind": "quantity",
+     "name": "start_time"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.ProcessStep",
+   "methods": [
+    {
+     "module": "nomad.datamodel.data",
+     "name": "normalize"
+    },
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "to_task"
+    }
+   ],
+   "name": "ProcessStep"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 1857
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "Datetime",
+      "display_shape": "[]"
+     },
+     "description": "A datetime associated with the identified thing. In case of an `Activity`, this\nshould be the starting time and, in case of an `Entity`, the creation time.",
+     "kind": "quantity",
+     "name": "datetime",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"nomad.metainfo.data_type.Datetime\", \"type_kind\": \"custom\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "Alias/short name of the home institute of the owner, i.e. *HZB*.",
+     "kind": "quantity",
+     "name": "institute",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "Full readable id. Ideally a human readable id convention, which is simple,\nunderstandable and still have chances of becoming unique.\nIf the `owner`, `short_name`, `ìnstitute`, and `datetime` are provided, this will\nbe formed automatically by joining these components by an underscore (_).\nSpaces in any of the individual components will be replaced with hyphens (-).\nAn example would be hzb_oah_20200602_4001-08.",
+     "kind": "quantity",
+     "name": "lab_id",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "Alias for the owner of the identified thing. This should be unique within the\ninstitute.",
+     "kind": "quantity",
+     "name": "owner",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "A short name of the the identified thing (e.g. the identifier scribed on the\nsample, the process number, or machine name), e.g. 4001-8, YAG-2-34.\nThis is to be managed and decided internally by the labs, although we recommend\nto avoid the following characters in it: \"_\", \"/\", \"\\\" and \".\".",
+     "kind": "quantity",
+     "name": "short_name",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.data.ArchiveSection"
+   ],
+   "description": "A base section that can be used to generate readable IDs. If the `owner`, `short_name`, `institute`, and `datetime`\nquantities are provided, the lab_id will be automatically created as a combination\nof these four quantities.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
+     "kind": "quantity",
+     "name": "institute"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
+     "kind": "quantity",
+     "name": "owner"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
+     "kind": "quantity",
+     "name": "short_name"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "ReadableIdentifiers"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 411
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "A short descriptive name for the role of this reference.",
+     "kind": "quantity",
+     "name": "name",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "Reference[data.ArchiveSection]",
+      "display_shape": "[]"
+     },
+     "description": "A reference to a NOMAD archive section.",
+     "kind": "quantity",
+     "name": "reference",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.data.ArchiveSection"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.data.ArchiveSection"
+   ],
+   "description": "A section used for referencing another section.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
+     "kind": "quantity",
+     "name": "reference"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
+   "methods": [
+    {
+     "module": "nomad.datamodel.data",
+     "name": "normalize"
+    }
+   ],
+   "name": "SectionReference"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/basesections/v1.py",
+    "source_line": 654
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "description": "A list of all the elements found in the system together and their respective\natomic fraction within the system.",
+     "kind": "subsection",
+     "name": "elemental_composition",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition"
+     },
+     "repeats": true
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.Entity"
+   ],
+   "description": "A base section for any system of materials which is investigated or used to construct other systems.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.System",
+     "kind": "subsection",
+     "name": "elemental_composition"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.basesections.v1.System",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "System"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/plot.py",
+    "source_line": 140
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_int32(int)",
+      "display_shape": "[]"
+     },
+     "description": "Index of figure in the plot selection.",
+     "kind": "quantity",
+     "name": "index",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"int\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "Label shown in the plot selection.",
+     "kind": "quantity",
+     "name": "label",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_bool(bool)",
+      "display_shape": "[]"
+     },
+     "description": "Determines whether the figure is initially open or closed.",
+     "kind": "quantity",
+     "name": "open",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"bool\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [],
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.plot.Figure",
+     "kind": "quantity",
+     "name": "index"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.plot.Figure",
+     "kind": "quantity",
+     "name": "label"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.plot.Figure",
+     "kind": "quantity",
+     "name": "open"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.plot.Figure",
+   "name": "Figure"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/plot.py",
+    "source_line": 187
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "kind": "subsection",
+     "name": "figures",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.plot.PlotlyFigure"
+     },
+     "repeats": true
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.data.ArchiveSection"
+   ],
+   "description": "The PlotSection base section serves as an additional functionality to your sections. This base section is designed to simplify the process of creating various types of\nplots, making it easy to use Plotly Express, Plotly Subplot, and the general Plotly graph objects.\n\nFeatures:\n- Plotly Express: Create simple and quick plots with a high-level, expressive API.\n- Plotly Subplot: Organize multiple plots into subplots for more complex visualizations.\n- General Plotly Graph Objects: Fine-tune your plots by working directly with Plotly's graph objects.\n\nUsage:\n- Inherit from this base section to leverage its plot functionality.\n- Customize your plots using the annotations plotly-express, plotly-subplots, or/and plotly-graph-object.\n\nExample Usage:\n```python\nclass CustomSection(PlotSection, ElnBaseSection, EntryData):\n    m_def = Section()\n    time = Quantity(type=float, shape=['*'], unit='s', a_eln=dict(component='NumberEditQuantity'))\n    substrate_temperature = Quantity(type=float, shape=['*'], unit='K', a_eln=dict(component='NumberEditQuantity'))\n    chamber_pressure = Quantity(type=float, shape=['*'], unit='Pa', a_eln=dict(component='NumberEditQuantity'))\n\n    def normalize(self, archive, logger):\n        super(CustomSection, self).normalize(archive, logger)\n\n        first_line = px.scatter(x=self.time, y=self.substrate_temperature)\n        second_line = px.scatter(x=self.time, y=self.chamber_pressure)\n        figure1 = make_subplots(rows=1, cols=2, shared_yaxes=True)\n        figure1.add_trace(first_line.data[0], row=1, col=1)\n        figure1.add_trace(second_line.data[0], row=1, col=2)\n        figure1.update_layout(height=400, width=716, title_text=\"Creating Subplots in Plotly\")\n        self.figures.append(PlotlyFigure(label='figure 1', figure=figure1.to_plotly_json()))\n\n        figure2 = px.scatter(x=self.substrate_temperature, y=self.chamber_pressure, color=self.chamber_pressure, title=\"Chamber as a function of Temperature\")\n        self.figures.append(PlotlyFigure(label='figure 2', index=1, figure=figure2.to_plotly_json()))\n\n        heatmap_data = [[None, None, None, 12, 13, 14, 15, 16],\n             [None, 1, None, 11, None, None, None, 17],\n             [None, 2, 6, 7, None, None, None, 18],\n             [None, 3, None, 8, None, None, None, 19],\n             [5, 4, 10, 9, None, None, None, 20],\n             [None, None, None, 27, None, None, None, 21],\n             [None, None, None, 26, 25, 24, 23, 22]]\n\n        heatmap = go.Heatmap(z=heatmap_data, showscale=False, connectgaps=True, zsmooth='best')\n        figure3 = go.Figure(data=heatmap)\n        self.figures.append(PlotlyFigure(label='figure 3', index=0, figure=figure3.to_plotly_json()))\n```",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.plot.PlotSection",
+     "kind": "subsection",
+     "name": "figures"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.plot.PlotSection",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.plot",
+     "name": "normalize"
+    }
+   ],
+   "name": "PlotSection"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad/datamodel/metainfo/plot.py",
+    "source_line": 176
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "JSON",
+      "display_shape": "[]"
+     },
+     "description": "Contains the JSON serialization for a plotly figure.",
+     "kind": "quantity",
+     "name": "figure",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"nomad.metainfo.data_type.JSON\", \"type_kind\": \"custom\"}"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.plot.Figure"
+   ],
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.plot.PlotlyFigure",
+     "kind": "quantity",
+     "name": "figure"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.plot.Figure",
+     "kind": "quantity",
+     "name": "index"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.plot.Figure",
+     "kind": "quantity",
+     "name": "label"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.plot.Figure",
+     "kind": "quantity",
+     "name": "open"
+    }
+   ],
+   "id": "nomad.datamodel.metainfo.plot.PlotlyFigure",
+   "name": "PlotlyFigure"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/general.py",
+    "source_line": 66
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "The readable identifier for the activity.",
+     "kind": "quantity",
+     "name": "lab_id",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "Reference[v1.Activity]",
+      "display_shape": "[]"
+     },
+     "description": "A reference to a NOMAD `Activity` entry.",
+     "kind": "quantity",
+     "name": "reference",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.basesections.v1.Activity"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.SectionReference"
+   ],
+   "description": "A section used for referencing an Activity.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.general.ActivityReference",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.general.ActivityReference",
+     "kind": "quantity",
+     "name": "reference"
+    }
+   ],
+   "id": "nomad_measurements.general.ActivityReference",
+   "methods": [
+    {
+     "module": "nomad_measurements.general",
+     "name": "normalize"
+    }
+   ],
+   "name": "ActivityReference"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/general.py",
+    "source_line": 142
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_card": "0..1"
+     },
+     "description": "A reference to the process during which the measurement occurred.",
+     "kind": "subsection",
+     "name": "process",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.general.ProcessReference"
+     },
+     "repeats": false
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.Measurement"
+   ],
+   "description": "A section used for a measurement performed in-situ during a process.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+     "kind": "subsection",
+     "name": "instruments"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "location"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "method"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.general.InSituMeasurement",
+     "kind": "subsection",
+     "name": "process"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+     "kind": "subsection",
+     "name": "results"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+     "kind": "subsection",
+     "name": "samples"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "subsection",
+     "name": "steps"
+    }
+   ],
+   "id": "nomad_measurements.general.InSituMeasurement",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "InSituMeasurement"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/general.py",
+    "source_line": 127
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "Reference[v1.Process]",
+      "display_shape": "[]"
+     },
+     "description": "A reference to a NOMAD `Process` entry.",
+     "kind": "quantity",
+     "name": "reference",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.basesections.v1.Process"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad_measurements.general.ActivityReference"
+   ],
+   "description": "A section used for referencing a Process.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.general.ActivityReference",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.general.ProcessReference",
+     "kind": "quantity",
+     "name": "reference"
+    }
+   ],
+   "id": "nomad_measurements.general.ProcessReference",
+   "methods": [
+    {
+     "module": "nomad_measurements.general",
+     "name": "normalize"
+    }
+   ],
+   "name": "ProcessReference"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 402
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "Description of the accessory.",
+     "kind": "quantity",
+     "name": "description",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "Name of the accessory.",
+     "kind": "quantity",
+     "name": "name",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.data.ArchiveSection"
+   ],
+   "description": "Section to specify settings of a custom accessory used in transmission spectroscopy instruments.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Accessory",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Accessory",
+     "kind": "quantity",
+     "name": "name"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.Accessory",
+   "methods": [
+    {
+     "module": "nomad.datamodel.data",
+     "name": "normalize"
+    }
+   ],
+   "name": "Accessory"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 476
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float64)",
+      "display_shape": "[]"
+     },
+     "description": "Diameter of the aperture.",
+     "kind": "quantity",
+     "name": "diameter",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float64\", \"type_kind\": \"numpy\"}"
+     },
+     "shape": [],
+     "unit": "millimeter"
+    }
+   ],
+   "bases": [
+    "nomad_measurements.transmission.schema.Accessory"
+   ],
+   "description": "Custom aperture placed in front of the sample inside the sample compartment.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Accessory",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Aperture",
+     "kind": "quantity",
+     "name": "diameter"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Accessory",
+     "kind": "quantity",
+     "name": "name"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.Aperture",
+   "methods": [
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "normalize"
+    }
+   ],
+   "name": "Aperture"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 750
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float)",
+      "display_shape": "[]"
+     },
+     "description": "Value of reference beam attenuation ranging from 0 to 1.",
+     "kind": "quantity",
+     "name": "reference_beam_attenuation",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float\", \"type_kind\": \"python\"}"
+     },
+     "shape": [],
+     "unit": "dimensionless"
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float)",
+      "display_shape": "[]"
+     },
+     "description": "Value of sample beam attenuation ranging from 0 to 1.",
+     "kind": "quantity",
+     "name": "sample_beam_attenuation",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float\", \"type_kind\": \"python\"}"
+     },
+     "shape": [],
+     "unit": "dimensionless"
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.data.ArchiveSection"
+   ],
+   "description": "Settings of the attenuator used for the sample and reference light beam.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.AttenuatorSettings",
+     "kind": "quantity",
+     "name": "reference_beam_attenuation"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.AttenuatorSettings",
+     "kind": "quantity",
+     "name": "sample_beam_attenuation"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.AttenuatorSettings",
+   "methods": [
+    {
+     "module": "nomad.datamodel.data",
+     "name": "normalize"
+    }
+   ],
+   "name": "AttenuatorSettings"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 373
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "Crystallographic orientation of the sample surface on which the light beam is\nincident.",
+     "kind": "quantity",
+     "name": "crystal_orientation",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad_measurements.transmission.schema.TransmissionSampleReference"
+   ],
+   "description": "Reference to the sample used in the transmission measurement. Additionally, it includes specific properties for crystallographic samples.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.CrystallographicTransmissionSampleReference",
+     "kind": "quantity",
+     "name": "crystal_orientation"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.TransmissionSampleReference",
+     "kind": "quantity",
+     "name": "geometric_path_length"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.TransmissionSampleReference",
+     "kind": "quantity",
+     "name": "reference"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.CrystallographicTransmissionSampleReference",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "CrystallographicTransmissionSampleReference"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 86
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "Type of the detector used in the instrument. Some of the popular detectors are:\n| Detector          | Description          |\n|-------------------|----------------------|\n| **PMT**           | Photomultiplier Tube detector used for the Ultra-Violet (UV) or visible range.|\n| **InGaAs**        | Indium Gallium Arsenide detector used for Near-Infra-red (NIR) range.|\n| **PbS**           | Lead Sulphide detector used for Infrared (IR) range.|",
+     "kind": "quantity",
+     "name": "type",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.Entity"
+   ],
+   "description": "Light detector used in the transmission spectroscopy instruments.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Detector",
+     "kind": "quantity",
+     "name": "type"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.Detector",
+   "methods": [
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "normalize"
+    }
+   ],
+   "name": "Detector"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 643
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float64)",
+      "display_shape": "[]"
+     },
+     "description": "Gain factor of the detector used over a wavelength range.",
+     "kind": "quantity",
+     "name": "gain",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float64\", \"type_kind\": \"numpy\"}"
+     },
+     "shape": [],
+     "unit": "dimensionless"
+    }
+   ],
+   "bases": [
+    "nomad_measurements.transmission.schema.SettingOverWavelengthRange"
+   ],
+   "description": "Gain factor of the detector used in transmission spectrophotometry over a range of wavelength.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.DetectorGain",
+     "kind": "quantity",
+     "name": "gain"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "wavelength_lower_limit"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "wavelength_upper_limit"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.DetectorGain",
+   "methods": [
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "normalize"
+    }
+   ],
+   "name": "DetectorGain"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 669
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float64)",
+      "display_shape": "[]"
+     },
+     "description": "Integration time of the detector used in the given wavelength range.",
+     "kind": "quantity",
+     "name": "integration_time",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float64\", \"type_kind\": \"numpy\"}"
+     },
+     "shape": [],
+     "unit": "second"
+    }
+   ],
+   "bases": [
+    "nomad_measurements.transmission.schema.SettingOverWavelengthRange"
+   ],
+   "description": "Integration time of the detector used in transmission spectrophotometry over a wavelength range.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.DetectorIntegrationTime",
+     "kind": "quantity",
+     "name": "integration_time"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "wavelength_lower_limit"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "wavelength_upper_limit"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.DetectorIntegrationTime",
+   "methods": [
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "normalize"
+    }
+   ],
+   "name": "DetectorIntegrationTime"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 700
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "Reference[schema.Detector]",
+      "display_shape": "[]"
+     },
+     "description": "Detector used in the current wavelength range",
+     "kind": "quantity",
+     "name": "detector",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.Detector"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad_measurements.transmission.schema.SettingOverWavelengthRange"
+   ],
+   "description": "Settings of the detector used in transmission spectrophotometry instruments.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.DetectorSettings",
+     "kind": "quantity",
+     "name": "detector"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "wavelength_lower_limit"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "wavelength_upper_limit"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.DetectorSettings",
+   "methods": [
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "normalize"
+    }
+   ],
+   "name": "DetectorSettings"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 1002
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "File generated by the instrument containing data and metadata.",
+     "kind": "quantity",
+     "name": "data_file",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_card": "0..1"
+     },
+     "kind": "subsection",
+     "name": "measurement_identifiers",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers"
+     },
+     "repeats": false
+    }
+   ],
+   "bases": [
+    "nomad_measurements.transmission.schema.UVVisNirTransmission",
+    "nomad.datamodel.metainfo.plot.PlotSection",
+    "nomad.datamodel.data.EntryData"
+   ],
+   "description": "Entry section for UVVisNirTransmission. Handles the population of the schema and plotting. Data is added either through manual input in the GUI or by parsing\nthe measurement files coming from the instrument.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.ELNUVVisNirTransmission",
+     "kind": "quantity",
+     "name": "data_file"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.plot.PlotSection",
+     "kind": "subsection",
+     "name": "figures"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+     "kind": "subsection",
+     "name": "instruments"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "location"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.ELNUVVisNirTransmission",
+     "kind": "subsection",
+     "name": "measurement_identifiers"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
+     "kind": "quantity",
+     "name": "method"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
+     "kind": "subsection",
+     "name": "results"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
+     "kind": "subsection",
+     "name": "samples"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "subsection",
+     "name": "steps"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
+     "kind": "subsection",
+     "name": "transmission_settings"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
+     "kind": "quantity",
+     "name": "user"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.ELNUVVisNirTransmission",
+   "methods": [
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "connect_instrument"
+    },
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "create_instrument_entry"
+    },
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "get_instrument_reference"
+    },
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "get_read_write_functions"
+    },
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "normalize"
+    },
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "write_transmission_data"
+    }
+   ],
+   "name": "ELNUVVisNirTransmission"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 191
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float)",
+      "display_shape": "[]"
+     },
+     "description": "Number of grooves per unit length of the grating.",
+     "kind": "quantity",
+     "name": "groove_density",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float\", \"type_kind\": \"python\"}"
+     },
+     "shape": [],
+     "unit": "1 / meter"
+    }
+   ],
+   "bases": [
+    "nomad_measurements.transmission.schema.Monochromator"
+   ],
+   "description": "Grating monochromator used in transmission spectroscopy instruments.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.GratingMonochromator",
+     "kind": "quantity",
+     "name": "groove_density"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.GratingMonochromator",
+   "methods": [
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "normalize"
+    }
+   ],
+   "name": "GratingMonochromator"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 143
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "Type of the lamp used. Some of the popular materials are:\n| Detector          | Description          |\n|-------------------|----------------------|\n| **Deuterium**     | Used for light generation in the UV range (160 nm to 400 nm).|\n| **Tungsten**      | Used for light generation in the near-infrared range (320nm to 2500nm).|",
+     "kind": "quantity",
+     "name": "type",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad_measurements.transmission.schema.LightSource"
+   ],
+   "description": "Lamp used in transmission spectroscopy instruments.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.LightSource",
+     "kind": "quantity",
+     "name": "power"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Lamp",
+     "kind": "quantity",
+     "name": "type"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.Lamp",
+   "methods": [
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "normalize"
+    }
+   ],
+   "name": "Lamp"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 725
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "Reference[schema.Lamp]",
+      "display_shape": "[]"
+     },
+     "description": "Lamp used in the current wavelength range.",
+     "kind": "quantity",
+     "name": "lamp",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.Lamp"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad_measurements.transmission.schema.SettingOverWavelengthRange"
+   ],
+   "description": "Settings of the lamp used in transmission spectrophotometry instruments.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.LampSettings",
+     "kind": "quantity",
+     "name": "lamp"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "wavelength_lower_limit"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "wavelength_upper_limit"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.LampSettings",
+   "methods": [
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "normalize"
+    }
+   ],
+   "name": "LampSettings"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 118
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float64)",
+      "display_shape": "[]"
+     },
+     "description": "Power of the light source.",
+     "kind": "quantity",
+     "name": "power",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float64\", \"type_kind\": \"numpy\"}"
+     },
+     "shape": [],
+     "unit": "watt"
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.Entity"
+   ],
+   "description": "Section to bring together different types of light sources.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.LightSource",
+     "kind": "quantity",
+     "name": "power"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.LightSource",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "LightSource"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 174
+   },
+   "attributes": [],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.Entity"
+   ],
+   "description": "Monochromator used to select a narrow band of wavelengths from the light source in transmission spectroscopy instruments.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.Monochromator",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "Monochromator"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 619
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "Reference[schema.Monochromator]",
+      "display_shape": "[]"
+     },
+     "description": "Monochromator used in the current wavelength range.",
+     "kind": "quantity",
+     "name": "monochromator",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.Monochromator"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad_measurements.transmission.schema.SettingOverWavelengthRange"
+   ],
+   "description": "Monochromator used over a wavelength range.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.MonochromatorSettings",
+     "kind": "quantity",
+     "name": "monochromator"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "wavelength_lower_limit"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "wavelength_upper_limit"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.MonochromatorSettings",
+   "methods": [
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "normalize"
+    }
+   ],
+   "name": "MonochromatorSettings"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 582
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float64)",
+      "display_shape": "[]"
+     },
+     "description": "Slit width value.",
+     "kind": "quantity",
+     "name": "slit_width",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float64\", \"type_kind\": \"numpy\"}"
+     },
+     "shape": [],
+     "unit": "nanometer"
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_bool(bool)",
+      "display_shape": "[]"
+     },
+     "description": "True if slit width servo is on, i.e., the system monitors the reference\nbeam energy and adjusts the slits to avoid over-saturation of the detectors.",
+     "kind": "quantity",
+     "name": "slit_width_servo",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"bool\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad_measurements.transmission.schema.SettingOverWavelengthRange"
+   ],
+   "description": "Monochromator slit width setting over a wavelength range.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.MonochromatorSlitWidth",
+     "kind": "quantity",
+     "name": "slit_width"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.MonochromatorSlitWidth",
+     "kind": "quantity",
+     "name": "slit_width_servo"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "wavelength_lower_limit"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "wavelength_upper_limit"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.MonochromatorSlitWidth",
+   "methods": [
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "normalize"
+    }
+   ],
+   "name": "MonochromatorSlitWidth"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 257
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "kind": "subsection",
+     "name": "monochromators",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.GratingMonochromator"
+     },
+     "repeats": true
+    }
+   ],
+   "bases": [
+    "nomad_measurements.transmission.schema.Spectrophotometer"
+   ],
+   "description": "Entry section for Perkin Elmers Lambda series transmission spectrophotometer.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
+     "kind": "subsection",
+     "name": "detectors"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
+     "kind": "subsection",
+     "name": "light_sources"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.PerkinElmersLambdaSpectrophotometer",
+     "kind": "subsection",
+     "name": "monochromators"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
+     "kind": "quantity",
+     "name": "serial_number"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
+     "kind": "quantity",
+     "name": "software_version"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.PerkinElmersLambdaSpectrophotometer",
+   "methods": [
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "normalize"
+    }
+   ],
+   "name": "PerkinElmersLambdaSpectrophotometer"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 430
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "Enum",
+      "display_shape": "[]",
+      "source_type": "{\"type_data\": [\"Depolarizer\", \"Polarizer\"], \"type_kind\": \"enum\"}"
+     },
+     "description": "Mode of the accessory: either polarizer or depolarizer.",
+     "kind": "quantity",
+     "name": "mode",
+     "range": {
+      "kind": "enum",
+      "name": "nomad_measurements.transmission.schema.PolDepol.mode"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float64)",
+      "display_shape": "[]"
+     },
+     "description": "Value of polarization angle when polarizer mode is used.",
+     "kind": "quantity",
+     "name": "polarizer_angle",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float64\", \"type_kind\": \"numpy\"}"
+     },
+     "shape": [],
+     "unit": "degree"
+    }
+   ],
+   "bases": [
+    "nomad_measurements.transmission.schema.Accessory"
+   ],
+   "description": "Accessory to polarize or depolarize the light beam entering the sample chamber.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Accessory",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.PolDepol",
+     "kind": "quantity",
+     "name": "mode"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Accessory",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.PolDepol",
+     "kind": "quantity",
+     "name": "polarizer_angle"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.PolDepol",
+   "methods": [
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "normalize"
+    }
+   ],
+   "name": "PolDepol"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 1477
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "Reference[schema.ELNUVVisNirTransmission]",
+      "display_shape": "[]"
+     },
+     "kind": "quantity",
+     "name": "measurement",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.ELNUVVisNirTransmission"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.data.EntryData"
+   ],
+   "description": "Entry section for transmission spectrophotometry data file.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.RawFileTransmissionData",
+     "kind": "quantity",
+     "name": "measurement"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.RawFileTransmissionData",
+   "methods": [
+    {
+     "module": "nomad.datamodel.data",
+     "name": "normalize"
+    }
+   ],
+   "name": "RawFileTransmissionData"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 510
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "Short description containing wavelength range.",
+     "kind": "quantity",
+     "name": "name",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float64)",
+      "display_shape": "[]"
+     },
+     "description": "Lower limit of wavelength range.",
+     "kind": "quantity",
+     "name": "wavelength_lower_limit",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float64\", \"type_kind\": \"numpy\"}"
+     },
+     "shape": [],
+     "unit": "nanometer"
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float64)",
+      "display_shape": "[]"
+     },
+     "description": "Upper limit of wavelength range.",
+     "kind": "quantity",
+     "name": "wavelength_upper_limit",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float64\", \"type_kind\": \"numpy\"}"
+     },
+     "shape": [],
+     "unit": "nanometer"
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.data.ArchiveSection"
+   ],
+   "description": "An instrument setting set over a wavelength range.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "wavelength_lower_limit"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+     "kind": "quantity",
+     "name": "wavelength_upper_limit"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+   "methods": [
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "normalize"
+    }
+   ],
+   "name": "SettingOverWavelengthRange"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 220
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "Instrument serial number.",
+     "kind": "quantity",
+     "name": "serial_number",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "Software/firmware version.",
+     "kind": "quantity",
+     "name": "software_version",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "kind": "subsection",
+     "name": "detectors",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.Detector"
+     },
+     "repeats": true
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "kind": "subsection",
+     "name": "light_sources",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.Lamp"
+     },
+     "repeats": true
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "kind": "subsection",
+     "name": "monochromators",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.Monochromator"
+     },
+     "repeats": true
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.Instrument",
+    "nomad.datamodel.data.EntryData"
+   ],
+   "description": "Entry section for transmission spectrophotometer. When extending the section for a specific instrument, the components (detectors,\nlight sources, and monochromators) should be instantiated in the `self.normalize`\nmethod based on what components are physically available in the instrument.\nThe component list should be populated such that components used in lower wavelength\nranges are listed first. For instance, PMT detector should be listed before InGaAs.\nTake a look at the `PerkinElmersLambdaSpectrophotometer` class for an example.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
+     "kind": "subsection",
+     "name": "detectors"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
+     "kind": "subsection",
+     "name": "light_sources"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
+     "kind": "subsection",
+     "name": "monochromators"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
+     "kind": "quantity",
+     "name": "serial_number"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.Spectrophotometer",
+     "kind": "quantity",
+     "name": "software_version"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.Spectrophotometer",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "Spectrophotometer"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 329
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float64)",
+      "display_shape": "[]"
+     },
+     "description": "Length of the sample along the direction of the light beam, i.e., the Euclidean\ndistance between the entry and exit points of the light beam on the sample.\nThis is different from the optical path length, which depends on the\nwavelength of light beam, refractive index, and the geometric path length.",
+     "kind": "quantity",
+     "name": "geometric_path_length",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float64\", \"type_kind\": \"numpy\"}"
+     },
+     "shape": [],
+     "unit": "meter"
+    },
+    {
+     "annotations": {
+      "display_dtype": "Reference[v1.CompositeSystem]",
+      "display_shape": "[]"
+     },
+     "description": "A reference to the sample used.",
+     "kind": "quantity",
+     "name": "reference",
+     "range": {
+      "kind": "class",
+      "name": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem"
+     },
+     "shape": []
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+   ],
+   "description": "Reference to the sample used in the transmission measurement. Additionally, it contains specific sample properties important for transmission measurements.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.TransmissionSampleReference",
+     "kind": "quantity",
+     "name": "geometric_path_length"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.TransmissionSampleReference",
+     "kind": "quantity",
+     "name": "reference"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.TransmissionSampleReference",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "TransmissionSampleReference"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 967
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "A short consistent handle for the applied method.",
+     "kind": "quantity",
+     "name": "method",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_str(str)",
+      "display_shape": "[]"
+     },
+     "description": "Name of user or analyst.",
+     "kind": "quantity",
+     "name": "user",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"str\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "description": "The result of the UV-Vis-NIR measurement.",
+     "kind": "subsection",
+     "name": "results",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.UVVisNirTransmissionResult"
+     },
+     "repeats": true
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "description": "A list of all the samples measured during the measurement.",
+     "kind": "subsection",
+     "name": "samples",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.TransmissionSampleReference"
+     },
+     "repeats": true
+    },
+    {
+     "annotations": {
+      "display_card": "0..1"
+     },
+     "kind": "subsection",
+     "name": "transmission_settings",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings"
+     },
+     "repeats": false
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.Measurement"
+   ],
+   "description": "Section for Transmission Spectroscopy measurement in UV, visible, and near IR ranges of wavelength.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+     "kind": "subsection",
+     "name": "instruments"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "quantity",
+     "name": "location"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
+     "kind": "quantity",
+     "name": "method"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
+     "kind": "subsection",
+     "name": "results"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
+     "kind": "subsection",
+     "name": "samples"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.Activity",
+     "kind": "subsection",
+     "name": "steps"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
+     "kind": "subsection",
+     "name": "transmission_settings"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
+     "kind": "quantity",
+     "name": "user"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.UVVisNirTransmission",
+   "methods": [
+    {
+     "module": "nomad.datamodel.metainfo.basesections.v1",
+     "name": "normalize"
+    }
+   ],
+   "name": "UVVisNirTransmission"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 778
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float64)",
+      "display_shape": "['*']"
+     },
+     "description": "Calculated absorbance using the relation A = -log(T), where T denotes\ntransmittance.",
+     "kind": "quantity",
+     "name": "absorbance",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float64\", \"type_kind\": \"numpy\"}"
+     },
+     "shape": [
+      "*"
+     ],
+     "unit": "dimensionless"
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_int32(int)",
+      "display_shape": "['*']"
+     },
+     "description": "Array of indices used for plotting quantity vectors.",
+     "kind": "quantity",
+     "name": "array_index",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"int\", \"type_kind\": \"python\"}"
+     },
+     "shape": [
+      "*"
+     ]
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float64)",
+      "display_shape": "['*']"
+     },
+     "description": "Measured transmittance ranging from 0 to 1.",
+     "kind": "quantity",
+     "name": "transmittance",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float64\", \"type_kind\": \"numpy\"}"
+     },
+     "shape": [
+      "*"
+     ],
+     "unit": "dimensionless"
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float64)",
+      "display_shape": "['*']"
+     },
+     "description": "Wavelength values for which the measurement was conducted.",
+     "kind": "quantity",
+     "name": "wavelength",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float64\", \"type_kind\": \"numpy\"}"
+     },
+     "shape": [
+      "*"
+     ],
+     "unit": "meter"
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.metainfo.basesections.v1.MeasurementResult"
+   ],
+   "description": "Section for the results of the Transmission Spectroscopy measurement in UV, visible, and near IR ranges of wavelength.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionResult",
+     "kind": "quantity",
+     "name": "absorbance"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionResult",
+     "kind": "quantity",
+     "name": "array_index"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v1.ActivityResult",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionResult",
+     "kind": "quantity",
+     "name": "transmittance"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionResult",
+     "kind": "quantity",
+     "name": "wavelength"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.UVVisNirTransmissionResult",
+   "methods": [
+    {
+     "module": "nomad_measurements.transmission.schema",
+     "name": "generate_plots"
+    },
+    {
+     "module": "nomad.datamodel.data",
+     "name": "normalize"
+    }
+   ],
+   "name": "UVVisNirTransmissionResult"
+  },
+  {
+   "annotations": {
+    "source_file": "nomad_measurements/transmission/schema.py",
+    "source_line": 877
+   },
+   "attributes": [
+    {
+     "annotations": {
+      "display_dtype": "m_bool(bool)",
+      "display_shape": "[]"
+     },
+     "description": "True if the common beam depolarizer (CBD) is on, else False. CBD is an optional accessory used to depolarize the radiation coming from the monochromator.",
+     "kind": "quantity",
+     "name": "common_beam_depolarizer",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"bool\", \"type_kind\": \"python\"}"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "m_float64(float)",
+      "display_shape": "[]"
+     },
+     "description": "Mask setting for the common beam ranging from 0 to 1.1 means the mask is fully open and the beam passes completely. 0 means the mask is closed and no light passes.",
+     "kind": "quantity",
+     "name": "common_beam_mask",
+     "range": {
+      "kind": "datatype",
+      "name": "{\"type_data\": \"float\", \"type_kind\": \"python\"}"
+     },
+     "shape": [],
+     "unit": "dimensionless"
+    },
+    {
+     "annotations": {
+      "display_dtype": "Enum",
+      "display_shape": "[]",
+      "source_type": "{\"type_data\": [\"150-mm Integrating Sphere\", \"Three Detector Module\", \"Two Detector Module\"], \"type_kind\": \"enum\"}"
+     },
+     "description": "Modules containing multiple detectors for different wavelength ranges.\n| Detector Module                      | Description          |\n|--------------------------------------|----------------------|\n| **Three Detector Module**            | Installed as standard module on Perkin-Elmer Lambda 1050 WB and NB spectrophotometers. Contains three detectors for different wavelength ranges: PMT, InGaAs, PbS. |\n| **Two Detector Module**              | Installed on Perkin-Elmer Lambda 750, 900, 950 spectrophotometers. Contains two detectors for different wavelength ranges: PMT, PbS. |\n| **150-mm Integrating Sphere**        | Includes an integrating sphere with a diameter of 150 mm which is equipped with PMT (R928) and InGaAs detector. The PMT covers 200-860.8 nm and the InGaAs detector covers 860.8-2500 nm. |",
+     "kind": "quantity",
+     "name": "detector_module",
+     "range": {
+      "kind": "enum",
+      "name": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings.detector_module"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_dtype": "Enum",
+      "display_shape": "[]",
+      "source_type": "{\"type_data\": [\"Front\", \"Rear\"], \"type_kind\": \"enum\"}"
+     },
+     "description": "Position of the sample beam: either the front or the back of the sample chamber.",
+     "kind": "quantity",
+     "name": "sample_beam_position",
+     "range": {
+      "kind": "enum",
+      "name": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings.sample_beam_position"
+     },
+     "shape": []
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "kind": "subsection",
+     "name": "accessories",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.Accessory"
+     },
+     "repeats": true
+    },
+    {
+     "annotations": {
+      "display_card": "0..1"
+     },
+     "kind": "subsection",
+     "name": "attenuator",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.AttenuatorSettings"
+     },
+     "repeats": false
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "kind": "subsection",
+     "name": "detector_gain",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.DetectorGain"
+     },
+     "repeats": true
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "kind": "subsection",
+     "name": "detector_integration_time",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.DetectorIntegrationTime"
+     },
+     "repeats": true
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "kind": "subsection",
+     "name": "detectors",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.DetectorSettings"
+     },
+     "repeats": true
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "kind": "subsection",
+     "name": "light_sources",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.LampSettings"
+     },
+     "repeats": true
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "kind": "subsection",
+     "name": "monochromator_slit_width",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.MonochromatorSlitWidth"
+     },
+     "repeats": true
+    },
+    {
+     "annotations": {
+      "display_card": "0..*"
+     },
+     "kind": "subsection",
+     "name": "monochromators",
+     "range": {
+      "kind": "class",
+      "name": "nomad_measurements.transmission.schema.MonochromatorSettings"
+     },
+     "repeats": true
+    }
+   ],
+   "bases": [
+    "nomad.datamodel.data.ArchiveSection"
+   ],
+   "description": "Section for the settings of the Transmission Spectroscopy measurement in UV, visible, and near IR ranges of wavelength.",
+   "effective_attributes": [
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "subsection",
+     "name": "accessories"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "subsection",
+     "name": "attenuator"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "quantity",
+     "name": "common_beam_depolarizer"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "quantity",
+     "name": "common_beam_mask"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "subsection",
+     "name": "detector_gain"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "subsection",
+     "name": "detector_integration_time"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "quantity",
+     "name": "detector_module"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "subsection",
+     "name": "detectors"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "subsection",
+     "name": "light_sources"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "subsection",
+     "name": "monochromator_slit_width"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "subsection",
+     "name": "monochromators"
+    },
+    {
+     "declaring_class_id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+     "kind": "quantity",
+     "name": "sample_beam_position"
+    }
+   ],
+   "id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings",
+   "methods": [
+    {
+     "module": "nomad.datamodel.data",
+     "name": "normalize"
+    }
+   ],
+   "name": "UVVisNirTransmissionSettings"
+  }
+ ],
+ "contract_version": "1.0",
+ "enums": [
+  {
+   "id": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition.element",
+   "values": [
+    "Ac",
+    "Ag",
+    "Al",
+    "Am",
+    "Ar",
+    "As",
+    "At",
+    "Au",
+    "B",
+    "Ba",
+    "Be",
+    "Bh",
+    "Bi",
+    "Bk",
+    "Br",
+    "C",
+    "Ca",
+    "Cd",
+    "Ce",
+    "Cf",
+    "Cl",
+    "Cm",
+    "Cn",
+    "Co",
+    "Cr",
+    "Cs",
+    "Cu",
+    "Db",
+    "Ds",
+    "Dy",
+    "Er",
+    "Es",
+    "Eu",
+    "F",
+    "Fe",
+    "Fl",
+    "Fm",
+    "Fr",
+    "Ga",
+    "Gd",
+    "Ge",
+    "H",
+    "He",
+    "Hf",
+    "Hg",
+    "Ho",
+    "Hs",
+    "I",
+    "In",
+    "Ir",
+    "K",
+    "Kr",
+    "La",
+    "Li",
+    "Lr",
+    "Lu",
+    "Lv",
+    "Mc",
+    "Md",
+    "Mg",
+    "Mn",
+    "Mo",
+    "Mt",
+    "N",
+    "Na",
+    "Nb",
+    "Nd",
+    "Ne",
+    "Nh",
+    "Ni",
+    "No",
+    "Np",
+    "O",
+    "Og",
+    "Os",
+    "P",
+    "Pa",
+    "Pb",
+    "Pd",
+    "Pm",
+    "Po",
+    "Pr",
+    "Pt",
+    "Pu",
+    "Ra",
+    "Rb",
+    "Re",
+    "Rf",
+    "Rg",
+    "Rh",
+    "Rn",
+    "Ru",
+    "S",
+    "Sb",
+    "Sc",
+    "Se",
+    "Sg",
+    "Si",
+    "Sm",
+    "Sn",
+    "Sr",
+    "Ta",
+    "Tb",
+    "Tc",
+    "Te",
+    "Th",
+    "Ti",
+    "Tl",
+    "Tm",
+    "Ts",
+    "U",
+    "V",
+    "W",
+    "Xe",
+    "Y",
+    "Yb",
+    "Zn",
+    "Zr"
+   ]
+  },
+  {
+   "id": "nomad_measurements.transmission.schema.PolDepol.mode",
+   "values": [
+    "Depolarizer",
+    "Polarizer"
+   ]
+  },
+  {
+   "id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings.detector_module",
+   "values": [
+    "150-mm Integrating Sphere",
+    "Three Detector Module",
+    "Two Detector Module"
+   ]
+  },
+  {
+   "id": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings.sample_beam_position",
+   "values": [
+    "Front",
+    "Rear"
+   ]
+  }
+ ],
+ "modules": [
+  {
+   "classes": [
+    "nomad.datamodel.metainfo.basesections.v1.Activity",
+    "nomad.datamodel.metainfo.basesections.v1.Measurement",
+    "nomad.datamodel.metainfo.basesections.v1.Process",
+    "nomad.datamodel.metainfo.basesections.v1.SectionReference",
+    "nomad_measurements.general.ActivityReference",
+    "nomad_measurements.general.InSituMeasurement",
+    "nomad_measurements.general.ProcessReference"
+   ],
+   "name": "nomad_measurements.general"
+  },
+  {
+   "classes": [
+    "nomad.datamodel.data.ArchiveSection",
+    "nomad.datamodel.data.EntryData",
+    "nomad.datamodel.metainfo.basesections.v1.CompositeSystem",
+    "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference",
+    "nomad.datamodel.metainfo.basesections.v1.Entity",
+    "nomad.datamodel.metainfo.basesections.v1.Instrument",
+    "nomad.datamodel.metainfo.basesections.v1.InstrumentReference",
+    "nomad.datamodel.metainfo.basesections.v1.Measurement",
+    "nomad.datamodel.metainfo.basesections.v1.MeasurementResult",
+    "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
+    "nomad.datamodel.metainfo.plot.PlotSection",
+    "nomad.datamodel.metainfo.plot.PlotlyFigure",
+    "nomad_measurements.transmission.schema.Accessory",
+    "nomad_measurements.transmission.schema.Aperture",
+    "nomad_measurements.transmission.schema.AttenuatorSettings",
+    "nomad_measurements.transmission.schema.CrystallographicTransmissionSampleReference",
+    "nomad_measurements.transmission.schema.Detector",
+    "nomad_measurements.transmission.schema.DetectorGain",
+    "nomad_measurements.transmission.schema.DetectorIntegrationTime",
+    "nomad_measurements.transmission.schema.DetectorSettings",
+    "nomad_measurements.transmission.schema.ELNUVVisNirTransmission",
+    "nomad_measurements.transmission.schema.GratingMonochromator",
+    "nomad_measurements.transmission.schema.Lamp",
+    "nomad_measurements.transmission.schema.LampSettings",
+    "nomad_measurements.transmission.schema.LightSource",
+    "nomad_measurements.transmission.schema.Monochromator",
+    "nomad_measurements.transmission.schema.MonochromatorSettings",
+    "nomad_measurements.transmission.schema.MonochromatorSlitWidth",
+    "nomad_measurements.transmission.schema.PerkinElmersLambdaSpectrophotometer",
+    "nomad_measurements.transmission.schema.PolDepol",
+    "nomad_measurements.transmission.schema.RawFileTransmissionData",
+    "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+    "nomad_measurements.transmission.schema.Spectrophotometer",
+    "nomad_measurements.transmission.schema.TransmissionSampleReference",
+    "nomad_measurements.transmission.schema.UVVisNirTransmission",
+    "nomad_measurements.transmission.schema.UVVisNirTransmissionResult",
+    "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings"
+   ],
+   "name": "nomad_measurements.transmission.schema"
+  }
+ ],
+ "report": [
+  {
+   "path": "nomad.datamodel.data.EntryDataCategory",
+   "reason": "not a section: its definition is a Category",
+   "status": "skipped"
+  },
+  {
+   "path": "nomad_measurements.general.NOMADMeasurementsCategory",
+   "reason": "not a section: its definition is a Category",
+   "status": "skipped"
+  }
+ ],
+ "source": {
+  "commit": "9e9eb3311ae9038abae39a1be1d20298cc242f30",
+  "dependencies": {
+   "nomad-lab": "1.4.3",
+   "numpy": "2.5.3"
+  },
+  "module": "nomad_measurements",
+  "name": "nomad-measurements",
+  "version": "1.3.8"
+ },
+ "usage": {
+  "nomad.datamodel.data.ArchiveSection": [
+   {
+    "doc": "Is called during entry normalization.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.data",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad.datamodel.data.EntryData": [
+   {
+    "doc": "Is called during entry normalization.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.data",
+    "qualname": "nomad.datamodel.data.EntryData.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.Activity": [
+   {
+    "doc": "- Ensures the `results.eln.methods` list is initialized and appends the method or section name.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.Activity.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.ActivityResult": [
+   {
+    "doc": "Is called during entry normalization.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.data",
+    "qualname": "nomad.datamodel.data.ActivityResult.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.ActivityStep": [
+   {
+    "doc": "Is called during entry normalization.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.data",
+    "qualname": "nomad.datamodel.data.ActivityStep.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.BaseSection": [
+   {
+    "doc": "- If the instance is of type `EntryData`, it sets the archive's entry name based on the instance's name.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.BaseSection.normalize",
+    "short_name": "normalize"
+   },
+   {
+    "kind": "utility_function",
+    "module": "nomad.common",
+    "qualname": "nomad.common.now",
+    "short_name": "now"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.Component": [
+   {
+    "doc": "Is called during entry normalization.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.data",
+    "qualname": "nomad.datamodel.data.Component.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.CompositeSystem": [
+   {
+    "doc": "If the elemental composition list is empty, the normalizer will iterate over the components and extract all the elements for populating the elemental composition list.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem.normalize",
+    "short_name": "normalize"
+   },
+   {
+    "doc": "Private static method for converting list of ElementalComposition objects to dictionary of element masses with the element symbol as key and mass as value.",
+    "kind": "utility_function",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem._atomic_to_mass",
+    "short_name": "_atomic_to_mass"
+   },
+   {
+    "doc": "Private static method for converting dictionary of elements with their masses to a list of ElementalComposition objects containing atomic fractions.",
+    "kind": "utility_function",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem._mass_to_atomic",
+    "short_name": "_mass_to_atomic"
+   },
+   {
+    "doc": "Help function for generating list of `ElementalComposition` instances from `nomad.atomutils.Formula` item",
+    "kind": "utility_function",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.elemental_composition_from_formula",
+    "short_name": "elemental_composition_from_formula"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference": [
+   {
+    "doc": "Will attempt to fill the `reference` from the `lab_id` or vice versa.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.ElementalComposition": [
+   {
+    "doc": "Will add a results.material subsection if none exists.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.Entity": [
+   {
+    "doc": "- If the instance is of type `EntryData`, it sets the archive's entry name based on the instance's name.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.Entity.normalize",
+    "short_name": "normalize"
+   },
+   {
+    "kind": "utility_function",
+    "module": "nomad.common",
+    "qualname": "nomad.common.now",
+    "short_name": "now"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.EntityReference": [
+   {
+    "doc": "Will attempt to fill the `reference` from the `lab_id` or vice versa.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.EntityReference.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.Instrument": [
+   {
+    "doc": "Adds the name of the instrument to the `results.eln.instruments` list.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.Instrument.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.InstrumentReference": [
+   {
+    "doc": "Will attempt to fill the `reference` from the `lab_id` or vice versa.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.Measurement": [
+   {
+    "doc": "- Updates the `archive.workflow2.inputs` list with links to the input samples.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.Measurement.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.MeasurementResult": [
+   {
+    "doc": "Is called during entry normalization.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.data",
+    "qualname": "nomad.datamodel.data.MeasurementResult.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.Process": [
+   {
+    "doc": "- Sets the start time for each step in `self.steps` if not already set, based on the `datetime` and `duration` fields.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.Process.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.ProcessStep": [
+   {
+    "doc": "Is called during entry normalization.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.data",
+    "qualname": "nomad.datamodel.data.ProcessStep.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers": [
+   {
+    "doc": "If owner is not filled the field will be filled by the first two letters of the first name joined with the first two letters of the last name of the author.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers.normalize",
+    "short_name": "normalize"
+   },
+   {
+    "kind": "utility_function",
+    "module": "nomad.common",
+    "qualname": "nomad.common.now",
+    "short_name": "now"
+   },
+   {
+    "doc": "Transliterate an Unicode object into an ASCII string",
+    "kind": "utility_function",
+    "module": "unidecode",
+    "qualname": "unidecode.unidecode_expect_ascii",
+    "short_name": "unidecode_expect_ascii"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.SectionReference": [
+   {
+    "doc": "Is called during entry normalization.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.data",
+    "qualname": "nomad.datamodel.data.SectionReference.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad.datamodel.metainfo.basesections.v1.System": [
+   {
+    "doc": "Will attempt to fill mass fractions or atomic fractions if left blank.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.System.normalize",
+    "short_name": "normalize"
+   },
+   {
+    "doc": "Private method for attempting to fill missing fractions (atomic or mass) in the `ElementalComposition` objects listed in elemental_composition.",
+    "kind": "utility_function",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.System._fill_fractions",
+    "short_name": "_fill_fractions"
+   }
+  ],
+  "nomad.datamodel.metainfo.plot.PlotSection": [
+   {
+    "doc": "Is called during entry normalization.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.plot",
+    "qualname": "nomad.datamodel.metainfo.plot.PlotSection.normalize",
+    "short_name": "normalize"
+   },
+   {
+    "doc": "Deep copy operation on arbitrary Python objects.",
+    "kind": "utility_function",
+    "module": "copy",
+    "qualname": "copy.deepcopy",
+    "short_name": "deepcopy"
+   },
+   {
+    "kind": "utility_function",
+    "module": "nomad.datamodel.metainfo.plot",
+    "qualname": "nomad.datamodel.metainfo.plot.express_do_plot",
+    "short_name": "express_do_plot"
+   },
+   {
+    "kind": "utility_function",
+    "module": "nomad.metainfo.metainfo",
+    "qualname": "nomad.metainfo.metainfo.MSection.get",
+    "short_name": "get"
+   },
+   {
+    "kind": "utility_function",
+    "module": "nomad.datamodel.metainfo.plot",
+    "qualname": "nomad.datamodel.metainfo.plot.get_figure_layout",
+    "short_name": "get_figure_layout"
+   },
+   {
+    "doc": "Convenience method to get annotations",
+    "kind": "utility_function",
+    "module": "nomad.metainfo.metainfo",
+    "qualname": "nomad.metainfo.metainfo.MSection.m_get_annotations",
+    "short_name": "m_get_annotations"
+   }
+  ],
+  "nomad_measurements.general.ActivityReference": [
+   {
+    "doc": "The normalizer for the `EntityReference` class.",
+    "kind": "normalize_method",
+    "module": "nomad_measurements.general",
+    "qualname": "nomad_measurements.general.ActivityReference.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.general.InSituMeasurement": [
+   {
+    "doc": "- Updates the `archive.workflow2.inputs` list with links to the input samples.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.InSituMeasurement.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.general.ProcessReference": [
+   {
+    "doc": "The normalizer for the `EntityReference` class.",
+    "kind": "normalize_method",
+    "module": "nomad_measurements.general",
+    "qualname": "nomad_measurements.general.ProcessReference.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.Accessory": [
+   {
+    "doc": "Is called during entry normalization.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.data",
+    "qualname": "nomad.datamodel.data.Accessory.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.Aperture": [
+   {
+    "doc": "Sets the name of the accessory.",
+    "kind": "normalize_method",
+    "module": "nomad_measurements.transmission.schema",
+    "qualname": "nomad_measurements.transmission.schema.Aperture.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.AttenuatorSettings": [
+   {
+    "doc": "Is called during entry normalization.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.data",
+    "qualname": "nomad.datamodel.data.AttenuatorSettings.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.CrystallographicTransmissionSampleReference": [
+   {
+    "doc": "Will attempt to fill the `reference` from the `lab_id` or vice versa.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.CrystallographicTransmissionSampleReference.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.Detector": [
+   {
+    "doc": "- If the instance is of type `EntryData`, it sets the archive's entry name based on the instance's name.",
+    "kind": "normalize_method",
+    "module": "nomad_measurements.transmission.schema",
+    "qualname": "nomad_measurements.transmission.schema.Detector.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.DetectorGain": [
+   {
+    "doc": "The normalizer for the `SettingOverWavelengthRange` class.",
+    "kind": "normalize_method",
+    "module": "nomad_measurements.transmission.schema",
+    "qualname": "nomad_measurements.transmission.schema.DetectorGain.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.DetectorIntegrationTime": [
+   {
+    "doc": "The normalizer for the `SettingOverWavelengthRange` class.",
+    "kind": "normalize_method",
+    "module": "nomad_measurements.transmission.schema",
+    "qualname": "nomad_measurements.transmission.schema.DetectorIntegrationTime.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.DetectorSettings": [
+   {
+    "doc": "The normalizer for the `SettingOverWavelengthRange` class.",
+    "kind": "normalize_method",
+    "module": "nomad_measurements.transmission.schema",
+    "qualname": "nomad_measurements.transmission.schema.DetectorSettings.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.ELNUVVisNirTransmission": [
+   {
+    "doc": "The normalize function of the `ELNUVVisNirTransmission` section.",
+    "kind": "normalize_method",
+    "module": "nomad_measurements.transmission.schema",
+    "qualname": "nomad_measurements.transmission.schema.ELNUVVisNirTransmission.normalize",
+    "short_name": "normalize"
+   },
+   {
+    "doc": "Method for automatically connecting the instrument based on the extracted raw data.",
+    "kind": "utility_function",
+    "module": "nomad_measurements.transmission.schema",
+    "qualname": "nomad_measurements.transmission.schema.ELNUVVisNirTransmission.connect_instrument",
+    "short_name": "connect_instrument"
+   },
+   {
+    "doc": "Method for getting the correct read and write functions for the current data file.",
+    "kind": "utility_function",
+    "module": "nomad_measurements.transmission.schema",
+    "qualname": "nomad_measurements.transmission.schema.ELNUVVisNirTransmission.get_read_write_functions",
+    "short_name": "get_read_write_functions"
+   },
+   {
+    "doc": "Unpopulated quantities and subsections in the `section` will be populated with the values from the `update` section.",
+    "kind": "utility_function",
+    "module": "nomad_measurements.utils",
+    "qualname": "nomad_measurements.utils.merge_sections",
+    "short_name": "merge_sections"
+   }
+  ],
+  "nomad_measurements.transmission.schema.GratingMonochromator": [
+   {
+    "doc": "- If the instance is of type `EntryData`, it sets the archive's entry name based on the instance's name.",
+    "kind": "normalize_method",
+    "module": "nomad_measurements.transmission.schema",
+    "qualname": "nomad_measurements.transmission.schema.GratingMonochromator.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.Lamp": [
+   {
+    "doc": "- If the instance is of type `EntryData`, it sets the archive's entry name based on the instance's name.",
+    "kind": "normalize_method",
+    "module": "nomad_measurements.transmission.schema",
+    "qualname": "nomad_measurements.transmission.schema.Lamp.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.LampSettings": [
+   {
+    "doc": "The normalizer for the `SettingOverWavelengthRange` class.",
+    "kind": "normalize_method",
+    "module": "nomad_measurements.transmission.schema",
+    "qualname": "nomad_measurements.transmission.schema.LampSettings.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.LightSource": [
+   {
+    "doc": "- If the instance is of type `EntryData`, it sets the archive's entry name based on the instance's name.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.LightSource.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.Monochromator": [
+   {
+    "doc": "- If the instance is of type `EntryData`, it sets the archive's entry name based on the instance's name.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.Monochromator.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.MonochromatorSettings": [
+   {
+    "doc": "The normalizer for the `SettingOverWavelengthRange` class.",
+    "kind": "normalize_method",
+    "module": "nomad_measurements.transmission.schema",
+    "qualname": "nomad_measurements.transmission.schema.MonochromatorSettings.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.MonochromatorSlitWidth": [
+   {
+    "doc": "The normalizer for the `SettingOverWavelengthRange` class.",
+    "kind": "normalize_method",
+    "module": "nomad_measurements.transmission.schema",
+    "qualname": "nomad_measurements.transmission.schema.MonochromatorSlitWidth.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.PerkinElmersLambdaSpectrophotometer": [
+   {
+    "doc": "The normalizer for the `PerkinElmersLambdaSpectrophotometer` class.",
+    "kind": "normalize_method",
+    "module": "nomad_measurements.transmission.schema",
+    "qualname": "nomad_measurements.transmission.schema.PerkinElmersLambdaSpectrophotometer.normalize",
+    "short_name": "normalize"
+   },
+   {
+    "doc": "Ensure the given path (e.g., 'a/b/1/c/2/d') exists and return the target section instance.",
+    "kind": "utility_function",
+    "module": "nomad.metainfo.metainfo",
+    "qualname": "nomad.metainfo.metainfo.MSection.m_setdefault",
+    "short_name": "m_setdefault"
+   }
+  ],
+  "nomad_measurements.transmission.schema.PolDepol": [
+   {
+    "doc": "Sets the name of the accessory based on the mode.",
+    "kind": "normalize_method",
+    "module": "nomad_measurements.transmission.schema",
+    "qualname": "nomad_measurements.transmission.schema.PolDepol.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.RawFileTransmissionData": [
+   {
+    "doc": "Is called during entry normalization.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.data",
+    "qualname": "nomad.datamodel.data.RawFileTransmissionData.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.SettingOverWavelengthRange": [
+   {
+    "doc": "The normalizer for the `SettingOverWavelengthRange` class.",
+    "kind": "normalize_method",
+    "module": "nomad_measurements.transmission.schema",
+    "qualname": "nomad_measurements.transmission.schema.SettingOverWavelengthRange.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.Spectrophotometer": [
+   {
+    "doc": "Adds the name of the instrument to the `results.eln.instruments` list.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.Spectrophotometer.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.TransmissionSampleReference": [
+   {
+    "doc": "Will attempt to fill the `reference` from the `lab_id` or vice versa.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.TransmissionSampleReference.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.UVVisNirTransmission": [
+   {
+    "doc": "- Updates the `archive.workflow2.inputs` list with links to the input samples.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.metainfo.basesections.v1",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.UVVisNirTransmission.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.UVVisNirTransmissionResult": [
+   {
+    "doc": "Is called during entry normalization.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.data",
+    "qualname": "nomad.datamodel.data.UVVisNirTransmissionResult.normalize",
+    "short_name": "normalize"
+   }
+  ],
+  "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings": [
+   {
+    "doc": "Is called during entry normalization.",
+    "kind": "normalize_method",
+    "module": "nomad.datamodel.data",
+    "qualname": "nomad.datamodel.data.UVVisNirTransmissionSettings.normalize",
+    "short_name": "normalize"
+   }
+  ]
+ }
+}

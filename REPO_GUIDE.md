@@ -141,7 +141,7 @@ schema-studio/
 │
 ├─ extractor/
 │  ├─ graph_builder.py          # build_graph(package, **opts); embeds docstrings
-│  ├─ usage_index.py            # get_usage_for_section(section_qualname) for /usage
+│  ├─ scripts/usage_index.py    # get_usage_for_section(section_qualname) for /usage
 │
 ├─ web/                         # React frontend (Vite)
 │  ├─ src/
@@ -331,7 +331,7 @@ The frontend shows these entries as a list under **Under the hood** for the curr
    - Validate edit payloads, rebuild graph, persist edit in Mongo, return updated graph.
 
 8. **`GET /usage`**
-   - Resolves section FQCN and returns normalize/helper usage via `extractor/usage_index.py`.
+   - Resolves section FQCN and returns normalize/helper usage via `extractor/scripts/usage_index.py`.
 
 9. **Async task endpoints (`POST /tasks/graph`, `POST /tasks/graph/diff`, `GET /tasks/{id}`)**
    - Optional Celery-backed background extraction and diffing.
@@ -377,7 +377,7 @@ The frontend shows these entries as a list under **Under the hood** for the curr
   - `api/light_mode/schema_source.py` — installed package policy + update behavior.
   - `api/light_mode/store.py` — SQLite workspace/custom edit persistence.
 - `extractor/graph_builder.py` — embeds graph structure + docstrings for sections and quantities.
-- `extractor/usage_index.py` — introspects normalize methods and helpers; exposes `get_usage_for_section`.
+- `extractor/scripts/usage_index.py` — introspects normalize methods and helpers; exposes `get_usage_for_section`.
 
 ---
 
@@ -483,7 +483,7 @@ The frontend shows these entries as a list under **Under the hood** for the curr
 
 **Extend usage / normalization discovery**
 
-- Edit `extractor/usage_index.py`.  
+- Edit `extractor/scripts/usage_index.py`.  
   - Add new heuristics for `"utility_function"` or additional normalize helpers.  
   - Keep the `UsageEntry` dataclass and `/usage` response model in sync with the frontend.
 
