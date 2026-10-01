@@ -31,6 +31,8 @@ from ..sources.legacy import (
     list_sections,
     root_namespace as _root_namespace,
 )
+from ..sources.linkml_routes import linkml_download, linkml_report
+from ..sources.snapshots import supports_linkml
 from .schema_source import (
     DEFAULT_BASE_NAMESPACE as LIGHT_DEFAULT_BASE_NS,
     DEFAULT_PACKAGE as LIGHT_DEFAULT_PACKAGE,
@@ -406,6 +408,7 @@ async def schema_profiles():
             "source": None,
             "error": None,
             "packaged": False,
+            "linkml_export": supports_linkml(profile),
         }
         try:
             info = current_schema_info(profile)
@@ -437,6 +440,18 @@ async def schema_version():
         "schema_profile": profile.key,
         "send_design_enabled": bool(SEND_ENDPOINT),
     }
+
+
+@app.get("/schema/linkml")
+async def schema_linkml(package: str | None = Query(None, description="Schema module; the profile's base namespace exports the whole profile")):
+    """Download the module's schema as LinkML YAML."""
+    return await linkml_download(package or _workspace().package)
+
+
+@app.get("/schema/linkml/report")
+async def schema_linkml_report(package: str | None = Query(None)):
+    """What did not convert cleanly into LinkML, for the module."""
+    return await linkml_report(package or _workspace().package)
 
 
 @app.post("/schema/update")

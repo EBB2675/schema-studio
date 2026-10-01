@@ -1,0 +1,172 @@
+"""Snapshots: the extraction document of a profile module and its LinkML schema.
+
+A snapshot is plain JSON. It holds the extraction document as printed by the
+profile's contract script (including NOMAD methods and usage, which describe
+code and are not converted), the LinkML schema converted from it, and the
+conversion report. Snapshots are cached on disk per profile, schema commit and
+module. When the converter code changes, the stored extraction document is
+converted again; the profile environment is not started for that.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import os
+from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
+from threading import Lock
+from typing import Any
+
+from extractor.contract import CONTRACT_VERSION, validate_document
+from extractor.runner import EnvironmentMissing, ExtractorError, run_script
+
+from ..light_mode.schema_source import (
+    SchemaProfile,
+    SchemaUnavailable,
+    current_schema_info,
+    setup_hint,
+)
+from ..light_mode.store import config_root
+from .legacy import EXTRACTOR_TIMEOUT_SECONDS, raise_script_error
+from .linkml_yaml import dump_yaml
+from .to_linkml import Conversion, convert_nomad
+
+logger = logging.getLogger(__name__)
+
+SNAPSHOT_FORMAT = 1
+_CONVERTER_DIR = Path(__file__).with_name("to_linkml")
+_MEMORY: dict[Path, dict[str, Any]] = {}
+_MEMORY_LIMIT = 8
+_LOCK = Lock()
+
+
+class LinkMLUnavailable(RuntimeError):
+    """The profile has no LinkML conversion yet."""
+
+
+def supports_linkml(profile: SchemaProfile) -> bool:
+    return profile.contract_script is not None and profile.linkml_prefix is not None
+
+
+def tool_versions() -> dict[str, str]:
+    tools = {"extraction-contract": CONTRACT_VERSION}
+    for name in ("schema-studio", "linkml-runtime"):
+        try:
+            tools[name] = version(name)
+        except PackageNotFoundError:
+            tools[name] = "unknown"
+    return tools
+
+
+def converter_fingerprint() -> str:
+    """Changes whenever the converter code changes, so stale conversions are redone."""
+    digest = hashlib.sha256(str(SNAPSHOT_FORMAT).encode())
+    for path in sorted(_CONVERTER_DIR.glob("*.py")):
+        digest.update(path.name.encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:16]
+
+
+def convert(profile: SchemaProfile, document: dict[str, Any]) -> Conversion:
+    if not supports_linkml(profile):
+        raise LinkMLUnavailable(f"LinkML export is not available for {profile.label} yet.")
+    return convert_nomad(document, prefix=profile.linkml_prefix)
+
+
+def make_snapshot(profile: SchemaProfile, scope: str, document: dict[str, Any]) -> dict[str, Any]:
+    """Build a snapshot from an extraction document (no environment needed)."""
+    conversion = convert(profile, document)
+    return {
+        "format": SNAPSHOT_FORMAT,
+        "profile": profile.key,
+        "scope": scope,
+        "converter": converter_fingerprint(),
+        "tools": tool_versions(),
+        "source": document["source"],
+        "extraction": document,
+        "linkml": conversion.schema,
+        "report": conversion.report,
+    }
+
+
+def snapshot_yaml(snapshot: dict[str, Any]) -> str:
+    return dump_yaml(
+        snapshot["linkml"], profile=snapshot["profile"], source=snapshot["source"], tools=snapshot["tools"],
+        report=snapshot["report"],
+    )
+
+
+def cache_root() -> Path:
+    return config_root() / "cache" / "snapshots"
+
+
+def _cache_path(profile: SchemaProfile, schema_version: str, scope: str) -> Path:
+    digest = hashlib.sha256(scope.encode("utf-8")).hexdigest()[:16]
+    safe_version = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in schema_version) or "unknown"
+    safe_scope = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in scope)[:80]
+    return cache_root() / profile.key / safe_version / f"{safe_scope}-{digest}.json"
+
+
+def _extract(profile: SchemaProfile, scope: str) -> dict[str, Any]:
+    """Run the profile's contract script for one module, or the whole profile when scope is its base."""
+    arguments = ["--dist", profile.package_dist]
+    if scope == profile.default_base_namespace:
+        arguments += ["--base", scope]
+        for discovery in profile.discovery:
+            arguments += ["--discovery", discovery]
+    else:
+        arguments += ["--module", scope]
+    try:
+        payload = run_script(
+            profile.environment, profile.contract_script, arguments=tuple(arguments), timeout=EXTRACTOR_TIMEOUT_SECONDS,
+        )
+    except EnvironmentMissing as exc:
+        raise SchemaUnavailable(
+            f"The {profile.label} schema environment is not set up. {setup_hint(profile)}"
+        ) from exc
+    except ExtractorError as exc:
+        raise_script_error(profile, exc)
+    return validate_document(payload["result"])
+
+
+def _remember(path: Path, snapshot: dict[str, Any]) -> None:
+    _MEMORY[path] = snapshot
+    while len(_MEMORY) > _MEMORY_LIMIT:
+        _MEMORY.pop(next(iter(_MEMORY)))
+
+
+def get_snapshot(profile: SchemaProfile, scope: str | None = None) -> dict[str, Any]:
+    """The snapshot for a module of the profile (default: the whole profile), from cache when possible."""
+    if not supports_linkml(profile):
+        raise LinkMLUnavailable(f"LinkML export is not available for {profile.label} yet.")
+    scope = scope or profile.default_base_namespace
+    info = current_schema_info(profile)
+    path = _cache_path(profile, info.version, scope)
+    fingerprint = converter_fingerprint()
+    with _LOCK:
+        cached = _MEMORY.get(path)
+        if cached is not None and cached.get("converter") == fingerprint:
+            return cached
+    stored = None
+    if path.is_file():
+        try:
+            stored = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            logger.warning("Ignoring unreadable snapshot %s", path)
+    if stored and stored.get("format") == SNAPSHOT_FORMAT and stored.get("converter") == fingerprint:
+        snapshot = stored
+    else:
+        document = stored["extraction"] if stored and stored.get("format") == SNAPSHOT_FORMAT else _extract(profile, scope)
+        snapshot = make_snapshot(profile, scope, document)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(f".{os.getpid()}.tmp")
+            tmp.write_text(json.dumps(snapshot, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(path)
+        except OSError:
+            logger.warning("Could not write snapshot %s", path, exc_info=True)
+    with _LOCK:
+        _remember(path, snapshot)
+    return snapshot

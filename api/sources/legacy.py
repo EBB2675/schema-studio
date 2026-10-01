@@ -73,7 +73,7 @@ def _cache_path(profile: SchemaProfile, version: str, command: str, arguments: d
     return cache_root() / profile.key / safe_version / f"{command}-{digest}.json"
 
 
-def _raise_script_error(profile: SchemaProfile, exc: ExtractorError) -> None:
+def raise_script_error(profile: SchemaProfile, exc: ExtractorError) -> None:
     """Turn the script's error document back into the exception the app expects."""
     try:
         error = json.loads(exc.stdout)["error"]
@@ -127,7 +127,7 @@ def run_legacy(
             f"The {profile.label} schema environment is not set up. {setup_hint(profile)}"
         ) from exc
     except ExtractorError as exc:
-        _raise_script_error(profile, exc)
+        raise_script_error(profile, exc)
     result = payload["result"]
 
     if cacheable:

@@ -17,6 +17,7 @@ from .sources.legacy import (
     list_sections,
     root_namespace as _root_namespace,
 )
+from .sources.linkml_routes import linkml_download, linkml_report
 
 from .routes_git import router as git_router
 from .routes_tasks import router as tasks_router
@@ -170,6 +171,19 @@ async def roots(package: str | None = Query(None), user_ws=Depends(get_user_and_
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
+
+@app.get("/schema/linkml")
+async def schema_linkml(package: str | None = Query(None), user_ws=Depends(get_user_and_workspace)):
+    """Download the module's schema as LinkML YAML (installed profile environment, not a worktree)."""
+    _, workspace = user_ws
+    return await linkml_download(package or workspace.get("package") or DEFAULT_BASE_PACKAGE)
+
+
+@app.get("/schema/linkml/report")
+async def schema_linkml_report(package: str | None = Query(None), user_ws=Depends(get_user_and_workspace)):
+    _, workspace = user_ws
+    return await linkml_report(package or workspace.get("package") or DEFAULT_BASE_PACKAGE)
+
 
 @app.get("/schema")
 async def schema(

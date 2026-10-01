@@ -9,6 +9,8 @@ PyJWT
 motor>=3.3.1
 platformdirs
 jsonschema>=4.0
+linkml-runtime==1.11.1
+pyyaml>=6
 pytest>=7
 celery[redis]>=5.3,<6
 redis>=5,<6

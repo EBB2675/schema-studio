@@ -24,6 +24,7 @@ from extractor.runner import EnvironmentMissing, ExtractorEnvironment, Extractor
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LEGACY_SCRIPT = REPO_ROOT / "extractor" / "scripts" / "legacy.py"
+NOMAD_SCRIPT = REPO_ROOT / "extractor" / "scripts" / "nomad.py"
 INFO_TIMEOUT_SECONDS = 60
 UPDATE_TIMEOUT_SECONDS = int(os.getenv("SCHEMA_STUDIO_UPDATE_TIMEOUT_SECONDS", "1800"))
 
@@ -45,6 +46,10 @@ class SchemaProfile:
     # (NOMAD schema package entry points) and/or "walk" (every module under the
     # base namespace).
     discovery: tuple[str, ...] = ("walk",)
+    # Id prefix of the LinkML schema, and the extractor script that prints the
+    # extraction document it is converted from (None: no LinkML conversion yet).
+    linkml_prefix: str | None = None
+    contract_script: Path | None = None
 
     @property
     def environment(self) -> ExtractorEnvironment:
@@ -82,6 +87,8 @@ SCHEMA_PROFILES: dict[str, SchemaProfile] = {
         # The single entry point only loads `general`; the other schema modules
         # are found by walking the namespace.
         discovery=("entry-points", "walk"),
+        linkml_prefix="nomadsim",
+        contract_script=NOMAD_SCRIPT,
     ),
     "nomad-measurements": SchemaProfile(
         key="nomad-measurements",
@@ -95,6 +102,8 @@ SCHEMA_PROFILES: dict[str, SchemaProfile] = {
         default_root="ELNXRayDiffraction",
         # One entry point per technique; walking would also import parsers and helpers.
         discovery=("entry-points",),
+        linkml_prefix="nomadmeas",
+        contract_script=NOMAD_SCRIPT,
     ),
     "bam-masterdata": SchemaProfile(
         key="bam-masterdata",
@@ -108,6 +117,7 @@ SCHEMA_PROFILES: dict[str, SchemaProfile] = {
         default_root="SearchQuery",
         # bam-masterdata declares no schema entry point yet.
         discovery=("walk",),
+        linkml_prefix="bammd",
     ),
 }
 DEFAULT_PROFILE_KEY = "nomad-simulations"

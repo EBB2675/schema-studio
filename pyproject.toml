@@ -18,6 +18,8 @@ dependencies = [
   "httpx",
   "platformdirs",
   "jsonschema>=4.0",
+  "linkml-runtime==1.11.1",
+  "pyyaml>=6",
 ]
 
 [project.optional-dependencies]

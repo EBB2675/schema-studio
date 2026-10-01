@@ -70,6 +70,7 @@ type SchemaProfileSummary = {
   source?: string | null;
   error?: string | null;
   packaged?: boolean;
+  linkml_export?: boolean;
 };
 
 type TaskEnqueueResponse = WorkspaceEnvelope & {
@@ -156,6 +157,7 @@ export default function App() {
     return Number.isFinite(stored) ? stored : 380;
   });
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [linkmlStatus, setLinkmlStatus] = useState<string | null>(null);
   const [canvasStatus, setCanvasStatus] = useState<string | null>(null);
   const [sendNote, setSendNote] = useState<string>("");
   const [sendStatus, setSendStatus] = useState<string | null>(null);
@@ -618,6 +620,7 @@ export default function App() {
           source: typeof entry.source === "string" ? entry.source : null,
           error: typeof entry.error === "string" ? entry.error : null,
           packaged: Boolean(entry.packaged),
+          linkml_export: typeof entry.linkml_export === "boolean" ? entry.linkml_export : undefined,
         }))
         .filter((entry: SchemaProfileSummary) => Boolean(entry.key));
       setSchemaProfiles(parsed);
@@ -2370,6 +2373,39 @@ export default function App() {
     a.click();
   };
 
+  // Profiles without a LinkML converter say so; Dev Mode lists no profiles, so the server decides there.
+  const canExportLinkml = currentSchemaProfile?.linkml_export ?? true;
+
+  const exportLinkml = async () => {
+    if (!currentGraph?.package) return;
+    setLinkmlStatus("Preparing LinkML export...");
+    try {
+      const res = await api.get("/schema/linkml", {
+        params: { package: currentGraph.package },
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(res.data as Blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${currentGraph.package}.linkml.yaml`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setLinkmlStatus(null);
+    } catch (error) {
+      let detail = error instanceof Error ? error.message : String(error);
+      const data = axios.isAxiosError(error) ? error.response?.data : null;
+      if (data instanceof Blob) {
+        try {
+          const parsed = JSON.parse(await data.text());
+          if (typeof parsed?.detail === "string") detail = parsed.detail;
+        } catch {
+          // keep the generic message
+        }
+      }
+      setLinkmlStatus(`LinkML export failed: ${detail}`);
+    }
+  };
+
   const handleImportJson = () => {
     setImportStatus(null);
     importFileRef.current?.click();
@@ -2861,6 +2897,16 @@ export default function App() {
                     <button className="btn secondary" onClick={exportJson}>
                       Export JSON
                     </button>
+                    {canExportLinkml ? (
+                      <button
+                        className="btn secondary"
+                        onClick={exportLinkml}
+                        disabled={!currentGraph.package}
+                        title="Download the schema of this module as LinkML YAML"
+                      >
+                        Export LinkML
+                      </button>
+                    ) : null}
                     <button
                       className="btn secondary"
                       onClick={exportPdf}
@@ -2872,6 +2918,11 @@ export default function App() {
                   </>
                 ) : null}
               </div>
+              {linkmlStatus ? (
+                <div className="small" style={{ color: linkmlStatus.startsWith("LinkML export failed") ? "#fca5a5" : "var(--muted)", textAlign: "right" }}>
+                  {linkmlStatus}
+                </div>
+              ) : null}
               {importStatus ? (
                 <div className="small" style={{ color: importStatus.startsWith("Import failed") ? "#fca5a5" : "var(--muted)", textAlign: "right" }}>
                   {importStatus}
