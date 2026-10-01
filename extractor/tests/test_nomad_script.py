@@ -223,6 +223,9 @@ class Measurement(Entity, Plot):
     best_result = SubSection(sub_section=Result.m_def, description="Best one.")
 
 
+Specimen = Sample  # another module-level name for the same section
+
+
 m_package = SchemaPackage([Sample.m_def, Measurement.m_def])
 ''',
     "fakeschema/helpers.py": "from fakeschema.base import Entity\n\nVALUE = 1\n",
@@ -308,13 +311,20 @@ def test_a_module_becomes_a_valid_document(fake_environment, source_root):
         "fakeschema.measurement.Result",
         "fakeschema.measurement.Sample",
     ]
-    assert document["modules"] == [{"name": MEASUREMENT, "classes": sorted(_classes(document))}]
+    # Module order: the graph starts from the classes in this order.
+    assert document["modules"] == [{"name": MEASUREMENT, "classes": [
+        "fakeschema.base.Entity",
+        "fakeschema.measurement.Sample",
+        "fakeschema.measurement.Plot",
+        "fakeschema.measurement.Result",
+        "fakeschema.measurement.Measurement",
+    ], "aliases": {"Specimen": "fakeschema.measurement.Sample"}}]
     measurement = _classes(document)["fakeschema.measurement.Measurement"]
     assert measurement["bases"] == ["fakeschema.base.Entity", "fakeschema.measurement.Plot"]
+    # NOMAD's order: quantities, then subsections; inherited ones first.
     assert [(ref["name"], ref["declaring_class_id"].rsplit(".", 1)[-1]) for ref in measurement["effective_attributes"]] == [
-        ("best_result", "Measurement"), ("comment", "Entity"), ("figures", "Plot"),
-        ("framework_ref", "Measurement"), ("name", "Entity"), ("results", "Measurement"),
-        ("sample", "Measurement"),
+        ("figures", "Plot"), ("name", "Entity"), ("comment", "Entity"), ("sample", "Measurement"),
+        ("framework_ref", "Measurement"), ("results", "Measurement"), ("best_result", "Measurement"),
     ]
     assert measurement["methods"] == [
         {"name": "check_name", "module": "fakeschema.base"},

@@ -20,7 +20,7 @@ def snapshots(studio_home, monkeypatch):
     module._MEMORY.clear()
     calls: list[tuple[str, str]] = []
 
-    def fake_extract(profile, scope):
+    def fake_extract(profile, scope, source_root=None):
         calls.append((profile.key, scope))
         return load_fixture(profile.key)
 
@@ -69,6 +69,26 @@ def test_snapshot_is_cached_on_disk_and_reconverted_without_extracting(snapshots
     again = snapshots.get_snapshot(nomad, "nomad_measurements.general")
     assert again["converter"] == "changed"
     assert len(snapshots.calls) == 1
+
+    # Changed extractor scripts: the module is extracted again.
+    snapshots._MEMORY.clear()
+    monkeypatch.setattr(snapshots, "extractor_fingerprint", lambda: "changed")
+    assert snapshots.get_snapshot(nomad, "nomad_measurements.general")["extractor"] == "changed"
+    assert len(snapshots.calls) == 2
+
+
+def test_worktree_snapshots_are_kept_apart_and_need_a_commit_to_be_cached(snapshots, studio_home, monkeypatch):
+    seen = []
+    monkeypatch.setattr(snapshots, "_extract", lambda profile, scope, source_root=None: (
+        seen.append(source_root), load_fixture(profile.key))[1])
+    nomad = profile("nomad-measurements")
+    snapshots.get_snapshot(nomad, "nomad_measurements.general", source_root="/wt", source_version="abc")
+    snapshots.get_snapshot(nomad, "nomad_measurements.general", source_root="/wt", source_version="abc")
+    snapshots.get_snapshot(nomad, "nomad_measurements.general", source_root="/wt")
+    assert seen == ["/wt", "/wt"]
+    assert [path.name for path in (studio_home / "cache" / "snapshots" / "nomad-measurements").iterdir()] == [
+        "0588fda-worktree-abc"
+    ]
 
 
 def test_whole_profile_scope_is_the_base_namespace(snapshots):

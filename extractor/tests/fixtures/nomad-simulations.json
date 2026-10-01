@@ -109,12 +109,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
-     "name": "datetime"
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
-     "name": "description"
+     "name": "datetime"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
@@ -124,7 +124,7 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
-     "name": "name"
+     "name": "description"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
@@ -150,12 +150,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
-     "name": "datetime"
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
-     "name": "description"
+     "name": "datetime"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
@@ -165,7 +165,7 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
-     "name": "name"
+     "name": "description"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v2.Entity",
@@ -257,13 +257,13 @@
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.SubSystem",
-     "kind": "subsection",
-     "name": "subsystem_properties"
+     "kind": "quantity",
+     "name": "system"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.SubSystem",
-     "kind": "quantity",
-     "name": "system"
+     "kind": "subsection",
+     "name": "subsystem_properties"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v2.SubSystem",
@@ -333,12 +333,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.SubSystemProperties",
      "kind": "quantity",
-     "name": "atomic_fraction"
+     "name": "mass"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.SubSystemProperties",
      "kind": "quantity",
-     "name": "mass"
+     "name": "atomic_fraction"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.SubSystemProperties",
@@ -410,7 +410,17 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
+     "kind": "quantity",
      "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
@@ -425,22 +435,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.System",
      "kind": "subsection",
-     "name": "geometry"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
-     "kind": "quantity",
-     "name": "lab_id"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
-     "kind": "quantity",
-     "name": "name"
+     "name": "sub_systems"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.System",
      "kind": "subsection",
-     "name": "sub_systems"
+     "name": "geometry"
     }
    ],
    "id": "nomad.datamodel.metainfo.basesections.v2.System",
@@ -548,19 +548,9 @@
    "description": "A base section to define each atom's state information. This section stores intrinsic atom/site-level descriptors (element identity,\natomic number, mass, formal integer charge, spin, site label) and an optional\n`electronic_state` container for orbital-state metadata.\n\nMethod-dependent observables that are not intrinsic atom descriptors (for example,\natom-in-molecule partial charges from Mulliken/Hirshfeld/RESP analyses) are\nout of scope for `AtomsState` and should be stored in method-specific sections.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.AtomsState",
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
-     "name": "atomic_number"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.AtomsState",
-     "kind": "quantity",
-     "name": "charge"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.AtomsState",
-     "kind": "quantity",
-     "name": "chemical_symbol"
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
@@ -570,17 +560,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
-     "name": "description"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.AtomsState",
-     "kind": "subsection",
-     "name": "electronic_state"
+     "name": "lab_id"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
-     "name": "lab_id"
+     "name": "description"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.AtomsState",
@@ -593,14 +578,29 @@
      "name": "mass"
     },
     {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
+     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.AtomsState",
      "kind": "quantity",
-     "name": "name"
+     "name": "chemical_symbol"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.AtomsState",
+     "kind": "quantity",
+     "name": "atomic_number"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.AtomsState",
+     "kind": "quantity",
+     "name": "charge"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.AtomsState",
      "kind": "quantity",
      "name": "spin"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.AtomsState",
+     "kind": "subsection",
+     "name": "electronic_state"
     }
    ],
    "id": "nomad_simulations.schema_packages.atoms_state.AtomsState",
@@ -652,12 +652,12 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
-     "name": "datetime"
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
-     "name": "description"
+     "name": "datetime"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
@@ -665,14 +665,14 @@
      "name": "lab_id"
     },
     {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.BaseSpinOrbitalState",
      "kind": "quantity",
      "name": "n_quantum_number"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
-     "kind": "quantity",
-     "name": "name"
     }
    ],
    "id": "nomad_simulations.schema_packages.atoms_state.BaseSpinOrbitalState",
@@ -727,8 +727,8 @@
    "effective_attributes": [
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
-     "kind": "subsection",
-     "name": "basis_orbitals"
+     "kind": "quantity",
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
@@ -736,9 +736,9 @@
      "name": "datetime"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
-     "name": "degeneracy"
+     "name": "lab_id"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
@@ -746,24 +746,19 @@
      "name": "description"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.CoreHole",
+     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
      "kind": "quantity",
-     "name": "dscf_state"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
-     "kind": "quantity",
-     "name": "lab_id"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.CoreHole",
-     "kind": "quantity",
-     "name": "n_excited_electrons"
+     "name": "point_group"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
      "kind": "quantity",
-     "name": "name"
+     "name": "symmetry_label"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
+     "kind": "quantity",
+     "name": "degeneracy"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
@@ -771,9 +766,14 @@
      "name": "occupation"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
+     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.CoreHole",
      "kind": "quantity",
-     "name": "point_group"
+     "name": "n_excited_electrons"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.CoreHole",
+     "kind": "quantity",
+     "name": "dscf_state"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
@@ -787,8 +787,8 @@
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
-     "kind": "quantity",
-     "name": "symmetry_label"
+     "kind": "subsection",
+     "name": "basis_orbitals"
     }
    ],
    "id": "nomad_simulations.schema_packages.atoms_state.CoreHole",
@@ -939,8 +939,8 @@
    "effective_attributes": [
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
-     "kind": "subsection",
-     "name": "basis_orbitals"
+     "kind": "quantity",
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
@@ -948,9 +948,9 @@
      "name": "datetime"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
-     "name": "degeneracy"
+     "name": "lab_id"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
@@ -958,24 +958,24 @@
      "name": "description"
     },
     {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
+     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
      "kind": "quantity",
-     "name": "lab_id"
+     "name": "point_group"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
      "kind": "quantity",
-     "name": "name"
+     "name": "symmetry_label"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
+     "kind": "quantity",
+     "name": "degeneracy"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
      "kind": "quantity",
      "name": "occupation"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
-     "kind": "quantity",
-     "name": "point_group"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
@@ -989,8 +989,8 @@
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
-     "kind": "quantity",
-     "name": "symmetry_label"
+     "kind": "subsection",
+     "name": "basis_orbitals"
     }
    ],
    "id": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
@@ -1058,17 +1058,22 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
+     "kind": "quantity",
      "name": "datetime"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
-     "name": "description"
+     "name": "lab_id"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
-     "name": "lab_id"
+     "name": "description"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ParticleState",
@@ -1079,11 +1084,6 @@
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.ParticleState",
      "kind": "quantity",
      "name": "mass"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
-     "kind": "quantity",
-     "name": "name"
     }
    ],
    "id": "nomad_simulations.schema_packages.atoms_state.ParticleState",
@@ -1225,9 +1225,9 @@
    "description": "Describes a quantum state under spherical symmetry. Supports SOC and relativistic effects. The system is only defined up to the given quantum numbers. States with a wider degeneracy are possible by keeping some quantum numbers undefined.\n\nQuantum number relationships:\n- j and l, s: j = |l - s|, |l - s| + 1, ..., l + s (total angular momentum from orbital and spin coupling)\n- m_j and j: m_j ∈ [-j, -j+1, ..., j-1, j] (azimuthal projection of j, 2j+1 values)\n- m_l and l: m_l ∈ [-l, -l+1, ..., l-1, l] (azimuthal projection of l, 2l+1 values)\n- κ (kappa_quantum_number) is specific to relativistic settings and populates j and l during normalization, not vice versa.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.SphericalSymmetryState",
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
-     "name": "coupling_origin"
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
@@ -1237,12 +1237,17 @@
     {
      "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
      "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
+     "kind": "quantity",
      "name": "description"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.SphericalSymmetryState",
+     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.BaseSpinOrbitalState",
      "kind": "quantity",
-     "name": "j_quantum_number"
+     "name": "n_quantum_number"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.SphericalSymmetryState",
@@ -1252,12 +1257,12 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.SphericalSymmetryState",
      "kind": "quantity",
-     "name": "l_quantum_number"
+     "name": "j_quantum_number"
     },
     {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
+     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.SphericalSymmetryState",
      "kind": "quantity",
-     "name": "lab_id"
+     "name": "l_quantum_number"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.SphericalSymmetryState",
@@ -1272,22 +1277,17 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.SphericalSymmetryState",
      "kind": "quantity",
-     "name": "ms_quantum_number"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.BaseSpinOrbitalState",
-     "kind": "quantity",
-     "name": "n_quantum_number"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
-     "kind": "quantity",
-     "name": "name"
+     "name": "s_quantum_number"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.SphericalSymmetryState",
      "kind": "quantity",
-     "name": "s_quantum_number"
+     "name": "ms_quantum_number"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.atoms_state.SphericalSymmetryState",
+     "kind": "quantity",
+     "name": "coupling_origin"
     }
    ],
    "id": "nomad_simulations.schema_packages.atoms_state.SphericalSymmetryState",
@@ -1462,12 +1462,12 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ActiveSpace",
      "kind": "quantity",
-     "name": "n_active_electrons"
+     "name": "n_active_orbitals"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ActiveSpace",
      "kind": "quantity",
-     "name": "n_active_orbitals"
+     "name": "n_active_electrons"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ActiveSpace",
@@ -1477,7 +1477,7 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ActiveSpace",
      "kind": "quantity",
-     "name": "ras1_max_holes"
+     "name": "selection_method"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ActiveSpace",
@@ -1492,17 +1492,17 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ActiveSpace",
      "kind": "quantity",
-     "name": "ras3_max_particles"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ActiveSpace",
-     "kind": "quantity",
      "name": "ras3_n_orbitals"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ActiveSpace",
      "kind": "quantity",
-     "name": "selection_method"
+     "name": "ras1_max_holes"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ActiveSpace",
+     "kind": "quantity",
+     "name": "ras3_max_particles"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.ActiveSpace",
@@ -1554,9 +1554,14 @@
    "description": "Broken-symmetry density functional theory calculation. This class specializes a DFT calculation to represent a symmetry-broken,\ncollinear, unrestricted Kohn-Sham reference without linking to the high-spin\nreference. Workflow-level orchestration is handled separately. Consistency\nchecks require `reference_form='UKS'`, `is_spin_polarized=True`, and\n`spin_centers` containing at least one up and one down local spin assignment.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -1574,24 +1579,9 @@
      "name": "jacobs_ladder"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "subsection",
-     "name": "numerical_settings"
-    },
-    {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.DFT",
      "kind": "quantity",
      "name": "reference_form"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BSDFT",
-     "kind": "subsection",
-     "name": "spin_centers"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BSDFT",
@@ -1600,13 +1590,23 @@
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "type"
+     "kind": "subsection",
+     "name": "numerical_settings"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.DFT",
      "kind": "subsection",
      "name": "xc"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BSDFT",
+     "kind": "subsection",
+     "name": "spin_centers"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.BSDFT",
@@ -1675,14 +1675,14 @@
    "description": "A base section used to define the parameters of a BSE calculation.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "quantity",
-     "name": "broadening"
+     "name": "name"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BSE",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -1697,27 +1697,17 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
      "kind": "quantity",
+     "name": "n_states"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
+     "kind": "quantity",
      "name": "n_empty_states"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
      "kind": "quantity",
-     "name": "n_states"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "subsection",
-     "name": "numerical_settings"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BSE",
-     "kind": "quantity",
-     "name": "screening_ref"
+     "name": "broadening"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BSE",
@@ -1727,7 +1717,17 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BSE",
      "kind": "quantity",
-     "name": "type"
+     "name": "screening_ref"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "subsection",
+     "name": "numerical_settings"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.BSE",
@@ -1808,22 +1808,22 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "quantity",
-     "name": "external_reference"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
      "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "subsection",
-     "name": "numerical_settings"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "quantity",
      "name": "type"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "external_reference"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "subsection",
+     "name": "numerical_settings"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -1951,14 +1951,14 @@
    "description": "Shared multireference parameters (active space, state-averaging, symmetry).",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
-     "kind": "subsection",
-     "name": "active_space"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -1968,22 +1968,12 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
      "kind": "quantity",
-     "name": "n_roots_per_multiplicity"
+     "name": "state_treatment"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
      "kind": "quantity",
      "name": "n_state_groups"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "subsection",
-     "name": "numerical_settings"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
@@ -1993,7 +1983,7 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
      "kind": "quantity",
-     "name": "state_treatment"
+     "name": "n_roots_per_multiplicity"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
@@ -2007,8 +1997,18 @@
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "type"
+     "kind": "subsection",
+     "name": "numerical_settings"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
+     "kind": "subsection",
+     "name": "active_space"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
@@ -2204,19 +2204,14 @@
    "description": "A base section used to define the parameters of a Coupled Cluster calculation. A standard schema is defined, though the most common cases can be summarized in the `type` quantity.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.CC",
      "kind": "quantity",
-     "name": "excitation_order"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.CC",
-     "kind": "quantity",
-     "name": "explicit_correlation"
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -2230,23 +2225,8 @@
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.CC",
-     "kind": "subsection",
-     "name": "local_correlation"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "subsection",
-     "name": "numerical_settings"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.CC",
-     "kind": "quantity",
-     "name": "perturbative_correction"
+     "name": "excitation_order"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.CC",
@@ -2256,7 +2236,27 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.CC",
      "kind": "quantity",
-     "name": "type"
+     "name": "perturbative_correction"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.CC",
+     "kind": "quantity",
+     "name": "explicit_correlation"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "subsection",
+     "name": "numerical_settings"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.CC",
+     "kind": "subsection",
+     "name": "local_correlation"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.CC",
@@ -2312,14 +2312,14 @@
    "description": "Single-reference Configuration Interaction (CI) methods using atom-centered basis sets. This captures CI expansions built on top of a single-determinant reference\n(e.g., RHF/UHF/ROHF), not multireference active-space CI variants. For\nCAS/RAS-based CI, use `MultireferenceCI`.\n\nVariants include:\n  - CIS    : Configuration Interaction Singles\n  - CID    : Configuration Interaction Doubles\n  - CISD   : Configuration Interaction Singles and Doubles\n  - CISDT  : Configuration Interaction Singles, Doubles and Triples\n  - CISDTQ : Configuration Interaction Singles, Doubles, Triples and Quadruples\n  - FCI    : Full Configuration Interaction",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.CI",
      "kind": "quantity",
-     "name": "excitation_order"
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -2332,9 +2332,9 @@
      "name": "is_spin_polarized"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.CI",
      "kind": "quantity",
-     "name": "name"
+     "name": "excitation_order"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -2342,9 +2342,9 @@
      "name": "numerical_settings"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.CI",
-     "kind": "quantity",
-     "name": "type"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.CI",
@@ -2427,24 +2427,14 @@
    "description": "A base section used to define the parameters used in a core-hole spectra calculation. This also contains reference to the specific methodological section (DFT, BSE) used to obtain the core-hole spectra.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.CoreHoleSpectra",
      "kind": "quantity",
-     "name": "core_hole_ref"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.CoreHoleSpectra",
-     "kind": "quantity",
-     "name": "edge"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.CoreHoleSpectra",
-     "kind": "quantity",
-     "name": "excited_state_method_ref"
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -2457,9 +2447,19 @@
      "name": "is_spin_polarized"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.CoreHoleSpectra",
      "kind": "quantity",
-     "name": "name"
+     "name": "edge"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.CoreHoleSpectra",
+     "kind": "quantity",
+     "name": "core_hole_ref"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.CoreHoleSpectra",
+     "kind": "quantity",
+     "name": "excited_state_method_ref"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -2467,9 +2467,9 @@
      "name": "numerical_settings"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.CoreHoleSpectra",
-     "kind": "quantity",
-     "name": "type"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.CoreHoleSpectra",
@@ -2536,9 +2536,14 @@
    "description": "A base section used to define the parameters used in a density functional theory (DFT) calculation.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -2556,9 +2561,9 @@
      "name": "jacobs_ladder"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.DFT",
      "kind": "quantity",
-     "name": "name"
+     "name": "reference_form"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -2566,14 +2571,9 @@
      "name": "numerical_settings"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.DFT",
-     "kind": "quantity",
-     "name": "reference_form"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "type"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.DFT",
@@ -2710,24 +2710,19 @@
    "description": "A base section used to define the parameters of a DMFT calculation.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "quantity",
      "name": "external_reference"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.DMFT",
-     "kind": "quantity",
-     "name": "impurity_solver"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.DMFT",
-     "kind": "quantity",
-     "name": "inverse_temperature"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethodElectronic",
@@ -2737,12 +2732,7 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.DMFT",
      "kind": "quantity",
-     "name": "magnetic_state"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.DMFT",
-     "kind": "quantity",
-     "name": "n_electrons"
+     "name": "impurity_solver"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.DMFT",
@@ -2755,9 +2745,24 @@
      "name": "n_orbitals"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.DMFT",
      "kind": "quantity",
-     "name": "name"
+     "name": "orbitals_ref"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.DMFT",
+     "kind": "quantity",
+     "name": "n_electrons"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.DMFT",
+     "kind": "quantity",
+     "name": "inverse_temperature"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.DMFT",
+     "kind": "quantity",
+     "name": "magnetic_state"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -2765,14 +2770,9 @@
      "name": "numerical_settings"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.DMFT",
-     "kind": "quantity",
-     "name": "orbitals_ref"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "type"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.DMFT",
@@ -2841,9 +2841,14 @@
    "description": "Empirical dispersion correction used together with an ab-initio method. Covers pairwise-additive (D2/D3/D3(BJ)/D4), density-dependent (TS/TS-SCS),\nmany-body dispersion (MBD, e.g. MBD@rsSCS), and exchange-hole based XDM.\nIn literature, `DFT-D` is often used as an umbrella label; this schema stores\nthe concrete generation explicitly when available (e.g. D2, D3, D3BJ, D4).",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.EmpiricalDispersionModel",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "quantity",
-     "name": "damping_function"
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -2856,24 +2861,19 @@
      "name": "model"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.EmpiricalDispersionModel",
      "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "subsection",
-     "name": "numerical_settings"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "type"
+     "name": "damping_function"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.EmpiricalDispersionModel",
      "kind": "quantity",
      "name": "xc_partner_ref"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "subsection",
+     "name": "numerical_settings"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.EmpiricalDispersionModel",
@@ -2941,14 +2941,14 @@
    "description": "A base section used to define the parameters typical of excited-state calculations. \"ExcitedStateMethodology\" mainly refers to methodologies which consider many-body effects as a perturbation of the original\nDFT Hamiltonian. These are: GW, TDDFT, BSE.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "quantity",
-     "name": "broadening"
+     "name": "name"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -2963,17 +2963,17 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
      "kind": "quantity",
+     "name": "n_states"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
+     "kind": "quantity",
      "name": "n_empty_states"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
      "kind": "quantity",
-     "name": "n_states"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "name"
+     "name": "broadening"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -2981,9 +2981,9 @@
      "name": "numerical_settings"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "type"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
@@ -3068,29 +3068,19 @@
    "description": "A base section used to define the parameters of a GW calculation.",
    "effective_attributes": [
     {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.GW",
      "kind": "quantity",
-     "name": "analytical_continuation"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
-     "kind": "quantity",
-     "name": "broadening"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "quantity",
      "name": "external_reference"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.GW",
-     "kind": "quantity",
-     "name": "interval_qp_corrections"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethodElectronic",
@@ -3100,22 +3090,27 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
      "kind": "quantity",
+     "name": "n_states"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
+     "kind": "quantity",
      "name": "n_empty_states"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
      "kind": "quantity",
-     "name": "n_states"
+     "name": "broadening"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.GW",
      "kind": "quantity",
-     "name": "name"
+     "name": "analytical_continuation"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "subsection",
-     "name": "numerical_settings"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.GW",
+     "kind": "quantity",
+     "name": "interval_qp_corrections"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.GW",
@@ -3123,9 +3118,14 @@
      "name": "screening_ref"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.GW",
-     "kind": "quantity",
-     "name": "type"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "subsection",
+     "name": "numerical_settings"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.GW",
@@ -3165,9 +3165,14 @@
    "description": "Defines a Hartree-Fock (HF) calculation. In HF theory:\n  - RHF  = Restricted Hartree-Fock, for closed-shell systems.\n  - UHF  = Unrestricted Hartree-Fock, allows different orbitals for alpha/beta spin.\n  - ROHF = Restricted Open-Shell Hartree-Fock, a partially restricted approach for\n           open-shell systems.\n\n**References**:\n  - Roothaan, C. C. J. (1951). \"New Developments in Molecular Orbital Theory.\"\n    Rev. Mod. Phys. 23, 69.\n  - Szabo, A., & Ostlund, N. S. (1989). *Modern Quantum Chemistry*. McGraw-Hill.\n  - Jensen, F. (2007). *Introduction to Computational Chemistry*. 2nd ed., Wiley.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -3180,9 +3185,9 @@
      "name": "is_spin_polarized"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.HF",
      "kind": "quantity",
-     "name": "name"
+     "name": "reference_form"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -3190,14 +3195,9 @@
      "name": "numerical_settings"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.HF",
-     "kind": "quantity",
-     "name": "reference_form"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "type"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.HF",
@@ -3392,7 +3392,12 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
      "kind": "quantity",
-     "name": "double_counting_correction"
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -3402,27 +3407,7 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
      "kind": "quantity",
-     "name": "j_hunds_coupling"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
-     "kind": "quantity",
-     "name": "j_local_exchange_interaction"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
-     "kind": "quantity",
      "name": "n_orbitals"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "subsection",
-     "name": "numerical_settings"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
@@ -3432,17 +3417,7 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
      "kind": "quantity",
-     "name": "slater_integrals"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "type"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
-     "kind": "quantity",
-     "name": "u_effective"
+     "name": "u_matrix"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
@@ -3452,12 +3427,37 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
      "kind": "quantity",
+     "name": "j_hunds_coupling"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
+     "kind": "quantity",
      "name": "u_interorbital_interaction"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
      "kind": "quantity",
-     "name": "u_matrix"
+     "name": "j_local_exchange_interaction"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
+     "kind": "quantity",
+     "name": "u_effective"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
+     "kind": "quantity",
+     "name": "slater_integrals"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
+     "kind": "quantity",
+     "name": "double_counting_correction"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "subsection",
+     "name": "numerical_settings"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
@@ -3590,9 +3590,29 @@
    "description": "Implicit-solvent or polarizable continuum treatments. Examples include PCM and its variants (IEF-PCM, CPCM), COSMO, COSMO-RS,\nSMD, GBSA, and Poisson-Boltzmann (PB) models.  The essential parameters\nare the dielectric constant **ε** of the solvent, a description of how\nthe cavity is constructed, and optional surface-charge or\ndispersion terms used by the model.",
    "effective_attributes": [
     {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "type"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "external_reference"
+    },
+    {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ImplicitSolvationModel",
      "kind": "quantity",
-     "name": "cavity_construction"
+     "name": "model"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ImplicitSolvationModel",
+     "kind": "quantity",
+     "name": "solvent"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ImplicitSolvationModel",
@@ -3605,29 +3625,9 @@
      "name": "dielectric_constant_optical"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "external_reference"
-    },
-    {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ImplicitSolvationModel",
      "kind": "quantity",
      "name": "is_mixture"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ImplicitSolvationModel",
-     "kind": "quantity",
-     "name": "model"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "subsection",
-     "name": "numerical_settings"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ImplicitSolvationModel",
@@ -3637,12 +3637,12 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ImplicitSolvationModel",
      "kind": "quantity",
-     "name": "solvent"
+     "name": "cavity_construction"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "type"
+     "kind": "subsection",
+     "name": "numerical_settings"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.ImplicitSolvationModel",
@@ -3696,13 +3696,13 @@
    "effective_attributes": [
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.LocalCorrelation",
-     "kind": "subsection",
-     "name": "spaces"
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.LocalCorrelation",
-     "kind": "quantity",
-     "name": "type"
+     "kind": "subsection",
+     "name": "spaces"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.LocalCorrelation",
@@ -3820,6 +3820,21 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.LocalCorrelationSpace",
      "kind": "quantity",
+     "name": "space_kind"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.LocalCorrelationSpace",
+     "kind": "quantity",
+     "name": "occupied_tuple_kind"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.LocalCorrelationSpace",
+     "kind": "quantity",
+     "name": "virtual_space_type"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.LocalCorrelationSpace",
+     "kind": "quantity",
      "name": "excitation_order"
     },
     {
@@ -3831,21 +3846,6 @@
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.LocalCorrelationSpace",
      "kind": "quantity",
      "name": "n_orbitals"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.LocalCorrelationSpace",
-     "kind": "quantity",
-     "name": "occupied_tuple_kind"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.LocalCorrelationSpace",
-     "kind": "quantity",
-     "name": "space_kind"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.LocalCorrelationSpace",
-     "kind": "quantity",
-     "name": "virtual_space_type"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.LocalCorrelationSpace",
@@ -3883,9 +3883,14 @@
    "description": "A base section for the method-defining choices of a simulation. Store here choices that change the target Hamiltonian, governing equations, ansatz, or physical approximation used by the\nsimulation. Numerical controls for discretization, convergence, basis representations, solver\nexecution, or related implementation details belong in `numerical_settings`.\n\nOptionally, this section can be decomposed in a series of contributions by storing them under\nthe `contributions` quantity.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -3894,18 +3899,13 @@
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "subsection",
      "name": "numerical_settings"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "type"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.ModelMethod",
@@ -3944,9 +3944,14 @@
    "description": "A base section used to define the parameters of a model Hamiltonian used in electronic structure calculations (TB, DFT, GW, BSE, DMFT, etc).",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -3960,18 +3965,13 @@
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "subsection",
      "name": "numerical_settings"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "type"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.ModelMethodElectronic",
@@ -4011,14 +4011,14 @@
    "description": "Multireference configuration interaction methods (e.g., MRCI).",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
-     "kind": "subsection",
-     "name": "active_space"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.MultireferenceCI",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -4028,22 +4028,12 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
      "kind": "quantity",
-     "name": "n_roots_per_multiplicity"
+     "name": "state_treatment"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
      "kind": "quantity",
      "name": "n_state_groups"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "subsection",
-     "name": "numerical_settings"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
@@ -4053,7 +4043,7 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
      "kind": "quantity",
-     "name": "state_treatment"
+     "name": "n_roots_per_multiplicity"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
@@ -4066,9 +4056,19 @@
      "name": "symmetry_label"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.MultireferenceCI",
-     "kind": "quantity",
-     "name": "type"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "subsection",
+     "name": "numerical_settings"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
+     "kind": "subsection",
+     "name": "active_space"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.MultireferenceCI",
@@ -4122,14 +4122,14 @@
    "description": "Multireference perturbation theory methods (CASPTn/NEVPTn/RASPTn). Defaults are PT2-style, but `order` can capture higher-order variants.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
-     "kind": "subsection",
-     "name": "active_space"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.MultireferencePT",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -4139,27 +4139,12 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
      "kind": "quantity",
-     "name": "n_roots_per_multiplicity"
+     "name": "state_treatment"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
      "kind": "quantity",
      "name": "n_state_groups"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "subsection",
-     "name": "numerical_settings"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.MultireferencePT",
-     "kind": "quantity",
-     "name": "order"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
@@ -4169,7 +4154,7 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
      "kind": "quantity",
-     "name": "state_treatment"
+     "name": "n_roots_per_multiplicity"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
@@ -4184,7 +4169,22 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.MultireferencePT",
      "kind": "quantity",
-     "name": "type"
+     "name": "order"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "subsection",
+     "name": "numerical_settings"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
+     "kind": "subsection",
+     "name": "active_space"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.MultireferencePT",
@@ -4224,14 +4224,14 @@
    "description": "Multiconfigurational SCF calculations (e.g., CASSCF, RASSCF, DMRG-SCF).",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
-     "kind": "subsection",
-     "name": "active_space"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.MultireferenceSCF",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -4241,22 +4241,12 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
      "kind": "quantity",
-     "name": "n_roots_per_multiplicity"
+     "name": "state_treatment"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
      "kind": "quantity",
      "name": "n_state_groups"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "subsection",
-     "name": "numerical_settings"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
@@ -4266,7 +4256,7 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
      "kind": "quantity",
-     "name": "state_treatment"
+     "name": "n_roots_per_multiplicity"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
@@ -4279,9 +4269,19 @@
      "name": "symmetry_label"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.MultireferenceSCF",
-     "kind": "quantity",
-     "name": "type"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "subsection",
+     "name": "numerical_settings"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
+     "kind": "subsection",
+     "name": "active_space"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.MultireferenceSCF",
@@ -4321,9 +4321,14 @@
    "description": "A base section used to define Neglect of Diatomic Differential Overlap (NDDO)-type semi-empirical quantum chemistry methods such as MNDO, AM1, PM3, PM6, PM7, and SAM1.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.NDDO",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -4337,18 +4342,13 @@
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "subsection",
      "name": "numerical_settings"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.NDDO",
-     "kind": "quantity",
-     "name": "type"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.NDDO",
@@ -4404,17 +4404,7 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "quantity",
-     "name": "external_reference"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
      "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "subsection",
-     "name": "numerical_settings"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.NonlocalCorrelation",
@@ -4422,9 +4412,19 @@
      "name": "type"
     },
     {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "external_reference"
+    },
+    {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.NonlocalCorrelation",
      "kind": "quantity",
      "name": "xc_partner_ref"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "subsection",
+     "name": "numerical_settings"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.NonlocalCorrelation",
@@ -4478,9 +4478,14 @@
    "description": "Transforming canonical MOs into a localized representation. Localized orbitals are used by local correlation methods such as\nLMP2, DLPNO-CCSD(T), fragment charge analyses, and qualitative bonding pictures.\nThe transformation is (near) unitary and does not change the total energy by itself,\nit merely changes the representation.\n\nReferences:\n    - S. F. Boys, \"Construction of Some Molecular Orbitals to Be Approximately Invariant for Changes from One Molecule to Another,\" Rev. Mod. Phys. 32, 296 (1960). https://doi.org/10.1103/RevModPhys.32.296\n    - J. Pipek and P. G. Mezey, \"A fast intrinsic localization procedure applicable for ab initio and semiempirical linear combination of atomic orbital wave functions,\" J. Chem. Phys. 90, 4916 (1989). https://doi.org/10.1063/1.456588\n    - C. Edmiston and K. Ruedenberg, \"Localized Atomic and Molecular Orbitals,\" Rev. Mod. Phys. 35, 457 (1963). https://doi.org/10.1103/RevModPhys.35.457\n    - G. Knizia, \"Intrinsic Atomic Orbitals: An Unbiased Bridge between Quantum Theory and Chemical Concepts,\" J. Chem. Theory Comput. 9, 4834 (2013). https://doi.org/10.1021/ct400687b\n    - F. Weinhold, C. R. Landis, \"Natural bond orbitals and extensions of localized bonding concepts,\" Chem. Educ. Res. Pract. 2, 91 (2001). https://doi.org/10.1039/B1RP90011K",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -4499,18 +4504,13 @@
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "subsection",
      "name": "numerical_settings"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "type"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.OrbitalLocalization",
@@ -4606,14 +4606,14 @@
    ],
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.PerturbationMethod",
      "kind": "quantity",
-     "name": "density"
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -4627,23 +4627,13 @@
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.PerturbationMethod",
-     "kind": "subsection",
-     "name": "local_correlation"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "subsection",
-     "name": "numerical_settings"
+     "name": "order"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.PerturbationMethod",
      "kind": "quantity",
-     "name": "order"
+     "name": "density"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.PerturbationMethod",
@@ -4651,9 +4641,19 @@
      "name": "spin_component_scaling"
     },
     {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "subsection",
+     "name": "numerical_settings"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
+    },
+    {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.PerturbationMethod",
-     "kind": "quantity",
-     "name": "type"
+     "kind": "subsection",
+     "name": "local_correlation"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.PerturbationMethod",
@@ -4742,22 +4742,22 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.Photon",
      "kind": "quantity",
-     "name": "energy"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.Photon",
-     "kind": "quantity",
-     "name": "momentum_transfer"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.Photon",
-     "kind": "quantity",
      "name": "multipole_type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.Photon",
      "kind": "quantity",
      "name": "polarization"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.Photon",
+     "kind": "quantity",
+     "name": "energy"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.Photon",
+     "kind": "quantity",
+     "name": "momentum_transfer"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.Photon",
@@ -4826,14 +4826,14 @@
    "description": "Relativistic treatment of the valence Hamiltonian. This does not describe core-electron approximations (PP/ECP).\n\nTypical options\n--------------\n* Four-component Dirac-Coulomb (DC)\n* Two-component X2C / DKH / ZORA\n* Spin-orbit mean-field (SOMF) for post-HF/BSE",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.RelativityModel",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "quantity",
-     "name": "approximation"
+     "name": "name"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.RelativityModel",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "quantity",
-     "name": "dkh_order"
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -4846,19 +4846,19 @@
      "name": "level"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.RelativityModel",
      "kind": "quantity",
-     "name": "name"
+     "name": "approximation"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.RelativityModel",
+     "kind": "quantity",
+     "name": "dkh_order"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "subsection",
      "name": "numerical_settings"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "type"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.RelativityModel",
@@ -4897,19 +4897,14 @@
    "description": "A base section used to define the parameters that define the calculation of screening. This is usually done in RPA and linear response.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "quantity",
-     "name": "broadening"
+     "name": "name"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.Screening",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "quantity",
-     "name": "dielectric_infinity"
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -4924,17 +4919,22 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
      "kind": "quantity",
+     "name": "n_states"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
+     "kind": "quantity",
      "name": "n_empty_states"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
      "kind": "quantity",
-     "name": "n_states"
+     "name": "broadening"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.Screening",
      "kind": "quantity",
-     "name": "name"
+     "name": "dielectric_infinity"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -4942,9 +4942,9 @@
      "name": "numerical_settings"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "type"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.Screening",
@@ -5040,14 +5040,14 @@
    "description": "Self-interaction correction (SIC) add-on used together with DFT. This section replaces the legacy flat\n`DFT.self_interaction_correction_method` string with a structured record\nthat can also store approximation-specific parameters, such as scaling\nfactors and explicitly corrected orbitals.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.SelfInteractionCorrection",
-     "kind": "subsection",
-     "name": "corrected_orbitals_ref"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.SelfInteractionCorrection",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "quantity",
-     "name": "correction_target"
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -5062,12 +5062,17 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.SelfInteractionCorrection",
      "kind": "quantity",
-     "name": "n_corrected_orbitals"
+     "name": "correction_target"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.SelfInteractionCorrection",
      "kind": "quantity",
-     "name": "name"
+     "name": "scaling_factor"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.SelfInteractionCorrection",
+     "kind": "quantity",
+     "name": "n_corrected_orbitals"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -5076,13 +5081,8 @@
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.SelfInteractionCorrection",
-     "kind": "quantity",
-     "name": "scaling_factor"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "type"
+     "kind": "subsection",
+     "name": "corrected_orbitals_ref"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.SelfInteractionCorrection",
@@ -5131,14 +5131,14 @@
    "description": "A base section used to define the parameters used in a Slater-Koster tight-binding fitting.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.SlaterKoster",
-     "kind": "subsection",
-     "name": "bonds"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -5153,12 +5153,12 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
      "kind": "quantity",
-     "name": "n_atoms_per_unit_cell"
+     "name": "n_orbitals_per_atom"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
      "kind": "quantity",
-     "name": "n_orbitals_per_atom"
+     "name": "n_atoms_per_unit_cell"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
@@ -5166,9 +5166,9 @@
      "name": "n_total_orbitals"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
      "kind": "quantity",
-     "name": "name"
+     "name": "orbitals_ref"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -5176,19 +5176,19 @@
      "name": "numerical_settings"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
-     "kind": "quantity",
-     "name": "orbitals_ref"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.SlaterKoster",
+     "kind": "subsection",
+     "name": "bonds"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.SlaterKoster",
      "kind": "subsection",
      "name": "overlaps"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
-     "kind": "quantity",
-     "name": "type"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.SlaterKoster",
@@ -5296,12 +5296,17 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.SlaterKosterBond",
      "kind": "quantity",
-     "name": "bravais_vector"
+     "name": "orbital_1"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.SlaterKosterBond",
      "kind": "quantity",
-     "name": "integral_value"
+     "name": "orbital_2"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.SlaterKosterBond",
+     "kind": "quantity",
+     "name": "bravais_vector"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.SlaterKosterBond",
@@ -5311,12 +5316,7 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.SlaterKosterBond",
      "kind": "quantity",
-     "name": "orbital_1"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.SlaterKosterBond",
-     "kind": "quantity",
-     "name": "orbital_2"
+     "name": "integral_value"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.SlaterKosterBond",
@@ -5418,9 +5418,14 @@
    "description": "A base section containing the parameters pertaining to a tight-binding (TB) model calculation. The type of tight-binding model is specified in the `type` quantity.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -5435,12 +5440,12 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
      "kind": "quantity",
-     "name": "n_atoms_per_unit_cell"
+     "name": "n_orbitals_per_atom"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
      "kind": "quantity",
-     "name": "n_orbitals_per_atom"
+     "name": "n_atoms_per_unit_cell"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
@@ -5448,9 +5453,9 @@
      "name": "n_total_orbitals"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
      "kind": "quantity",
-     "name": "name"
+     "name": "orbitals_ref"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -5458,14 +5463,9 @@
      "name": "numerical_settings"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
-     "kind": "quantity",
-     "name": "orbitals_ref"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
-     "kind": "quantity",
-     "name": "type"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.TB",
@@ -5584,29 +5584,19 @@
    "description": "Time-dependent density functional theory settings. Captures both linear-response and real-time propagation flavours.\nLinks to underlying ground-state calculations should be represented at workflow level.",
    "effective_attributes": [
     {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TDDFT",
      "kind": "quantity",
-     "name": "approximation"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
-     "kind": "quantity",
-     "name": "broadening"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
      "kind": "quantity",
      "name": "external_reference"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TDDFT",
-     "kind": "quantity",
-     "name": "field_polarization_ref"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethodElectronic",
@@ -5616,22 +5606,17 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
      "kind": "quantity",
+     "name": "n_states"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
+     "kind": "quantity",
      "name": "n_empty_states"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
      "kind": "quantity",
-     "name": "n_states"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "subsection",
-     "name": "numerical_settings"
+     "name": "broadening"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TDDFT",
@@ -5641,12 +5626,27 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TDDFT",
      "kind": "quantity",
-     "name": "target_property"
+     "name": "approximation"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TDDFT",
      "kind": "quantity",
-     "name": "type"
+     "name": "field_polarization_ref"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TDDFT",
+     "kind": "quantity",
+     "name": "target_property"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "subsection",
+     "name": "numerical_settings"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TDDFT",
@@ -5753,19 +5753,14 @@
    "description": "A base section used to define the parameters used in a Wannier tight-binding fitting.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.Wannier",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
      "kind": "quantity",
-     "name": "energy_window_inner"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.Wannier",
-     "kind": "quantity",
-     "name": "energy_window_outer"
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -5773,29 +5768,9 @@
      "name": "external_reference"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.Wannier",
-     "kind": "quantity",
-     "name": "is_maximally_localized"
-    },
-    {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethodElectronic",
      "kind": "quantity",
      "name": "is_spin_polarized"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.Wannier",
-     "kind": "quantity",
-     "name": "localization_type"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
-     "kind": "quantity",
-     "name": "n_atoms_per_unit_cell"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.Wannier",
-     "kind": "quantity",
-     "name": "n_bloch_bands"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
@@ -5805,17 +5780,12 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
      "kind": "quantity",
-     "name": "n_total_orbitals"
+     "name": "n_atoms_per_unit_cell"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
      "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-     "kind": "subsection",
-     "name": "numerical_settings"
+     "name": "n_total_orbitals"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
@@ -5823,9 +5793,39 @@
      "name": "orbitals_ref"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.Wannier",
      "kind": "quantity",
-     "name": "type"
+     "name": "is_maximally_localized"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.Wannier",
+     "kind": "quantity",
+     "name": "localization_type"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.Wannier",
+     "kind": "quantity",
+     "name": "n_bloch_bands"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.Wannier",
+     "kind": "quantity",
+     "name": "energy_window_outer"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.Wannier",
+     "kind": "quantity",
+     "name": "energy_window_inner"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "subsection",
+     "name": "numerical_settings"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.Wannier",
@@ -6019,6 +6019,11 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.XCComponent",
      "kind": "quantity",
+     "name": "libxc_id"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.XCComponent",
+     "kind": "quantity",
      "name": "canonical_label"
     },
     {
@@ -6034,17 +6039,12 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.XCComponent",
      "kind": "quantity",
-     "name": "fraction_exact_exchange"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.XCComponent",
-     "kind": "quantity",
      "name": "kind"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.XCComponent",
      "kind": "quantity",
-     "name": "libxc_id"
+     "name": "fraction_exact_exchange"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.XCComponent",
@@ -6054,22 +6054,22 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.XCComponent",
      "kind": "quantity",
-     "name": "range_separation_function"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.XCComponent",
-     "kind": "quantity",
      "name": "range_separation_parameter"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.XCComponent",
      "kind": "quantity",
-     "name": "unidentified"
+     "name": "range_separation_function"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.XCComponent",
      "kind": "quantity",
      "name": "weight"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.XCComponent",
+     "kind": "quantity",
+     "name": "unidentified"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.XCComponent",
@@ -6149,11 +6149,6 @@
    "effective_attributes": [
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.XCFunctional",
-     "kind": "subsection",
-     "name": "components"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.XCFunctional",
      "kind": "quantity",
      "name": "functional_key"
     },
@@ -6166,6 +6161,11 @@
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.XCFunctional",
      "kind": "quantity",
      "name": "uses_libxc"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.XCFunctional",
+     "kind": "subsection",
+     "name": "components"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.XCFunctional",
@@ -6189,9 +6189,14 @@
    "description": "A base section used to define the parameters used in an extended tight-binding (xTB) calculation.",
    "effective_attributes": [
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
-     "kind": "subsection",
-     "name": "contributions"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
+     "kind": "quantity",
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -6206,12 +6211,12 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
      "kind": "quantity",
-     "name": "n_atoms_per_unit_cell"
+     "name": "n_orbitals_per_atom"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
      "kind": "quantity",
-     "name": "n_orbitals_per_atom"
+     "name": "n_atoms_per_unit_cell"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
@@ -6219,9 +6224,9 @@
      "name": "n_total_orbitals"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
      "kind": "quantity",
-     "name": "name"
+     "name": "orbitals_ref"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
@@ -6229,14 +6234,9 @@
      "name": "numerical_settings"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
-     "kind": "quantity",
-     "name": "orbitals_ref"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_method.TB",
-     "kind": "quantity",
-     "name": "type"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_method.ModelMethod",
+     "kind": "subsection",
+     "name": "contributions"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_method.xTB",
@@ -6336,7 +6336,37 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
      "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "kind": "quantity",
+     "name": "coordinates_system"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "kind": "quantity",
+     "name": "lattice_vectors"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "kind": "quantity",
+     "name": "periodic_boundary_conditions"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "kind": "quantity",
+     "name": "volume"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "kind": "quantity",
      "name": "area"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "kind": "quantity",
+     "name": "length"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
@@ -6351,37 +6381,7 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
      "kind": "quantity",
-     "name": "coordinates_system"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.AlternativeRepresentation",
-     "kind": "quantity",
-     "name": "crystal_cell_type"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
-     "kind": "quantity",
      "name": "fractional_coordinates"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
-     "kind": "quantity",
-     "name": "lattice_vectors"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
-     "kind": "quantity",
-     "name": "length"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
-     "kind": "subsection",
-     "name": "local_symmetry"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
-     "kind": "quantity",
-     "name": "name"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.AlternativeRepresentation",
@@ -6389,9 +6389,14 @@
      "name": "origin_shift"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.AlternativeRepresentation",
      "kind": "quantity",
-     "name": "periodic_boundary_conditions"
+     "name": "transformation_matrix"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.AlternativeRepresentation",
+     "kind": "quantity",
+     "name": "crystal_cell_type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.AlternativeRepresentation",
@@ -6399,14 +6404,9 @@
      "name": "supercell_matrix"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.AlternativeRepresentation",
-     "kind": "quantity",
-     "name": "transformation_matrix"
-    },
-    {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
-     "kind": "quantity",
-     "name": "volume"
+     "kind": "subsection",
+     "name": "local_symmetry"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_system.AlternativeRepresentation",
@@ -6503,17 +6503,12 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.ChemicalFormula",
      "kind": "quantity",
-     "name": "anonymous"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ChemicalFormula",
-     "kind": "quantity",
      "name": "descriptive"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.ChemicalFormula",
      "kind": "quantity",
-     "name": "hill"
+     "name": "reduced"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.ChemicalFormula",
@@ -6523,7 +6518,12 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.ChemicalFormula",
      "kind": "quantity",
-     "name": "reduced"
+     "name": "hill"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ChemicalFormula",
+     "kind": "quantity",
+     "name": "anonymous"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_system.ChemicalFormula",
@@ -6729,22 +6729,7 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
      "kind": "quantity",
-     "name": "analysis_origin_shift"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
-     "kind": "quantity",
-     "name": "analysis_transformation_matrix"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
-     "kind": "quantity",
-     "name": "hall_number"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
-     "kind": "quantity",
-     "name": "hall_symbol"
+     "name": "lattice_type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
@@ -6754,22 +6739,17 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
      "kind": "quantity",
-     "name": "lattice_type"
+     "name": "hall_symbol"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
+     "kind": "quantity",
+     "name": "hall_number"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
      "kind": "quantity",
      "name": "point_group_symbol"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
-     "kind": "quantity",
-     "name": "prototype_aflow_id"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
-     "kind": "quantity",
-     "name": "prototype_formula"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
@@ -6785,6 +6765,26 @@
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
      "kind": "quantity",
      "name": "strukturbericht_designation"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
+     "kind": "quantity",
+     "name": "prototype_formula"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
+     "kind": "quantity",
+     "name": "prototype_aflow_id"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
+     "kind": "quantity",
+     "name": "analysis_origin_shift"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
+     "kind": "quantity",
+     "name": "analysis_transformation_matrix"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
@@ -6892,17 +6892,17 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.LocalCrystalSymmetry",
      "kind": "quantity",
-     "name": "site_multiplicities"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.LocalCrystalSymmetry",
-     "kind": "quantity",
      "name": "site_symmetries"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.LocalCrystalSymmetry",
      "kind": "quantity",
      "name": "wyckoff_letters"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.LocalCrystalSymmetry",
+     "kind": "quantity",
+     "name": "site_multiplicities"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_system.LocalCrystalSymmetry",
@@ -7271,14 +7271,59 @@
    "description": "Model system used as an input for simulating the material. Particle positions are held at the top level in the quantity \"positions\"\nand more detailed per‐particle information, e.g., electronic state information,\nare stored in the subsection \"particle_states\". Parsers may populate generic\n`ParticleState` entries or specialized subclasses such as `AtomsState` and\n`CGBeadState`. ModelSystem normalization does not reassign between these types.\n\nDownstream subsystems refer to particles via `particle_indices`.\n\nDefinitions:\n    - `name` refers to all the verbose and user-dependent naming in ModelSystem,\n    - `type` refers to the type of the ModelSystem (atom, bulk, surface, etc.),\n    - `dimensionality` refers to the dimensionality of the ModelSystem (0, 1, 2, 3),\n\nIf the ModelSystem `is_representative`, proceeds with normalization. The time evolution of the\nModelSystem is stored in a `list` format under `Simulation`, and for each element of that list,\n`time_step` can be defined.\n\nIt is composed of the sub-sections:\n    - `Representation` containing alternative representations of the system\n    - `GlobalSymmetry` containing the global symmetry information for bulk ModelSystem,\n    - `ChemicalFormula` containing the information of the chemical formulas in different\n    formats.\n\nThis class nests over itself (with the section proxy in `sub_systems`) to define different\nparent-child system trees. The quantities `branch_label`, `branch_depth`, `particle_indices`,\nand `bond_list` are used to define the parent-child tree.\n\nSee the [ModelSystem documentation](https://nomad-lab.eu/prod/v1/staging/docs/howto/customization/plugins_dev.html)\nfor comprehensive usage examples, design philosophy, and integration patterns.\n\nThe normalization within ModelSystem.normalize() proceeds in the following order:\n    1. Parent System normalization\n    2. Subsystem validation\n    3. System type and dimensionality resolution (if representative and atomic)\n    4. Symmetry section creation and normalization (for bulk systems)\n    5. ChemicalFormula section creation and normalization\n\nNote: Other normalizations (ParticleState, ElectronicState, etc.) are handled automatically\nby NOMAD's normalization system when their respective sections are processed.\n\nExamples for the parent-child hierarchical trees:\n\n    - Example 1, a crystal Si has: 2 alternative Representation sections (named 'primitive'\n    and 'conventional'), 1 Symmetry section, and 0 nested ModelSystem trees. The original\n    representation data is stored directly on the ModelSystem instance itself.\n\n    - Example 2, an heterostructure Si/GaAs has: 1 parent ModelSystem section (for\n    Si/GaAs together) and 2 nested child ModelSystem sections (for Si and GaAs); each\n    child has 2 alternative Representation sections and 1 Symmetry section. The parent\n    ModelSystem section could also have 2 alternative Representation sections and 1\n    Symmetry section (if it is possible to extract them).\n\n    - Example 3, a solution of C800H3200Cu has: 1 parent ModelSystem section (for\n    800*(CH4)+Cu) and 2 nested child ModelSystem sections (for CH4 and Cu). Each system\n    stores its cell data directly via Representation inheritance.\n\n    - Example 4, a passivated surface GaAs-CO2 has --> similar to the example 2.\n\n    - Example 5, a passivated heterostructure Si/(GaAs-CO2) has: 1 parent ModelSystem\n    section (for Si/(GaAs-CO2)), 2 child ModelSystem sections (for Si and GaAs-CO2),\n    and 2 additional children sections in one of the children (for GaAs and CO2). The number\n    of Cell and Symmetry sections can be inferred using a combination of example\n    2 and 3.",
    "effective_attributes": [
     {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
+     "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
+     "kind": "quantity",
+     "name": "datetime"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
+     "kind": "quantity",
+     "name": "lab_id"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
+     "kind": "quantity",
+     "name": "description"
+    },
+    {
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.System",
+     "kind": "quantity",
+     "name": "formula"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "kind": "quantity",
+     "name": "coordinates_system"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "kind": "quantity",
+     "name": "lattice_vectors"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "kind": "quantity",
+     "name": "periodic_boundary_conditions"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "kind": "quantity",
+     "name": "volume"
+    },
+    {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
      "kind": "quantity",
      "name": "area"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
      "kind": "quantity",
-     "name": "bond_list"
+     "name": "length"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
@@ -7291,39 +7336,14 @@
      "name": "boundary_length"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
-     "kind": "quantity",
-     "name": "branch_depth"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
-     "kind": "quantity",
-     "name": "branch_label"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
-     "kind": "subsection",
-     "name": "chemical_formula"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
-     "kind": "quantity",
-     "name": "composition_formula"
-    },
-    {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
      "kind": "quantity",
-     "name": "coordinates_system"
+     "name": "fractional_coordinates"
     },
     {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
      "kind": "quantity",
-     "name": "datetime"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
-     "kind": "quantity",
-     "name": "description"
+     "name": "type"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
@@ -7332,48 +7352,28 @@
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
-     "kind": "subsection",
-     "name": "electronic_state"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.System",
-     "kind": "quantity",
-     "name": "formula"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
-     "kind": "quantity",
-     "name": "fractional_coordinates"
-    },
-    {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.System",
-     "kind": "subsection",
-     "name": "geometry"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
      "kind": "quantity",
      "name": "is_representative"
     },
     {
-     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.BaseSection",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
      "kind": "quantity",
-     "name": "lab_id"
+     "name": "time_step"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
      "kind": "quantity",
-     "name": "lattice_vectors"
+     "name": "branch_label"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
      "kind": "quantity",
-     "name": "length"
+     "name": "branch_depth"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
-     "kind": "subsection",
-     "name": "local_symmetry"
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
+     "kind": "quantity",
+     "name": "particle_indices"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
@@ -7383,47 +7383,22 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
      "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
-     "kind": "quantity",
-     "name": "particle_indices"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
-     "kind": "subsection",
-     "name": "particle_states"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
-     "kind": "quantity",
-     "name": "periodic_boundary_conditions"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
-     "kind": "quantity",
      "name": "positions"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
-     "kind": "subsection",
-     "name": "representations"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
-     "kind": "subsection",
-     "name": "sub_systems"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
-     "kind": "subsection",
-     "name": "symmetry"
+     "kind": "quantity",
+     "name": "velocities"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
      "kind": "quantity",
-     "name": "time_step"
+     "name": "bond_list"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
+     "kind": "quantity",
+     "name": "composition_formula"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
@@ -7437,18 +7412,43 @@
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
-     "kind": "quantity",
-     "name": "type"
+     "kind": "subsection",
+     "name": "sub_systems"
     },
     {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
-     "kind": "quantity",
-     "name": "velocities"
+     "declaring_class_id": "nomad.datamodel.metainfo.basesections.v2.System",
+     "kind": "subsection",
+     "name": "geometry"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
-     "kind": "quantity",
-     "name": "volume"
+     "kind": "subsection",
+     "name": "local_symmetry"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
+     "kind": "subsection",
+     "name": "symmetry"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
+     "kind": "subsection",
+     "name": "chemical_formula"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
+     "kind": "subsection",
+     "name": "electronic_state"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
+     "kind": "subsection",
+     "name": "particle_states"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.ModelSystem",
+     "kind": "subsection",
+     "name": "representations"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_system.ModelSystem",
@@ -7714,7 +7714,37 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
      "kind": "quantity",
+     "name": "name"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "kind": "quantity",
+     "name": "coordinates_system"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "kind": "quantity",
+     "name": "lattice_vectors"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "kind": "quantity",
+     "name": "periodic_boundary_conditions"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "kind": "quantity",
+     "name": "volume"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "kind": "quantity",
      "name": "area"
+    },
+    {
+     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
+     "kind": "quantity",
+     "name": "length"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
@@ -7729,42 +7759,12 @@
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
      "kind": "quantity",
-     "name": "coordinates_system"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
-     "kind": "quantity",
      "name": "fractional_coordinates"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
-     "kind": "quantity",
-     "name": "lattice_vectors"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
-     "kind": "quantity",
-     "name": "length"
     },
     {
      "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
      "kind": "subsection",
      "name": "local_symmetry"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
-     "kind": "quantity",
-     "name": "name"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
-     "kind": "quantity",
-     "name": "periodic_boundary_conditions"
-    },
-    {
-     "declaring_class_id": "nomad_simulations.schema_packages.model_system.Representation",
-     "kind": "quantity",
-     "name": "volume"
     }
    ],
    "id": "nomad_simulations.schema_packages.model_system.Representation",
@@ -8534,66 +8534,69 @@
     "nomad_simulations.schema_packages.atoms_state.CoreHole",
     "nomad_simulations.schema_packages.atoms_state.ElectronicState",
     "nomad_simulations.schema_packages.atoms_state.SphericalSymmetryState",
-    "nomad_simulations.schema_packages.model_method.ActiveSpace",
-    "nomad_simulations.schema_packages.model_method.BSDFT",
-    "nomad_simulations.schema_packages.model_method.BSE",
+    "nomad_simulations.schema_packages.model_system.ModelSystem",
+    "nomad_simulations.schema_packages.numerical_settings.NumericalSettings",
     "nomad_simulations.schema_packages.model_method.BaseModelMethod",
-    "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
-    "nomad_simulations.schema_packages.model_method.BrokenSymmetryCenter",
-    "nomad_simulations.schema_packages.model_method.CC",
-    "nomad_simulations.schema_packages.model_method.CI",
-    "nomad_simulations.schema_packages.model_method.CoreHoleSpectra",
-    "nomad_simulations.schema_packages.model_method.DFT",
-    "nomad_simulations.schema_packages.model_method.DMFT",
-    "nomad_simulations.schema_packages.model_method.EmpiricalDispersionModel",
-    "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
-    "nomad_simulations.schema_packages.model_method.GW",
-    "nomad_simulations.schema_packages.model_method.HF",
-    "nomad_simulations.schema_packages.model_method.HubbardInteractions",
-    "nomad_simulations.schema_packages.model_method.ImplicitSolvationModel",
-    "nomad_simulations.schema_packages.model_method.LocalCorrelation",
-    "nomad_simulations.schema_packages.model_method.LocalCorrelationSpace",
     "nomad_simulations.schema_packages.model_method.ModelMethod",
-    "nomad_simulations.schema_packages.model_method.ModelMethodElectronic",
-    "nomad_simulations.schema_packages.model_method.MultireferenceCI",
-    "nomad_simulations.schema_packages.model_method.MultireferencePT",
-    "nomad_simulations.schema_packages.model_method.MultireferenceSCF",
-    "nomad_simulations.schema_packages.model_method.NDDO",
+    "nomad_simulations.schema_packages.model_method.ImplicitSolvationModel",
+    "nomad_simulations.schema_packages.model_method.EmpiricalDispersionModel",
+    "nomad_simulations.schema_packages.model_method.SelfInteractionCorrection",
+    "nomad_simulations.schema_packages.model_method.HubbardInteractions",
+    "nomad_simulations.schema_packages.model_method.RelativityModel",
     "nomad_simulations.schema_packages.model_method.NonlocalCorrelation",
     "nomad_simulations.schema_packages.model_method.OrbitalLocalization",
-    "nomad_simulations.schema_packages.model_method.PerturbationMethod",
-    "nomad_simulations.schema_packages.model_method.Photon",
-    "nomad_simulations.schema_packages.model_method.RelativityModel",
-    "nomad_simulations.schema_packages.model_method.Screening",
-    "nomad_simulations.schema_packages.model_method.SelfInteractionCorrection",
-    "nomad_simulations.schema_packages.model_method.SlaterKoster",
-    "nomad_simulations.schema_packages.model_method.SlaterKosterBond",
-    "nomad_simulations.schema_packages.model_method.TB",
-    "nomad_simulations.schema_packages.model_method.TDDFT",
-    "nomad_simulations.schema_packages.model_method.Wannier",
+    "nomad_simulations.schema_packages.model_method.ModelMethodElectronic",
     "nomad_simulations.schema_packages.model_method.XCComponent",
     "nomad_simulations.schema_packages.model_method.XCFunctional",
+    "nomad_simulations.schema_packages.model_method.DFT",
+    "nomad_simulations.schema_packages.model_method.BrokenSymmetryCenter",
+    "nomad_simulations.schema_packages.model_method.BSDFT",
+    "nomad_simulations.schema_packages.model_method.TB",
+    "nomad_simulations.schema_packages.model_method.Wannier",
+    "nomad_simulations.schema_packages.model_method.SlaterKosterBond",
+    "nomad_simulations.schema_packages.model_method.SlaterKoster",
     "nomad_simulations.schema_packages.model_method.xTB",
-    "nomad_simulations.schema_packages.model_system.ModelSystem",
-    "nomad_simulations.schema_packages.numerical_settings.NumericalSettings"
+    "nomad_simulations.schema_packages.model_method.NDDO",
+    "nomad_simulations.schema_packages.model_method.Photon",
+    "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
+    "nomad_simulations.schema_packages.model_method.Screening",
+    "nomad_simulations.schema_packages.model_method.GW",
+    "nomad_simulations.schema_packages.model_method.BSE",
+    "nomad_simulations.schema_packages.model_method.TDDFT",
+    "nomad_simulations.schema_packages.model_method.CoreHoleSpectra",
+    "nomad_simulations.schema_packages.model_method.DMFT",
+    "nomad_simulations.schema_packages.model_method.HF",
+    "nomad_simulations.schema_packages.model_method.PerturbationMethod",
+    "nomad_simulations.schema_packages.model_method.LocalCorrelationSpace",
+    "nomad_simulations.schema_packages.model_method.LocalCorrelation",
+    "nomad_simulations.schema_packages.model_method.CC",
+    "nomad_simulations.schema_packages.model_method.CI",
+    "nomad_simulations.schema_packages.model_method.ActiveSpace",
+    "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
+    "nomad_simulations.schema_packages.model_method.MultireferenceSCF",
+    "nomad_simulations.schema_packages.model_method.MultireferenceCI",
+    "nomad_simulations.schema_packages.model_method.MultireferencePT"
    ],
    "name": "nomad_simulations.schema_packages.model_method"
   },
   {
+   "aliases": {
+    "Symmetry": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry"
+   },
    "classes": [
     "nomad.datamodel.data.ArchiveSection",
     "nomad.datamodel.metainfo.basesections.v2.System",
     "nomad_simulations.schema_packages.atoms_state.AtomsState",
     "nomad_simulations.schema_packages.atoms_state.ElectronicState",
     "nomad_simulations.schema_packages.atoms_state.ParticleState",
+    "nomad_simulations.schema_packages.model_system.Representation",
     "nomad_simulations.schema_packages.model_system.AlternativeRepresentation",
-    "nomad_simulations.schema_packages.model_system.ChemicalFormula",
-    "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
-    "nomad_simulations.schema_packages.model_system.GlobalSymmetry",
-    "nomad_simulations.schema_packages.model_system.LocalCrystalSymmetry",
     "nomad_simulations.schema_packages.model_system.LocalSymmetry",
-    "nomad_simulations.schema_packages.model_system.ModelSystem",
-    "nomad_simulations.schema_packages.model_system.Representation"
+    "nomad_simulations.schema_packages.model_system.LocalCrystalSymmetry",
+    "nomad_simulations.schema_packages.model_system.GlobalSymmetry",
+    "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
+    "nomad_simulations.schema_packages.model_system.ChemicalFormula",
+    "nomad_simulations.schema_packages.model_system.ModelSystem"
    ],
    "name": "nomad_simulations.schema_packages.model_system"
   }

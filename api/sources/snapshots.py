@@ -5,7 +5,8 @@ profile's contract script (including NOMAD methods and usage, which describe
 code and are not converted), the LinkML schema converted from it, and the
 conversion report. Snapshots are cached on disk per profile, schema commit and
 module. When the converter code changes, the stored extraction document is
-converted again; the profile environment is not started for that.
+converted again; the profile environment is not started for that. When the
+extractor scripts change, the module is extracted again.
 """
 from __future__ import annotations
 
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 SNAPSHOT_FORMAT = 1
 _CONVERTER_DIR = Path(__file__).with_name("to_linkml")
+_SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "extractor" / "scripts"
 _MEMORY: dict[Path, dict[str, Any]] = {}
 _MEMORY_LIMIT = 8
 _LOCK = Lock()
@@ -69,6 +71,15 @@ def converter_fingerprint() -> str:
     return digest.hexdigest()[:16]
 
 
+def extractor_fingerprint() -> str:
+    """Changes whenever the extractor scripts change, so stale extraction documents are redone."""
+    digest = hashlib.sha256()
+    for path in sorted(_SCRIPTS_DIR.glob("*.py")):
+        digest.update(path.name.encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:16]
+
+
 def convert(profile: SchemaProfile, document: dict[str, Any]) -> Conversion:
     if not supports_linkml(profile):
         raise LinkMLUnavailable(f"LinkML export is not available for {profile.label} yet.")
@@ -83,6 +94,7 @@ def make_snapshot(profile: SchemaProfile, scope: str, document: dict[str, Any]) 
         "profile": profile.key,
         "scope": scope,
         "converter": converter_fingerprint(),
+        "extractor": extractor_fingerprint(),
         "tools": tool_versions(),
         "source": document["source"],
         "extraction": document,
@@ -109,9 +121,15 @@ def _cache_path(profile: SchemaProfile, schema_version: str, scope: str) -> Path
     return cache_root() / profile.key / safe_version / f"{safe_scope}-{digest}.json"
 
 
-def _extract(profile: SchemaProfile, scope: str) -> dict[str, Any]:
-    """Run the profile's contract script for one module, or the whole profile when scope is its base."""
+def _extract(profile: SchemaProfile, scope: str, source_root: Path | None = None) -> dict[str, Any]:
+    """Run the profile's contract script for one module, or the whole profile when scope is its base.
+
+    `source_root` makes the script import the schema from that folder (a git
+    worktree in Dev Mode) instead of the installed package.
+    """
     arguments = ["--dist", profile.package_dist]
+    if source_root is not None:
+        arguments += ["--source-root", str(source_root)]
     if scope == profile.default_base_namespace:
         arguments += ["--base", scope]
         for discovery in profile.discovery:
@@ -137,17 +155,32 @@ def _remember(path: Path, snapshot: dict[str, Any]) -> None:
         _MEMORY.pop(next(iter(_MEMORY)))
 
 
-def get_snapshot(profile: SchemaProfile, scope: str | None = None) -> dict[str, Any]:
-    """The snapshot for a module of the profile (default: the whole profile), from cache when possible."""
+def get_snapshot(
+    profile: SchemaProfile,
+    scope: str | None = None,
+    *,
+    source_root: Path | None = None,
+    source_version: str | None = None,
+) -> dict[str, Any]:
+    """The snapshot for a module of the profile (default: the whole profile), from cache when possible.
+
+    With `source_root` the schema is read from that folder (a git worktree)
+    instead of the installed package; `source_version` is the worktree's
+    commit, and without it the snapshot is not cached.
+    """
     if not supports_linkml(profile):
         raise LinkMLUnavailable(f"LinkML export is not available for {profile.label} yet.")
     scope = scope or profile.default_base_namespace
+    if source_root is not None and not source_version:
+        return make_snapshot(profile, scope, _extract(profile, scope, source_root))
     info = current_schema_info(profile)
-    path = _cache_path(profile, info.version, scope)
+    version = info.version if source_root is None else f"{info.version}-worktree-{source_version}"
+    path = _cache_path(profile, version, scope)
     fingerprint = converter_fingerprint()
+    extractor = extractor_fingerprint()
     with _LOCK:
         cached = _MEMORY.get(path)
-        if cached is not None and cached.get("converter") == fingerprint:
+        if cached is not None and cached.get("converter") == fingerprint and cached.get("extractor") == extractor:
             return cached
     stored = None
     if path.is_file():
@@ -155,10 +188,11 @@ def get_snapshot(profile: SchemaProfile, scope: str | None = None) -> dict[str, 
             stored = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             logger.warning("Ignoring unreadable snapshot %s", path)
-    if stored and stored.get("format") == SNAPSHOT_FORMAT and stored.get("converter") == fingerprint:
+    reusable = bool(stored) and stored.get("format") == SNAPSHOT_FORMAT and stored.get("extractor") == extractor
+    if reusable and stored.get("converter") == fingerprint:
         snapshot = stored
     else:
-        document = stored["extraction"] if stored and stored.get("format") == SNAPSHOT_FORMAT else _extract(profile, scope)
+        document = stored["extraction"] if reusable else _extract(profile, scope, source_root)
         snapshot = make_snapshot(profile, scope, document)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)

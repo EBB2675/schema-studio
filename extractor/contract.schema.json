@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/EBB2675/schema-studio/extractor/contract/1.0",
-  "$comment": "Adapted from schematerial src/schematerial/extraction/contract.schema.json (contract 1.2) at commit df3839b. Field names and meanings are unchanged; the requirements of contract 1.2 apply unconditionally. Added, all optional: source.commit, class methods, top-level modules and usage.",
+  "$comment": "Adapted from schematerial src/schematerial/extraction/contract.schema.json (contract 1.2) at commit df3839b. Field names and meanings are unchanged; the requirements of contract 1.2 apply unconditionally. Added, all optional: source.commit, class methods, top-level modules (with optional aliases) and usage.",
   "title": "Schema Studio extraction document",
   "type": "object",
   "properties": {
@@ -358,6 +358,14 @@
         "classes": {
           "type": "array",
           "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "aliases": {
+          "$comment": "Other module-level names of exposed classes (name -> class id), where they differ from the class name.",
+          "type": "object",
+          "additionalProperties": {
             "type": "string",
             "minLength": 1
           }
