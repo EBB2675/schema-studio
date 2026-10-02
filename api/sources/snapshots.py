@@ -32,7 +32,7 @@ from ..light_mode.schema_source import (
 )
 from ..light_mode.store import config_root
 from .legacy import EXTRACTOR_TIMEOUT_SECONDS, raise_script_error
-from .linkml_yaml import dump_yaml
+from .core import snapshot_yaml  # noqa: F401  (re-exported)
 from .to_linkml import Conversion, convert as convert_document
 
 logger = logging.getLogger(__name__)
@@ -104,13 +104,6 @@ def make_snapshot(profile: SchemaProfile, scope: str, document: dict[str, Any]) 
         "linkml": conversion.schema,
         "report": conversion.report,
     }
-
-
-def snapshot_yaml(snapshot: dict[str, Any]) -> str:
-    return dump_yaml(
-        snapshot["linkml"], profile=snapshot["profile"], source=snapshot["source"], tools=snapshot["tools"],
-        report=snapshot["report"],
-    )
 
 
 def cache_root() -> Path:
