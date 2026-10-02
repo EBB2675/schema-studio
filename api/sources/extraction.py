@@ -2,17 +2,16 @@
 
 `SCHEMA_STUDIO_EXTRACTION` chooses the path per profile:
 
-- `linkml`: the profile's contract script extracts the module once, the
-  snapshot holds it converted into LinkML, and `graph.py` builds the graph
-  from that;
+- `linkml` (default): the profile's contract script extracts the module once,
+  the snapshot holds it converted into LinkML, and `graph.py` builds the
+  graph from that;
 - `legacy`: `extractor/scripts/legacy.py` builds the graph inside the profile
   environment (see `legacy.py` here).
 
 The value is either one setting for every profile (`legacy`) or a
-comma-separated list per profile (`nomad-simulations=legacy,bam-masterdata=linkml`);
-profiles not listed use their own default (`default_extraction`, `linkml`
-unless the profile says otherwise). A profile without a LinkML conversion
-always uses `legacy`.
+comma-separated list per profile (`nomad-simulations=legacy,bam-masterdata=legacy`);
+profiles not listed use `linkml`. A profile without a LinkML conversion always
+uses `legacy`.
 """
 from __future__ import annotations
 
@@ -29,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 EXTRACTION_SETTING = "SCHEMA_STUDIO_EXTRACTION"
 EXTRACTION_MODES = ("legacy", "linkml")
+DEFAULT_EXTRACTION = "linkml"
 # The graph builder the legacy path runs by default; any other extractor stays on the legacy path.
 DEFAULT_EXTRACTOR = "extractor.graph_builder:build_graph"
 
@@ -52,7 +52,7 @@ def _parse_setting(raw: str) -> dict[str, str]:
 def extraction_mode(profile: SchemaProfile) -> str:
     """`legacy` or `linkml` for this profile, from `SCHEMA_STUDIO_EXTRACTION`."""
     settings = _parse_setting(os.getenv(EXTRACTION_SETTING, ""))
-    mode = settings.get(profile.key, settings.get("*", profile.default_extraction))
+    mode = settings.get(profile.key, settings.get("*", DEFAULT_EXTRACTION))
     if mode == "linkml" and not supports_linkml(profile):
         return "legacy"
     return mode

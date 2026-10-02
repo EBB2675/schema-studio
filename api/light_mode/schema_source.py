@@ -51,8 +51,6 @@ class SchemaProfile:
     # extraction document it is converted from (None: no LinkML conversion yet).
     linkml_prefix: str | None = None
     contract_script: Path | None = None
-    # Graph path when SCHEMA_STUDIO_EXTRACTION does not choose one: "linkml" or "legacy".
-    default_extraction: str = "linkml"
     # What the source offers besides the schema: "usage" (the code that acts on
     # a class, shown under the hood) and "methods" (public methods on classes).
     capabilities: frozenset[str] = frozenset()
@@ -127,7 +125,6 @@ SCHEMA_PROFILES: dict[str, SchemaProfile] = {
         discovery=("walk",),
         linkml_prefix="bammd",
         contract_script=BAM_SCRIPT,
-        default_extraction="legacy",
     ),
 }
 DEFAULT_PROFILE_KEY = "nomad-simulations"
