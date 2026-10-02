@@ -28,7 +28,7 @@ vi.mock('axios', () => {
     post: mockPost,
     put: mockPut,
     delete: mockDelete,
-    interceptors: { request: { use: vi.fn() } },
+    interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
   });
   const axios = Object.assign(create, { create, post: vi.fn() });
   return { default: axios };

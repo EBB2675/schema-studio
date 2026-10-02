@@ -6,3 +6,5 @@ api/_data
 .DS_Store
 .env
 **/.env
+environments/*/.venv
+**/__pycache__

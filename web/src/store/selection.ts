@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { NodeDetails } from '../types/api';
 
 export type QtySnapshot = {
   name?: string;
@@ -22,6 +23,7 @@ export type QtyMeta = {
   inheritedFromId?: string | null;
   inheritedFromName?: string | null;
   sourceId?: string | null;
+  details?: NodeDetails | null;
   diff?: { state: 'added' | 'removed' | 'changed'; before?: QtySnapshot; after?: QtySnapshot };
 };
 
@@ -42,6 +44,7 @@ export type Selected = null | {
   inheritedFromName?: string | null;
   sourceId?: string | null;
   fqid?: string;
+  details?: NodeDetails | null;
   diff?: QtyMeta['diff'];
 };
 

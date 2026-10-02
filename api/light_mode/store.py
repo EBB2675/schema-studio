@@ -1,17 +1,19 @@
 """Local persistence for Light Mode (SQLite in user config dir).
 
-Stores a single workspace row and custom edits; no authentication.
+Stores a single workspace row and the schema edits; no authentication. An
+edit is stored as the plain dict of `api/sources/edits.py` (operation, target,
+payload, profile and commit) and replayed from there; nothing here knows how
+edits apply. A database in an older format is recreated, not migrated.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Iterable, List, Optional
 
 try:
     from platformdirs import user_config_dir
@@ -24,15 +26,13 @@ except ImportError:  # pragma: no cover - platformdirs is tiny; fallback to home
 
 
 DEFAULT_APP_NAME = "schema_studio_light"
+# Raised whenever the tables change; a database with another format is recreated.
+STORE_FORMAT = 2
+_TABLES = ("workspace", "custom_edits", "edits")
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _hash_content(content: dict) -> str:
-    canonical = json.dumps(content, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 @dataclass
@@ -40,26 +40,7 @@ class Workspace:
     branch: str
     package: str
     base_namespace: str
-
-
-@dataclass
-class PersistedEdit:
-    edit_id: int | None
-    user_id: str
-    branch: str
-    package: str
-    class_name: str
-    edit_type: str  # "class" | "quantity"
-    quantity_name: Optional[str] = None
-    dtype: Optional[str] = None
-    docstring: Optional[str] = None
-    parent_name: Optional[str] = None
-    parent_relation: Optional[str] = None
-    card: Optional[str] = None
-    base_sha: Optional[str] = None
-    content_hash: Optional[str] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    profile: str = ""
 
 
 class LocalStore:
@@ -77,10 +58,15 @@ class LocalStore:
 
     def _init_db(self) -> None:
         with self._conn() as conn:
+            if conn.execute("PRAGMA user_version").fetchone()[0] != STORE_FORMAT:
+                for table in _TABLES:
+                    conn.execute(f"DROP TABLE IF EXISTS {table}")
+                conn.execute(f"PRAGMA user_version = {STORE_FORMAT}")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS workspace (
                     id INTEGER PRIMARY KEY CHECK (id = 1),
+                    profile TEXT NOT NULL,
                     branch TEXT NOT NULL,
                     package TEXT NOT NULL,
                     base_namespace TEXT NOT NULL
@@ -89,216 +75,128 @@ class LocalStore:
             )
             conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS custom_edits (
+                CREATE TABLE IF NOT EXISTS edits (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id TEXT NOT NULL,
-                    branch TEXT NOT NULL,
+                    profile TEXT NOT NULL,
                     package TEXT NOT NULL,
-                    class_name TEXT NOT NULL,
-                    quantity_name TEXT DEFAULT "",
-                    dtype TEXT,
-                    docstring TEXT,
-                    parent_name TEXT,
-                    parent_relation TEXT,
-                    card TEXT,
-                    edit_type TEXT NOT NULL,
-                    base_sha TEXT,
-                    content_hash TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    UNIQUE(user_id, branch, package, class_name, quantity_name)
+                    commit_sha TEXT,
+                    op TEXT NOT NULL,
+                    target TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    created_at TEXT NOT NULL
                 );
                 """
             )
-            columns = {row["name"] for row in conn.execute("PRAGMA table_info(custom_edits)").fetchall()}
-            if "card" not in columns:
-                conn.execute("ALTER TABLE custom_edits ADD COLUMN card TEXT")
-            # Seed workspace defaults if empty
+            conn.execute("CREATE INDEX IF NOT EXISTS edits_scope ON edits (user_id, profile, package, id)")
             cur = conn.execute("SELECT COUNT(*) AS n FROM workspace")
             if cur.fetchone()["n"] == 0:
                 conn.execute(
-                    "INSERT INTO workspace (id, branch, package, base_namespace) VALUES (1, ?, ?, ?)",
-                    (self.defaults.branch, self.defaults.package, self.defaults.base_namespace),
+                    "INSERT INTO workspace (id, profile, branch, package, base_namespace) VALUES (1, ?, ?, ?, ?)",
+                    (self.defaults.profile, self.defaults.branch, self.defaults.package, self.defaults.base_namespace),
                 )
             conn.commit()
 
     # --- workspace ---
     def get_workspace(self) -> Workspace:
         with self._conn() as conn:
-            row = conn.execute("SELECT branch, package, base_namespace FROM workspace WHERE id = 1").fetchone()
+            row = conn.execute("SELECT profile, branch, package, base_namespace FROM workspace WHERE id = 1").fetchone()
         if not row:
             return self.defaults
-        return Workspace(branch=row["branch"], package=row["package"], base_namespace=row["base_namespace"])
+        return Workspace(
+            branch=row["branch"], package=row["package"], base_namespace=row["base_namespace"], profile=row["profile"],
+        )
 
-    def update_workspace(self, *, branch: Optional[str] = None, package: Optional[str] = None, base_namespace: Optional[str] = None) -> Workspace:
+    def update_workspace(
+        self,
+        *,
+        branch: Optional[str] = None,
+        package: Optional[str] = None,
+        base_namespace: Optional[str] = None,
+        profile: Optional[str] = None,
+    ) -> Workspace:
         current = self.get_workspace()
         next_ws = Workspace(
             branch=branch or current.branch,
             package=package or current.package,
             base_namespace=base_namespace or current.base_namespace,
+            profile=profile or current.profile,
         )
         with self._conn() as conn:
             conn.execute(
-                "UPDATE workspace SET branch = ?, package = ?, base_namespace = ? WHERE id = 1",
-                (next_ws.branch, next_ws.package, next_ws.base_namespace),
+                "UPDATE workspace SET profile = ?, branch = ?, package = ?, base_namespace = ? WHERE id = 1",
+                (next_ws.profile, next_ws.branch, next_ws.package, next_ws.base_namespace),
             )
             conn.commit()
         return next_ws
 
     # --- edits ---
-    def list_edits(self, *, user_id: str, branch: str, package: str) -> List[PersistedEdit]:
+    def list_edits(self, *, user_id: str, profile: str, package: str | None = None) -> List[dict[str, Any]]:
+        """The profile's edits (or one module's) in the order they were made."""
+        query, values = "SELECT * FROM edits WHERE user_id = ? AND profile = ?", [user_id, profile]
+        if package is not None:
+            query += " AND package = ?"
+            values.append(package)
         with self._conn() as conn:
-            rows = conn.execute(
-                """
-                SELECT * FROM custom_edits
-                WHERE user_id = ? AND branch = ? AND package = ?
-                ORDER BY id ASC
-                """,
-                (user_id, branch, package),
-            ).fetchall()
-        return [self._row_to_edit(r) for r in rows]
+            rows = conn.execute(query + " ORDER BY id ASC", values).fetchall()
+        return [self._row_to_edit(row) for row in rows]
 
-    def delete_edits(self, *, user_id: str, branch: str, package: str | None = None) -> int:
+    def add_edits(self, *, user_id: str, profile: str, package: str, edits: Iterable[dict[str, Any]]) -> List[dict[str, Any]]:
+        """Append edits (plain dicts with op, target, payload, commit), each under its own `package`
+        (default: `package`); all of them or none."""
+        now = _now_iso()
         with self._conn() as conn:
-            if package is None:
+            ids = []
+            for edit in edits:
                 cur = conn.execute(
-                    "DELETE FROM custom_edits WHERE user_id = ? AND branch = ?",
-                    (user_id, branch),
+                    """
+                    INSERT INTO edits (user_id, profile, package, commit_sha, op, target, payload, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (user_id, profile, edit.get("package") or package, edit.get("commit"), edit["op"], edit["target"],
+                     json.dumps(edit.get("payload") or {}, sort_keys=True, ensure_ascii=False), now),
                 )
-            else:
-                cur = conn.execute(
-                    "DELETE FROM custom_edits WHERE user_id = ? AND branch = ? AND package = ?",
-                    (user_id, branch, package),
-                )
+                ids.append(cur.lastrowid)
             conn.commit()
-            return int(cur.rowcount or 0)
+            rows = [conn.execute("SELECT * FROM edits WHERE id = ?", (edit_id,)).fetchone() for edit_id in ids]
+        return [self._row_to_edit(row) for row in rows]
 
-    def delete_edit(
+    def delete_edits(
         self,
         *,
         user_id: str,
-        branch: str,
-        package: str,
-        class_name: str,
-        quantity_name: str | None = None,
+        ids: Iterable[int] = (),
+        profile: str | None = None,
+        package: str | None = None,
+        all_packages: bool = False,
     ) -> int:
-        class_candidates = [class_name]
-        short_name = class_name.rsplit(".", 1)[-1]
-        if short_name and short_name not in class_candidates:
-            class_candidates.append(short_name)
-        placeholders = ",".join("?" for _ in class_candidates)
-        qname = quantity_name or ""
+        """Delete the edits with the given ids and, with a profile, the module's edits (or the
+        profile's, with `all_packages`); in one transaction."""
+        deleted = 0
         with self._conn() as conn:
-            cur = conn.execute(
-                f"""
-                DELETE FROM custom_edits
-                WHERE user_id = ?
-                  AND branch = ?
-                  AND package = ?
-                  AND class_name IN ({placeholders})
-                  AND quantity_name = ?
-                """,
-                (user_id, branch, package, *class_candidates, qname),
-            )
+            for edit_id in ids:
+                deleted += conn.execute("DELETE FROM edits WHERE user_id = ? AND id = ?", (user_id, edit_id)).rowcount
+            if profile is not None and (package is not None or all_packages):
+                clauses, values = ["user_id = ?", "profile = ?"], [user_id, profile]
+                if not all_packages:
+                    clauses.append("package = ?")
+                    values.append(package)
+                deleted += conn.execute(f"DELETE FROM edits WHERE {' AND '.join(clauses)}", values).rowcount
             conn.commit()
-            return int(cur.rowcount or 0)
-
-    def save_edit(self, *, edit: PersistedEdit, current_sha: Optional[str]) -> PersistedEdit:
-        payload_hash = _hash_content(
-            {
-                "class_name": edit.class_name,
-                "quantity_name": edit.quantity_name or "",
-                "dtype": edit.dtype,
-                "docstring": edit.docstring,
-                "parent_name": edit.parent_name,
-                "parent_relation": edit.parent_relation,
-                "card": edit.card,
-                "edit_type": edit.edit_type,
-            }
-        )
-        now = _now_iso()
-        with self._conn() as conn:
-            row = conn.execute(
-                """
-                SELECT * FROM custom_edits
-                WHERE user_id = ? AND branch = ? AND package = ? AND class_name = ? AND quantity_name = ?
-                """,
-                (edit.user_id, edit.branch, edit.package, edit.class_name, edit.quantity_name or ""),
-            ).fetchone()
-
-            if row:
-                edit_id = row["id"]
-                conn.execute(
-                    """
-                    UPDATE custom_edits
-                    SET dtype = ?, docstring = ?, parent_name = ?, parent_relation = ?, card = ?, edit_type = ?, base_sha = ?, content_hash = ?, updated_at = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        edit.dtype,
-                        edit.docstring,
-                        edit.parent_name,
-                        edit.parent_relation,
-                        edit.card,
-                        edit.edit_type,
-                        current_sha,
-                        payload_hash,
-                        now,
-                        edit_id,
-                    ),
-                )
-                conn.commit()
-                return self._row_to_edit(conn.execute("SELECT * FROM custom_edits WHERE id = ?", (edit_id,)).fetchone())
-
-            conn.execute(
-                """
-                INSERT INTO custom_edits (
-                    user_id, branch, package, class_name, quantity_name, dtype, docstring, parent_name, parent_relation,
-                    card, edit_type, base_sha, content_hash, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    edit.user_id,
-                    edit.branch,
-                    edit.package,
-                    edit.class_name,
-                    edit.quantity_name or "",
-                    edit.dtype,
-                    edit.docstring,
-                    edit.parent_name,
-                    edit.parent_relation,
-                    edit.card,
-                    edit.edit_type,
-                    current_sha,
-                    payload_hash,
-                    now,
-                    now,
-                ),
-            )
-            conn.commit()
-            new_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
-            return self._row_to_edit(conn.execute("SELECT * FROM custom_edits WHERE id = ?", (new_id,)).fetchone())
+        return deleted
 
     # --- internal helpers ---
-    def _row_to_edit(self, row: sqlite3.Row) -> PersistedEdit:
-        return PersistedEdit(
-            edit_id=row["id"],
-            user_id=row["user_id"],
-            branch=row["branch"],
-            package=row["package"],
-            class_name=row["class_name"],
-            quantity_name=row["quantity_name"] or None,
-            dtype=row["dtype"],
-            docstring=row["docstring"],
-            parent_name=row["parent_name"],
-            parent_relation=row["parent_relation"],
-            card=row["card"],
-            edit_type=row["edit_type"],
-            base_sha=row["base_sha"],
-            content_hash=row["content_hash"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-        )
+    def _row_to_edit(self, row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "id": row["id"],
+            "profile": row["profile"],
+            "package": row["package"],
+            "commit": row["commit_sha"],
+            "op": row["op"],
+            "target": row["target"],
+            "payload": json.loads(row["payload"]),
+            "created_at": row["created_at"],
+        }
 
 
 def config_root() -> Path:

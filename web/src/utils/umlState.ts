@@ -20,6 +20,7 @@ const toBaseQuantityNode = (n: ApiNode): QuantityNode => {
     inheritedFromId: null,
     inheritedFromName: null,
     sourceId: id,
+    details: n.details ?? null,
   };
 };
 
@@ -62,6 +63,7 @@ const inheritedQuantityFrom = (classId: string, source: QuantityNode, sectionNam
     inheritedFromId: fallbackOrigin,
     inheritedFromName,
     sourceId,
+    details: source.details ?? null,
   };
 };
 
@@ -237,6 +239,7 @@ export const buildUmlStateFromGraph = (g: ApiGraph | null): UmlGraphState | null
       parentId: parentInfo?.id ?? null,
       parentRelation: parentInfo?.relation ?? null,
       parentCard: parentInfo?.card ?? null,
+      details: sec.details ?? null,
     };
   });
 

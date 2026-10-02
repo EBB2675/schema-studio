@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import { DEFAULT_OVERVIEW_NAMESPACE } from "../constants/defaults";
 
 type OverviewItem = { package: string; classes: string[] };
 type OverviewResp = { branch: string; base: string; items: OverviewItem[] };
 
-const DEFAULT_OVERVIEW_BASE =
-  import.meta.env.VITE_DEFAULT_NAMESPACE ??
-  "nomad_simulations.schema_packages,nomad_measurements";
-
 export default function OverviewGrid({
   apiBase,
   branch,
-  base = DEFAULT_OVERVIEW_BASE,
+  base = DEFAULT_OVERVIEW_NAMESPACE,
   token,
   onClassSelect,
 }: {
@@ -86,7 +83,6 @@ export default function OverviewGrid({
         </div>
       </div>
 
-      {/* responsive grid */}
       <div
         style={{
           display: "grid",
@@ -120,7 +116,6 @@ export default function OverviewGrid({
               </div>
             </div>
 
-            {/* class chips */}
             <div
               style={{
                 display: "flex",

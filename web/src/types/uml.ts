@@ -1,3 +1,5 @@
+import type { NodeDetails } from "./api";
+
 export type QuantityNode = {
   id: string;
   name: string;
@@ -12,6 +14,7 @@ export type QuantityNode = {
   inheritedFromId?: string | null;
   inheritedFromName?: string | null;
   sourceId?: string | null;
+  details?: NodeDetails | null;
 };
 
 export type UmlClassNode = {
@@ -25,6 +28,7 @@ export type UmlClassNode = {
   parentId?: string | null;
   parentRelation?: "inherits" | "hasSubSection" | null;
   parentCard?: string | null;
+  details?: NodeDetails | null;
 };
 
 export type UmlEdge = {
@@ -55,5 +59,7 @@ export type AuditTrailEntry = {
   description: string;
   package?: string;
   replayable?: boolean;
+  // Ids of the stored schema edits this change made; the server's graph already holds them.
+  editIds?: string[];
   change: AuditChange;
 };

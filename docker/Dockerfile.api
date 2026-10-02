@@ -5,11 +5,24 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+# uv creates the schema environments below; the app also needs it at runtime to update them.
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 COPY api/requirements.txt /app/api/requirements.txt
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git build-essential \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir -r /app/api/requirements.txt
+
+# Schema packages never go into the app's own Python. Each profile listed in
+# SCHEMA_PROFILES gets its own environment under /app/environments/<profile>/,
+# with its own interpreter managed by uv.
+ARG SCHEMA_PROFILES="nomad-simulations"
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
+COPY environments /app/environments
+RUN for profile in ${SCHEMA_PROFILES}; do \
+      uv sync --locked --no-cache --project "/app/environments/${profile}" || exit 1; \
+    done
 
 COPY api /app/api
 COPY extractor /app/extractor

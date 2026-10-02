@@ -5,7 +5,15 @@ import GraphView, { type GraphExportHandle } from "./GraphView";
 import DocPanel from "./components/DocPanel";
 import OverviewGrid from "./components/OverviewGrid";
 import UnderTheHoodPanel from "./components/UnderTheHoodPanel";
-import type { QuantityFormData } from "./components/quantityShared";
+import {
+  NOMAD_EDIT_RULES,
+  VOCAB_TERM,
+  dtypeNameFor,
+  parseEditRules,
+  subsectionName,
+  type EditRules,
+  type QuantityFormData,
+} from "./components/quantityShared";
 import CollapsibleSection from "./components/CollapsibleSection";
 import { useSelection } from "./store/selection";
 import { jsPDF } from "jspdf";
@@ -20,13 +28,19 @@ import {
 } from "./types/api";
 import type { WorkspaceState } from "./types/workspace";
 import { API_FEATURE_HEADER, API_VERSION, API_VERSION_HEADER, DEFAULT_FEATURE_FLAGS } from "./constants/api";
-import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_ROOT, DEFAULT_PACKAGE, LIGHT_MODE } from "./constants/defaults";
+import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_ROOT, DEFAULT_PACKAGE, LIGHT_MODE, WORKSPACE_PRESETS } from "./constants/defaults";
 import { useWorkspaceStore } from "./store/workspace";
 import { fqidFromParts, normalizeId, normalizeLabel, normalizeModule } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
 import { buildUmlStateFromGraph } from "./utils/umlState";
 
 type WorkspaceEnvelope = { workspace?: WorkspaceState };
+
+// Responses carry the workspace the server had when the request was handled.
+// A response that was requested before the user's latest workspace change must
+// not overwrite that change, however late it arrives.
+const WORKSPACE_EPOCH = "__workspaceEpoch";
+type EpochConfig = { workspaceEpoch?: number };
 
 type TaskStatusResponse = {
   task_id: string;
@@ -49,6 +63,26 @@ type GraphRequestParams = {
 type GraphTaskBody = {
   branch: string;
   package: string;
+};
+
+type SchemaProfileSummary = {
+  key: string;
+  label: string;
+  default_branch: string;
+  default_package: string;
+  default_base_namespace: string;
+  default_root: string;
+  available: boolean;
+  current: boolean;
+  version?: string | null;
+  source?: string | null;
+  error?: string | null;
+  packaged?: boolean;
+  linkml_export?: boolean;
+  capabilities?: string[];
+  // Whether the schema can be edited (the LinkML path is on) and with which rules.
+  editable?: boolean;
+  edit_rules?: EditRules;
 };
 
 type TaskEnqueueResponse = WorkspaceEnvelope & {
@@ -114,7 +148,7 @@ export default function App() {
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     if (typeof window === "undefined") return "dark";
     const stored = window.localStorage.getItem("schema-uml-theme");
-    const initial = stored === "light" ? "light" : "dark";
+    const initial = stored === "light" ? "light" : (LIGHT_MODE ? "light" : "dark");
     document.documentElement.setAttribute("data-theme", initial);
     return initial;
   });
@@ -122,6 +156,7 @@ export default function App() {
   const appShellRef = useRef<HTMLElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const workspaceStateRef = useRef<WorkspaceState | null>(null);
+  const workspaceEpochRef = useRef(0);
   const importFileRef = useRef<HTMLInputElement | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === "undefined") return 360;
@@ -134,6 +169,7 @@ export default function App() {
     return Number.isFinite(stored) ? stored : 380;
   });
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [linkmlStatus, setLinkmlStatus] = useState<string | null>(null);
   const [canvasStatus, setCanvasStatus] = useState<string | null>(null);
   const [sendNote, setSendNote] = useState<string>("");
   const [sendStatus, setSendStatus] = useState<string | null>(null);
@@ -141,6 +177,9 @@ export default function App() {
   const [sendDesignEnabled, setSendDesignEnabled] = useState<boolean>(false);
   const [schemaVersion, setSchemaVersion] = useState<string | null>(null);
   const [schemaSource, setSchemaSource] = useState<string | null>(null);
+  const [schemaProfileKey, setSchemaProfileKey] = useState<string | null>(null);
+  const [schemaProfileError, setSchemaProfileError] = useState<string | null>(null);
+  const [schemaProfiles, setSchemaProfiles] = useState<SchemaProfileSummary[]>([]);
   const [schemaUpdateStatus, setSchemaUpdateStatus] = useState<string | null>(null);
   const [schemaUpdating, setSchemaUpdating] = useState<boolean>(false);
   const canUpdateSchema = isLightMode && schemaSource !== "bundled";
@@ -179,6 +218,9 @@ export default function App() {
       change: entry.change,
       replayable: entry.replayable === false ? false : true,
       package: typeof entry.package === "string" ? entry.package : undefined,
+      editIds: Array.isArray(entry.editIds)
+        ? entry.editIds.filter((item): item is string => typeof item === "string")
+        : undefined,
     };
   };
 
@@ -250,10 +292,24 @@ export default function App() {
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
+      (config as EpochConfig).workspaceEpoch = workspaceEpochRef.current;
       return config;
+    });
+    instance.interceptors.response.use((response) => {
+      const epoch = (response.config as EpochConfig).workspaceEpoch;
+      if (typeof epoch === "number" && response.data && typeof response.data === "object") {
+        Object.defineProperty(response.data, WORKSPACE_EPOCH, { value: epoch, enumerable: false });
+      }
+      return response;
     });
     return instance;
   }, [apiBase, token]);
+
+  const isStaleResponse = useCallback((payload: unknown): boolean => {
+    if (!payload || typeof payload !== "object") return false;
+    const epoch = (payload as Record<string, unknown>)[WORKSPACE_EPOCH];
+    return typeof epoch === "number" && epoch < workspaceEpochRef.current;
+  }, []);
   const normalizedNamespace = useMemo(() => {
     const parts = namespace.split(",").map((p: string) => p.trim()).filter(Boolean);
     return parts.length > 0 ? parts.join(",") : DEFAULT_NAMESPACE;
@@ -317,6 +373,7 @@ export default function App() {
 
     workspaceStateRef.current = ws;
     setWorkspace(ws);
+    setSchemaProfileKey(inferProfileKey(ws.package));
     applyWorkspaceInStore(ws);
     if (ws.branch) {
       setPackageBranch(ws.branch);
@@ -326,24 +383,34 @@ export default function App() {
     }
   }, [applyWorkspaceInStore]);
 
+  // Build-time defaults only fill in until the server reports the workspace.
+  // Re-applying them later would undo a schema the user has just selected.
+  const applyDefaultWorkspace = useCallback(() => {
+    if (workspaceStateRef.current) return;
+    applyWorkspace({ branch: DEFAULT_BRANCH, package: DEFAULT_PACKAGE, base_namespace: DEFAULT_NAMESPACE });
+  }, [applyWorkspace]);
+
   const syncWorkspaceFromResponse = useCallback(
     (payload: WorkspaceEnvelope | null | undefined) => {
+      if (isStaleResponse(payload)) return;
       if (payload?.workspace) applyWorkspace(payload.workspace);
     },
-    [applyWorkspace]
+    [applyWorkspace, isStaleResponse]
   );
 
   const updateWorkspaceOnServer = useCallback(
     async (updates: Partial<WorkspaceState>) => {
       if (!token) return;
+      // From here on, answers to earlier requests describe an outdated workspace.
+      workspaceEpochRef.current += 1;
       try {
         const res = await api.put("/workspace", updates);
-        applyWorkspace(res.data.workspace as WorkspaceState);
+        syncWorkspaceFromResponse(res.data);
       } catch (error: unknown) {
         console.error("Failed to update workspace", error);
       }
     },
-    [api, applyWorkspace, token]
+    [api, syncWorkspaceFromResponse, token]
   );
 
   const pollTaskStatus = useCallback(
@@ -457,6 +524,24 @@ export default function App() {
     return normalizeModule(value) || value;
   }, []);
 
+  const inferProfileKey = useCallback((value?: string | null) => {
+    const normalized = normalizePackageName(value);
+    const preset = WORKSPACE_PRESETS.find((entry) => {
+      const top = entry.namespace.split(".")[0];
+      return normalized === top || normalized.startsWith(`${top}.`);
+    });
+    return preset?.key ?? null;
+  }, [normalizePackageName]);
+
+  const currentSchemaProfile = useMemo(
+    () => schemaProfiles.find((profile) => profile.key === schemaProfileKey) ?? null,
+    [schemaProfileKey, schemaProfiles]
+  );
+  // Dev Mode lists no profiles; its schemas are NOMAD ones.
+  const editRules: EditRules = currentSchemaProfile?.edit_rules ?? NOMAD_EDIT_RULES;
+  const schemaSelectionRequired = isLightMode && !startEmpty && !currentSchemaProfile;
+  const selectedSchemaReady = !schemaSelectionRequired && (!currentSchemaProfile || currentSchemaProfile.available);
+
   const filterActiveAuditForPackage = useCallback(
     (entries: AuditTrailEntry[], targetPackage?: string | null) => {
       const normalizedTarget = normalizePackageName(targetPackage);
@@ -481,13 +566,13 @@ export default function App() {
   }, [setAuditTrail]);
 
   const appendAudit = useCallback(
-    (change: AuditTrailEntry["change"], description: string) => {
+    (change: AuditTrailEntry["change"], description: string, editIds?: string[], packageName?: string) => {
       const now = new Date().toISOString();
       const id = `${now}-${Math.random().toString(16).slice(2)}`;
-      const pkgForEntry = graph?.package || pkg;
+      const pkgForEntry = packageName || graph?.package || pkg;
       setAuditTrail((prev) => [
         ...prev,
-        { change, description, id, timestamp: now, package: pkgForEntry, replayable: true },
+        { change, description, id, timestamp: now, package: pkgForEntry, replayable: true, editIds },
       ]);
     },
     [graph, pkg]
@@ -507,25 +592,68 @@ export default function App() {
   ): Promise<boolean> => {
     try {
       const res = await api.get("/schema/version");
+      if (isStaleResponse(res.data)) return true;
       setSchemaVersion(res.data?.version || null);
       setSchemaSource(res.data?.source || null);
+      setSchemaProfileKey(typeof res.data?.schema_profile === "string" ? res.data.schema_profile : null);
+      setSchemaProfileError(null);
       setSendDesignEnabled(Boolean(res.data?.send_design_enabled));
       if (opts?.promoteLight && !isLightMode) {
         setRuntimeLightMode(true);
         setToken("light");
         setUserName("local");
         setSessionChecked(true);
-        applyWorkspace({ branch: DEFAULT_BRANCH, package: DEFAULT_PACKAGE, base_namespace: DEFAULT_NAMESPACE });
+        applyDefaultWorkspace();
       }
       return true;
     } catch (error) {
+      setSchemaVersion(null);
+      setSchemaSource(null);
       setSendDesignEnabled(false);
       if (!opts?.silent) {
         setSchemaUpdateStatus(`Schema version unavailable: ${formatApiError(error)}`);
       }
       return false;
     }
-  }, [api, applyWorkspace, isLightMode]);
+  }, [api, applyDefaultWorkspace, isLightMode, isStaleResponse]);
+
+  const loadSchemaProfiles = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await api.get("/schema/profiles");
+      const profilesRaw = Array.isArray(res.data?.profiles) ? res.data.profiles : [];
+      const parsed: SchemaProfileSummary[] = profilesRaw
+        .filter((entry: unknown): entry is Record<string, unknown> => typeof entry === "object" && entry !== null)
+        .map((entry: Record<string, unknown>) => ({
+          key: typeof entry.key === "string" ? entry.key : "",
+          label: typeof entry.label === "string" ? entry.label : "",
+          default_branch: typeof entry.default_branch === "string" ? entry.default_branch : DEFAULT_BRANCH,
+          default_package: typeof entry.default_package === "string" ? entry.default_package : DEFAULT_PACKAGE,
+          default_base_namespace: typeof entry.default_base_namespace === "string" ? entry.default_base_namespace : DEFAULT_NAMESPACE,
+          default_root: typeof entry.default_root === "string" ? entry.default_root : DEFAULT_ROOT,
+          available: Boolean(entry.available),
+          current: Boolean(entry.current),
+          version: typeof entry.version === "string" ? entry.version : null,
+          source: typeof entry.source === "string" ? entry.source : null,
+          error: typeof entry.error === "string" ? entry.error : null,
+          packaged: Boolean(entry.packaged),
+          linkml_export: typeof entry.linkml_export === "boolean" ? entry.linkml_export : undefined,
+          capabilities: Array.isArray(entry.capabilities)
+            ? entry.capabilities.filter((item: unknown): item is string => typeof item === "string")
+            : undefined,
+          editable: typeof entry.editable === "boolean" ? entry.editable : undefined,
+          edit_rules: parseEditRules(entry.edit_rules),
+        }))
+        .filter((entry: SchemaProfileSummary) => Boolean(entry.key));
+      setSchemaProfiles(parsed);
+      if (isStaleResponse(res.data)) return;
+      const current = typeof res.data?.current_profile === "string" ? res.data.current_profile : null;
+      setSchemaProfileKey(current || parsed.find((entry: SchemaProfileSummary) => entry.current)?.key || inferProfileKey(pkg));
+      syncWorkspaceFromResponse(res.data);
+    } catch (error) {
+      console.error("Failed to load schema profiles", error);
+    }
+  }, [api, inferProfileKey, isStaleResponse, pkg, syncWorkspaceFromResponse, token]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -539,8 +667,9 @@ export default function App() {
   useEffect(() => {
     if (isLightMode) {
       setSessionChecked(true);
-      applyWorkspace({ branch: DEFAULT_BRANCH, package: DEFAULT_PACKAGE, base_namespace: DEFAULT_NAMESPACE });
+      applyDefaultWorkspace();
       loadSchemaVersion({ promoteLight: true });
+      loadSchemaProfiles();
       return;
     }
     let cancelled = false;
@@ -562,6 +691,10 @@ export default function App() {
         const res = await api.get("/workspace");
         if (cancelled) return;
         applyWorkspace(res.data.workspace as WorkspaceState);
+        setSchemaVersion(typeof res.data?.schema_version === "string" ? res.data.schema_version : null);
+        setSchemaSource(typeof res.data?.schema_source === "string" ? res.data.schema_source : null);
+        setSchemaProfileKey(typeof res.data?.schema_profile === "string" ? res.data.schema_profile : inferProfileKey(res.data?.workspace?.package));
+        setSchemaProfileError(typeof res.data?.schema_error === "string" ? res.data.schema_error : null);
         setAuthError(null);
         setUserName((prev) => res.data?.user?.username || prev || null);
       } catch (error: unknown) {
@@ -578,12 +711,15 @@ export default function App() {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [api, applyWorkspace, isLightMode, loadSchemaVersion, logout, token]);
+  }, [api, applyDefaultWorkspace, applyWorkspace, isLightMode, loadSchemaProfiles, loadSchemaVersion, logout, token]);
 
   useEffect(() => {
     if (!sessionChecked) return;
     loadSchemaVersion({ silent: !isLightMode, promoteLight: true });
-  }, [isLightMode, loadSchemaVersion, sessionChecked]);
+    if (token) {
+      loadSchemaProfiles();
+    }
+  }, [isLightMode, loadSchemaProfiles, loadSchemaVersion, sessionChecked, token]);
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
   const clampDocWidth = useCallback((value: number) => {
@@ -762,7 +898,8 @@ export default function App() {
     }
     setErr(null);
     try {
-      const r = await api.get("/roots", { params: { package: pkg } });
+      // Dev Mode reads the branch it draws; Light Mode has a single, fixed one.
+      const r = await api.get("/roots", { params: { package: pkg, branch: isLightMode ? undefined : workspaceBranch || undefined } });
       const list = r.data.sections || [];
       setRoots(list);
       if (list.length > 0 && !list.includes(root)) setRoot(list[0]);
@@ -771,7 +908,7 @@ export default function App() {
       setErr(formatApiError(e));
       setRoots([]);
     }
-  }, [api, pkg, root, startEmpty, syncWorkspaceFromResponse, token]);
+  }, [api, isLightMode, pkg, root, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
 
   // build single-branch graph (resets diff view)
   const loadGraph = useCallback(async (
@@ -910,12 +1047,7 @@ export default function App() {
     try {
       setCanvasStatus("Resetting canvas…");
       setErr(null);
-      await api.delete("/schema/custom-edits", {
-        params: {
-          package: targetPkg,
-          branch: workspaceBranch || undefined,
-        },
-      });
+      await api.delete("/schema/edits", { params: { package: targetPkg } });
       archiveAuditTrail();
       setGraph(null);
       setBaseGraph(null);
@@ -949,6 +1081,29 @@ export default function App() {
       console.error("Failed to load branches", e);
     }
   }, [api, isLightMode, normalizedNamespace, syncWorkspaceFromResponse, token, workspaceBranch]);
+
+  const applySchemaProfile = useCallback(async (profileKey: string) => {
+    const selected = schemaProfiles.find((profile) => profile.key === profileKey);
+    const fallbackPreset = WORKSPACE_PRESETS.find((preset) => preset.key === profileKey);
+    const nextPackage = selected?.default_package ?? fallbackPreset?.pkg;
+    const nextNamespace = selected?.default_base_namespace ?? fallbackPreset?.namespace;
+    const nextBranch = selected?.default_branch ?? fallbackPreset?.branch ?? DEFAULT_BRANCH;
+    const nextRoot = selected?.default_root ?? fallbackPreset?.root ?? DEFAULT_ROOT;
+    if (!nextPackage || !nextNamespace) return;
+
+    setSchemaProfileKey(profileKey);
+    setPkg(nextPackage);
+    setRoot(nextRoot);
+    if (!isLightMode) {
+      setWorkspaceBranch(nextBranch);
+    }
+    applyWorkspace({ branch: nextBranch, package: nextPackage, base_namespace: nextNamespace });
+    await updateWorkspaceOnServer({
+      branch: nextBranch,
+      package: nextPackage,
+      base_namespace: nextNamespace,
+    });
+  }, [applyWorkspace, isLightMode, schemaProfiles, setPkg, setWorkspaceBranch, updateWorkspaceOnServer]);
 
   // fetch available schema packages from develop branch
   const loadPackages = useCallback(async () => {
@@ -987,12 +1142,34 @@ export default function App() {
     }
   }, [api, isLightMode, normalizedNamespace, packageBranch, pkg, scratchPackage, setPkg, startEmpty, syncWorkspaceFromResponse, token]);
 
+  const loadSelectedSchemaProfile = useCallback(async () => {
+    if (!schemaProfileKey) return;
+    setSchemaUpdating(true);
+    setSchemaUpdateStatus(null);
+    try {
+      const res = await api.post("/schema/update", null, { params: { profile: schemaProfileKey } });
+      const version = res.data?.version as string | undefined;
+      setSchemaVersion(version || null);
+      setSchemaSource(typeof res.data?.source === "string" ? res.data.source : null);
+      setSchemaProfileError(null);
+      setSchemaUpdateStatus(version ? `Schema loaded: ${version}` : "Schema loaded.");
+      await loadSchemaProfiles();
+      await loadPackages();
+      await loadRoots();
+    } catch (error) {
+      setSchemaUpdateStatus(`Load failed: ${formatApiError(error)}`);
+    } finally {
+      setSchemaUpdating(false);
+    }
+  }, [api, loadPackages, loadRoots, loadSchemaProfiles, schemaProfileKey]);
+
   useEffect(() => {
     if (!workspace || !token) return;
     loadBranches();
+    loadSchemaProfiles();
     loadPackages();
     loadRoots();
-  }, [loadBranches, loadPackages, loadRoots, token, workspace]);
+  }, [loadBranches, loadPackages, loadRoots, loadSchemaProfiles, token, workspace]);
 
   // compare base/head using same filters as sidebar
   const compareBranches = async () => {
@@ -1241,7 +1418,9 @@ export default function App() {
             inheritedFromId: q.inheritedFromId ?? null,
             inheritedFromName: q.inheritedFromName ?? null,
             sourceId: q.sourceId ?? null,
+            details: q.details ?? null,
           })),
+          details: cls.details ?? null,
         });
         return;
       }
@@ -1260,6 +1439,7 @@ export default function App() {
         inheritedFromId: qty.inheritedFromId ?? null,
         inheritedFromName: qty.inheritedFromName ?? null,
         sourceId: qty.sourceId ?? null,
+        details: qty.details ?? null,
       });
       return;
     }
@@ -1285,11 +1465,49 @@ export default function App() {
         inheritedFromId: q.inheritedFromId ?? null,
         inheritedFromName: q.inheritedFromName ?? null,
         sourceId: q.sourceId ?? null,
+        details: q.details ?? null,
       })),
+      details: cls.details ?? null,
     });
   }, [selectedClassId, selectedQuantityId, setSelected, umlState]);
 
-  const createQuantityOnCanvas = async (classId: string, { quantityName, dtype, docstring }: QuantityFormData) => {
+  type EditRequest = { op: string; target: string; payload: Record<string, unknown> };
+
+  const editIdsOf = (updated: ApiGraph): string[] =>
+    (updated.persisted_edits ?? []).map((edit) => edit.id).filter((id): id is string => Boolean(id));
+
+  // Store edits on the server (all or none) and show the graph it rebuilds from the edited schema.
+  const submitEdits = async (edits: EditRequest[]): Promise<ApiGraph> => {
+    const targetPackage = graph?.package || pkg;
+    const res = await api.post(
+      "/schema/edits",
+      { package: targetPackage, edits },
+      {
+        params: {
+          root,
+          include_quantities: includeQuantities,
+          include_subsections: includeSubsections,
+          include_inheritance: includeInheritance,
+          allow_cross_module: crossModules,
+          base_namespace: normalizedNamespace || undefined,
+          empty: startEmpty ? true : undefined,
+          // Dev Mode checks and draws the edits on the branch it shows.
+          branch: isLightMode ? undefined : workspaceBranch || undefined,
+        },
+      }
+    );
+    const updated = ensureGraphResponse(res.data);
+    syncWorkspaceFromResponse(res.data);
+    // A root the edits renamed follows its class; a removed one leaves the whole module.
+    if ((updated.root ?? "") !== (root ?? "")) setRoot(updated.root ?? "");
+    const merged = replayGraphWithAudit(updated);
+    setBaseGraph(updated);
+    setGraph(merged);
+    setUmlState(buildUmlState(merged));
+    return updated;
+  };
+
+  const createQuantityOnCanvas = async (classId: string, data: QuantityFormData) => {
     const currentGraph = ensureEditableReady();
     if (!currentGraph) {
       throw new Error(addBlockedReason || "Canvas is not editable");
@@ -1309,118 +1527,64 @@ export default function App() {
     setCreatingQuantityFor(classId);
     setQuantityActionErr(null);
     try {
-      const targetPackage = targetClass.module || pkg;
-      const rawName = targetClass.name || targetClass.id || classId;
-      const classLabel =
-        rawName && rawName.includes(".") ? rawName.split(".").pop() || rawName : rawName;
-
-      const parentLabel =
-        targetClass.parentId
-          ? umlState?.classes.find((c) => c.id === targetClass.parentId)?.name ||
-            targetClass.parentId.split(".").pop() ||
-            targetClass.parentId
-          : null;
-      const parentRelation = targetClass.parentRelation ?? null;
-
-      if (!classLabel) {
-        const message = "Target class name missing";
-        setQuantityActionErr(message);
-        throw new Error(message);
-      }
-      const trimmedQuantityName = quantityName.trim();
-      const visibleNameConflict = targetClass.quantities.find((q) => q.name === trimmedQuantityName);
-      if (visibleNameConflict) {
-        const inheritedFrom = visibleNameConflict.inheritedFromName || visibleNameConflict.inheritedFromId;
-        const message = visibleNameConflict.inherited
-          ? `Quantity '${trimmedQuantityName}' is inherited from ${inheritedFrom || "a parent class"} and cannot be redefined on ${targetClass.name}.`
-          : `A quantity named '${trimmedQuantityName}' already exists on ${targetClass.name}.`;
-        setQuantityActionErr(message);
-        throw new Error(message);
-      }
-
-      const r = await api.post(
-        "/schema/custom-quantity",
-        {
-          package: targetPackage,
-          class_name: classLabel,
-          parent_name: parentLabel,
-          parent_relation: parentRelation,
-          quantity_name: trimmedQuantityName,
-          dtype,
-          docstring: docstring || null,
-        },
-        {
-          params: {
-            root,
-            include_subsections: includeSubsections,
-            include_inheritance: includeInheritance,
-            allow_cross_module: crossModules,
-            base_namespace: normalizedNamespace || undefined,
-            empty: startEmpty ? true : undefined,
+      const trimmedName = data.quantityName.trim();
+      const code = data.code?.trim() || "";
+      const description = data.docstring.trim() || undefined;
+      const isVocabulary = editRules.codes && targetClass.quantities.some((q) => q.dtype === VOCAB_TERM);
+      let edit: EditRequest;
+      if (isVocabulary) {
+        edit = { op: "add_enum_value", target: classId, payload: { value: code, label: data.label?.trim() || undefined, description } };
+      } else if (editRules.codes) {
+        edit = {
+          op: "add_attribute",
+          target: classId,
+          payload: {
+            code,
+            name: trimmedName || undefined,
+            data_type: data.dtype,
+            range: data.range || undefined,
+            mandatory: Boolean(data.mandatory),
+            label: data.label?.trim() || undefined,
+            description,
           },
+        };
+      } else {
+        const visibleNameConflict = targetClass.quantities.find((q) => q.name === trimmedName);
+        if (visibleNameConflict) {
+          const inheritedFrom = visibleNameConflict.inheritedFromName || visibleNameConflict.inheritedFromId;
+          const message = visibleNameConflict.inherited
+            ? `Quantity '${trimmedName}' is inherited from ${inheritedFrom || "a parent class"} and cannot be redefined on ${targetClass.name}.`
+            : `A quantity named '${trimmedName}' already exists on ${targetClass.name}.`;
+          setQuantityActionErr(message);
+          throw new Error(message);
         }
-      );
-      const updated = ensureGraphResponse(r.data);
-      const newChange: AuditTrailEntry["change"] = {
-        type: "add-quantity",
-        classId: targetClass.id,
-        quantity: {
-          id: `${targetClass.id}.${trimmedQuantityName}`,
-          name: trimmedQuantityName,
-          dtype,
-          doc: docstring || null,
-          ownerId: targetClass.id,
-          shape: null,
-          card: null,
-          path: null,
-          line: null,
-        },
+        edit = { op: "add_attribute", target: classId, payload: { name: trimmedName, kind: "quantity", dtype: data.dtype, description } };
+      }
+
+      const updated = await submitEdits([edit]);
+      const stored = updated.persisted_edits?.[0];
+      const addedName = String(stored?.payload?.name ?? trimmedName);
+      const addedId = `${classId}.${addedName}`;
+      const addedNode = updated.nodes.find((n) => n.id === addedId);
+      const addedQuantity: QuantityNode = {
+        id: addedId,
+        name: addedName,
+        dtype: addedNode?.dtype ?? undefined,
+        doc: addedNode?.doc ?? description ?? null,
+        ownerId: classId,
+        shape: addedNode?.shape ?? null,
+        card: addedNode?.card ?? null,
+        path: null,
+        line: null,
       };
-
-      const mergedGraph = replayGraphWithAudit(updated, newChange);
-
-      setGraph(mergedGraph);
-      const nextUml = buildUmlState(mergedGraph);
-      setUmlState(nextUml);
-      syncWorkspaceFromResponse(mergedGraph);
-      const updatedClass =
-        nextUml?.classes?.find(
-          (c) =>
-            c.id === targetClass.id ||
-            c.name === targetClass.name ||
-            c.id?.endsWith?.(`.${targetClass.name}`) ||
-            c.name?.endsWith?.(`.${targetClass.name}`)
-        ) ?? targetClass;
-
-      const addedQuantity =
-        nextUml?.classes
-          ?.find(
-            (c) =>
-              c.id === updatedClass.id ||
-              c.name === updatedClass.name ||
-              c.name?.endsWith?.(`.${updatedClass.name}`)
-          )
-          ?.quantities.find(
-            (q) => q.name === trimmedQuantityName || q.id === `${updatedClass.id}.${trimmedQuantityName}`
-          ) ??
-        ({
-          id: `${updatedClass.id}.${trimmedQuantityName}`,
-          name: trimmedQuantityName,
-          dtype,
-          doc: docstring || null,
-          ownerId: updatedClass.id,
-          shape: null,
-          card: null,
-          path: null,
-          line: null,
-        } as QuantityNode);
-
       appendAudit(
-        { type: "add-quantity", classId: updatedClass.id, quantity: addedQuantity },
-        `Added quantity ${addedQuantity.name}${dtype ? `: ${dtype}` : ""} to class ${updatedClass.name}`
+        { type: "add-quantity", classId, quantity: addedQuantity },
+        `Added ${isVocabulary ? "term" : "quantity"} ${addedQuantity.name}${addedQuantity.dtype ? `: ${addedQuantity.dtype}` : ""} to class ${targetClass.name}`,
+        editIdsOf(updated),
+        updated.package
       );
-      setSelectedClassId(updatedClass.id);
-      setSelectedQuantityId(addedQuantity.id);
+      setSelectedClassId(classId);
+      setSelectedQuantityId(addedId);
     } catch (e: unknown) {
       const message = formatApiError(e);
       setQuantityActionErr(message);
@@ -1445,72 +1609,54 @@ export default function App() {
     try {
       const classRelation = parentId ? relation || "inherits" : "inherits";
       const subsectionCard = classRelation === "hasSubSection" ? card?.trim() || null : null;
-      const res = await api.post(
-        "/schema/custom-class",
-        {
-          package: pkg,
-          name,
-          parent: parentId || null,
-          relation: classRelation,
-          card: subsectionCard,
-          docstring: docstring || null,
-        },
-        {
-          params: {
-            root,
-            include_quantities: includeQuantities,
-            include_subsections: includeSubsections,
-            include_inheritance: includeInheritance,
-            allow_cross_module: crossModules,
-            base_namespace: normalizedNamespace || undefined,
-            empty: startEmpty ? true : undefined,
-          },
+      const targetPackage = currentGraph.package || pkg;
+      const edits: EditRequest[] = [];
+      if (editRules.codes) {
+        if (classRelation === "hasSubSection") {
+          throw new Error("bam-masterdata has no subsections; link object types with an OBJECT property instead.");
         }
-      );
-      const next = ensureGraphResponse(res.data);
-      const expectedClassId = normalizeId(`${pkg}.${name}`);
-      const newChange: AuditTrailEntry["change"] = {
-        type: "add-class",
-        cls: {
-          id: expectedClassId,
-          name,
-          doc: docstring || null,
-          module: pkg,
-          parentId: parentId || null,
-          parentRelation: parentId ? classRelation : null,
-          parentCard: subsectionCard,
-          quantities: [],
-          path: null,
-          line: null,
-        } as UmlClassNode,
+        // bam-masterdata names a new object type by its code; the class name follows from it.
+        edits.push({ op: "add_class", target: "", payload: { code: name, is_a: parentId || undefined, description: docstring || undefined } });
+      } else {
+        edits.push({
+          op: "add_class",
+          target: "",
+          payload: { name, is_a: classRelation === "inherits" ? parentId || undefined : undefined, description: docstring || undefined },
+        });
+        if (parentId && classRelation === "hasSubSection") {
+          const upper = subsectionCard?.split("..").pop() ?? "";
+          edits.push({
+            op: "add_attribute",
+            target: parentId,
+            payload: {
+              name: subsectionName(name),
+              kind: "subsection",
+              range: `${targetPackage}.${name}`,
+              multivalued: upper === "*" || Number(upper) > 1,
+            },
+          });
+        }
+      }
+      const next = await submitEdits(edits);
+      const newClassId = next.persisted_edits?.[0]?.target || normalizeId(`${targetPackage}.${name}`);
+      const newNode = next.nodes.find((n) => n.kind === "section" && n.id === newClassId);
+      const newCls: UmlClassNode = {
+        id: newClassId,
+        name: newNode?.label || name,
+        doc: docstring || null,
+        module: targetPackage,
+        parentId: parentId || null,
+        parentRelation: parentId ? classRelation : null,
+        parentCard: subsectionCard,
+        quantities: [],
+        path: null,
+        line: null,
       };
-      const mergedGraph = replayGraphWithAudit(next, newChange);
-      setGraph(mergedGraph);
-      const nextUml = buildUmlState(mergedGraph);
-      setUmlState(nextUml);
-      syncWorkspaceFromResponse(mergedGraph);
-      const newCls =
-        nextUml?.classes.find((c) => normalizeId(c.id) === expectedClassId) ??
-        nextUml?.classes.find(
-          (c) =>
-            normalizeId(c.name) === normalizeId(name) &&
-            normalizeModule(c.module) === normalizeModule(pkg)
-        ) ??
-        ({
-          id: expectedClassId,
-          name,
-          doc: docstring || null,
-          module: pkg,
-          parentId: parentId || null,
-          parentRelation: parentId ? classRelation : null,
-          parentCard: subsectionCard,
-          quantities: [],
-          path: null,
-          line: null,
-        } as UmlClassNode);
       appendAudit(
         { type: "add-class", cls: newCls },
-        parentId ? `Added class ${newCls.name} extending ${parentId}` : `Added class ${newCls.name}`
+        parentId ? `Added class ${newCls.name} extending ${parentId}` : `Added class ${newCls.name}`,
+        editIdsOf(next),
+        next.package
       );
       setSelectedClassId(newCls.id);
       setSelectedQuantityId(null);
@@ -1651,7 +1797,8 @@ export default function App() {
   const replayGraphWithAudit = useCallback(
     (serverGraph: ApiGraph, extraChange?: AuditTrailEntry["change"]): ApiGraph => {
       const targetPackage = normalizePackageName(serverGraph.package) || normalizePackageName(pkg);
-      const scopedEntries = filterActiveAuditForPackage(auditTrail, targetPackage);
+      // Stored edits are already in the server's graph; only local changes are replayed.
+      const scopedEntries = filterActiveAuditForPackage(auditTrail, targetPackage).filter((a) => !a.editIds?.length);
       const changes = scopedEntries.map((a) => a.change).filter(Boolean) as AuditTrailEntry["change"][];
       const allChanges = extraChange ? [...changes, extraChange] : changes;
       return allChanges.reduce((acc, change) => applyForwardChange(acc, change), serverGraph);
@@ -1664,7 +1811,7 @@ export default function App() {
       const baseline = baseGraph ?? graph;
       if (!baseline) return;
       const targetPackage = normalizePackageName(baseline.package || pkg);
-      const applicable = filterActiveAuditForPackage(entries, targetPackage);
+      const applicable = filterActiveAuditForPackage(entries, targetPackage).filter((a) => !a.editIds?.length);
       const rebuilt = applicable.reduce((acc, curr) => applyForwardChange(acc, curr.change), baseline);
       setGraph(rebuilt);
       setUmlState(buildUmlState(rebuilt));
@@ -1672,85 +1819,52 @@ export default function App() {
     [applyForwardChange, baseGraph, buildUmlState, filterActiveAuditForPackage, graph, normalizePackageName, pkg]
   );
 
-  const deletePersistedEntryForAudit = useCallback(
-    async (entry: AuditTrailEntry) => {
-      if (!isLightMode) return;
-      const scopedPackage = normalizePackageName(entry.package) || normalizePackageName(pkg) || pkg;
-      if (entry.change.type === "add-class") {
-        const className =
-          entry.change.cls.name || entry.change.cls.id.split(".").pop() || entry.change.cls.id;
-        await api.delete("/schema/custom-edit", {
-          params: {
-            package: scopedPackage,
-            class_name: className,
-            branch: workspaceBranch || undefined,
-          },
-        });
-      } else if (entry.change.type === "add-quantity") {
-        const className =
-          entry.change.classId.split(".").pop() ||
-          entry.change.classId ||
-          entry.change.quantity.ownerId.split(".").pop() ||
-          entry.change.quantity.ownerId;
-        const quantityName =
-          entry.change.quantity.name || entry.change.quantity.id.split(".").pop() || entry.change.quantity.id;
-        await api.delete("/schema/custom-edit", {
-          params: {
-            package: scopedPackage,
-            class_name: className,
-            quantity_name: quantityName,
-            branch: workspaceBranch || undefined,
-          },
-        });
-      }
+  // Deletes the stored edits of audit entries (and a module's own edits) in one request: all or none.
+  const deleteStoredEdits = useCallback(
+    async (ids: string[], packageName?: string) => {
+      await api.delete("/schema/edits", { params: { package: packageName }, data: { ids } });
     },
-    [api, isLightMode, normalizePackageName, pkg, workspaceBranch]
+    [api]
   );
 
   const undoAuditEntry = async (id: string) => {
     const entry = auditTrail.find((a) => a.id === id);
     if (!entry || !entry.change) return;
     const remaining = auditTrail.filter((a) => a.id !== id && a.change);
-
-    setAuditTrail(remaining as AuditTrailEntry[]);
     setQuantityActionErr(null);
 
-    if (isLightMode && (entry.change.type === "add-class" || entry.change.type === "add-quantity")) {
+    if (entry.editIds?.length) {
       try {
-        await deletePersistedEntryForAudit(entry);
+        await deleteStoredEdits(entry.editIds);
       } catch (e: unknown) {
+        // Nothing was deleted; the entry stays so the undo can be tried again.
         setQuantityActionErr(`Undo failed: ${formatApiError(e)}`);
+        return;
       }
+      setAuditTrail(remaining as AuditTrailEntry[]);
       await loadGraph();
       return;
     }
 
+    setAuditTrail(remaining as AuditTrailEntry[]);
     rebuildGraphWithAudit(remaining as AuditTrailEntry[]);
   };
 
+  // Clears what the audit panel shows: this module's stored edits and the edits its entries made.
   const clearAuditTrail = async () => {
-    const hasLocalAudit = auditTrail.length > 0;
-    const hasPersistedEdits = (graph?.applied_edits?.length ?? 0) > 0;
+    const targetPackage = currentPackageForAudit || pkg;
+    const hasLocalAudit = auditEntriesForCurrentPackage.length > 0;
+    const hasPersistedEdits = (graph?.applied_edits?.length ?? 0) > 0 || (graph?.edit_conflicts?.length ?? 0) > 0;
     if (!hasLocalAudit && !hasPersistedEdits) return;
-    const baseline = baseGraph ?? graph;
-    if (baseline) {
-      setGraph(baseline);
-      setUmlState(buildUmlState(baseline));
-    }
-    setAuditTrail([]);
+    const ids = auditEntriesForCurrentPackage.flatMap((entry) => entry.editIds ?? []);
     setQuantityActionErr(null);
     try {
-      await api.delete("/schema/custom-edits", {
-        params: {
-          package: isLightMode ? undefined : pkg,
-          branch: workspaceBranch || undefined,
-          all_packages: isLightMode ? true : undefined,
-        },
-      });
-    } catch (e) {
-      console.warn("Failed to clear persisted edits", e);
+      await deleteStoredEdits(ids, targetPackage);
+    } catch (e: unknown) {
+      setQuantityActionErr(`Clear failed: ${formatApiError(e)}`);
       return;
     }
+    setAuditTrail((prev) => prev.filter((entry) => !auditEntriesForCurrentPackage.includes(entry)));
     await loadGraph();
   };
 
@@ -2001,59 +2115,24 @@ export default function App() {
       ...before,
       doc: updates.docstring || null,
     };
-    const parentName =
-      before.parentId
-        ? umlState?.classes.find((c) => c.id === before.parentId)?.name ||
-          before.parentId.split(".").pop() ||
-          before.parentId
-        : null;
 
+    let updated: ApiGraph;
     try {
-      const res = await api.post(
-        "/schema/custom-class",
-        {
-          package: before.module || current.package || pkg,
-          name: before.name,
-          parent: parentName,
-          relation: before.parentId ? before.parentRelation || "inherits" : "inherits",
-          card: before.parentRelation === "hasSubSection" ? before.parentCard ?? null : null,
-          docstring: updates.docstring || null,
-          update_existing: true,
-        },
-        {
-          params: {
-            root,
-            include_quantities: includeQuantities,
-            include_subsections: includeSubsections,
-            include_inheritance: includeInheritance,
-            allow_cross_module: crossModules,
-            base_namespace: normalizedNamespace || undefined,
-            empty: startEmpty ? true : undefined,
-          },
-        }
-      );
-      const updated = ensureGraphResponse(res.data);
-      syncWorkspaceFromResponse(updated);
+      updated = await submitEdits([
+        { op: "set_description", target: classId, payload: { description: updates.docstring || null } },
+      ]);
     } catch (e: unknown) {
       const message = formatApiError(e);
       setQuantityActionErr(message);
       throw new Error(message);
     }
 
-    const nextGraph = {
-      ...current,
-      nodes: current.nodes.map((n) => (
-        n.id === classId && n.kind === "section"
-          ? { ...n, doc: updates.docstring || null }
-          : n
-      )),
-    };
-
-    setGraph(nextGraph);
     setQuantityActionErr(null);
     appendAudit(
       { type: "edit-class", before, after },
-      `Edited class ${before.name} docstring`
+      `Edited class ${before.name} docstring`,
+      editIdsOf(updated),
+      updated.package
     );
 
     if (selected?.kind === "class" && selected.id === classId) {
@@ -2064,88 +2143,110 @@ export default function App() {
     }
   };
 
-  const editQuantity = (quantityId: string, updates: QuantityFormData) => {
-    const current = ensureEditableReady();
-    if (!current) return;
+  // The quantity the user picked, if it can be edited: not inherited, with an owner.
+  const editableQuantity = (current: ApiGraph, quantityId: string, verb: string): ApiNode | null => {
     const ownerHint = selected?.kind === "quantity" ? selected.owner : selectedClassId;
     const umlQuantity = findQuantityInUml(quantityId, ownerHint);
     if (umlQuantity?.qty.inherited) {
       const inheritedFrom = umlQuantity.qty.inheritedFromName || umlQuantity.qty.inheritedFromId || "a parent class";
       setQuantityActionErr(
-        `Quantity '${umlQuantity.qty.name}' is inherited from ${inheritedFrom} and cannot be edited on ${umlQuantity.cls.name}.`
+        `Quantity '${umlQuantity.qty.name}' is inherited from ${inheritedFrom} and cannot be ${verb} on ${umlQuantity.cls.name}.`
       );
-      return;
+      return null;
     }
-
     const target = current.nodes.find((n) => n.id === quantityId && n.kind === "quantity");
     if (!target) {
       setQuantityActionErr("Quantity not found in current graph.");
-      return;
+      return null;
     }
     if (!target.owner) {
-      setQuantityActionErr("Cannot edit a quantity without an owner.");
-      return;
+      setQuantityActionErr(`Cannot ${verb === "edited" ? "edit" : "remove"} a quantity without an owner.`);
+      return null;
     }
+    return target;
+  };
+
+  const quantitySnapshot = (node: ApiNode): QuantityNode => ({
+    id: node.id,
+    name: node.label,
+    dtype: node.dtype ?? node.data_type ?? node.type ?? undefined,
+    shape: node.shape ?? null,
+    card: node.card ?? null,
+    doc: node.doc ?? null,
+    path: node.path ?? null,
+    line: typeof node.line === "number" ? node.line : null,
+    ownerId: node.owner ?? "",
+  });
+
+  const editQuantity = async (quantityId: string, updates: QuantityFormData) => {
+    const current = ensureEditableReady();
+    if (!current) return;
+    const target = editableQuantity(current, quantityId, "edited");
+    if (!target?.owner) return;
 
     const trimmedName = updates.quantityName.trim();
     if (!trimmedName) {
       setQuantityActionErr("Quantity name cannot be empty.");
       return;
     }
-
-    const newId = `${target.owner}.${trimmedName}`;
-    const ownerClass = umlState?.classes.find((c) => c.id === target.owner);
-    const nameConflict = ownerClass?.quantities.find((q) => q.id !== quantityId && q.name === trimmedName);
-    const conflict = Boolean(nameConflict) || current.nodes.some(
-      (n) => n.kind === "quantity" && n.owner === target.owner && n.id !== quantityId && (n.id === newId || n.label === trimmedName)
-    );
-    if (conflict) {
-      if (nameConflict?.inherited) {
-        const inheritedFrom = nameConflict.inheritedFromName || nameConflict.inheritedFromId || "a parent class";
-        setQuantityActionErr(
-          `A quantity named '${trimmedName}' is inherited from ${inheritedFrom} and cannot be overridden on this class.`
-        );
-      } else {
-        setQuantityActionErr("A quantity with that name already exists on this class.");
+    const owner = target.owner;
+    const description = updates.docstring.trim() || null;
+    const docChanged = (target.doc ?? null) !== description;
+    const edits: EditRequest[] = [];
+    if (target.dtype === VOCAB_TERM) {
+      const code = target.details?.code;
+      if (!code) {
+        setQuantityActionErr("This term has no code to edit it by.");
+        return;
       }
+      if (trimmedName !== target.label) {
+        setQuantityActionErr("A vocabulary term is named by its code; remove it and add a new term instead.");
+        return;
+      }
+      if (docChanged) edits.push({ op: "set_description", target: owner, payload: { value: code, description } });
+    } else {
+      const attribute = target.label;
+      const currentDtype = dtypeNameFor(editRules, target.dtype);
+      const rangeChanged = editRules.codes && Boolean(updates.range) && updates.range !== undefined;
+      if (updates.dtype && (updates.dtype !== currentDtype || rangeChanged)) {
+        edits.push({
+          op: "set_range",
+          target: owner,
+          payload: editRules.codes
+            ? { attribute, data_type: updates.dtype, range: updates.range || undefined }
+            : { attribute, dtype: updates.dtype },
+        });
+      }
+      if (editRules.codes && typeof updates.mandatory === "boolean" && updates.mandatory !== Boolean(target.details?.mandatory)) {
+        edits.push({ op: "set_required", target: owner, payload: { attribute, required: updates.mandatory } });
+      }
+      if (docChanged) edits.push({ op: "set_description", target: owner, payload: { attribute, description } });
+      if (trimmedName !== attribute) {
+        edits.push({ op: "rename_attribute", target: owner, payload: { attribute, new_name: trimmedName } });
+      }
+    }
+    if (!edits.length) {
+      setQuantityActionErr(null);
       return;
     }
 
-    const nextNodes = current.nodes.map((n) => {
-      if (n.id !== quantityId) return n;
-      return { ...n, id: newId, label: trimmedName, doc: updates.docstring || null, dtype: updates.dtype };
-    });
-
-    const nextEdges = current.edges.map((e) => {
-      if (e.source === quantityId) return { ...e, source: newId };
-      if (e.target === quantityId) return { ...e, target: newId };
-      return e;
-    });
-
-    const nextGraph = { ...current, nodes: nextNodes, edges: nextEdges };
-    setGraph(nextGraph);
+    let updated: ApiGraph;
+    try {
+      updated = await submitEdits(edits);
+    } catch (e: unknown) {
+      setQuantityActionErr(formatApiError(e));
+      return;
+    }
     setQuantityActionErr(null);
-    const before: QuantityNode = {
-      id: target.id,
-      name: target.label,
-      dtype: target.dtype ?? target.data_type ?? target.type ?? undefined,
-      shape: target.shape ?? null,
-      card: target.card ?? null,
-      doc: target.doc ?? null,
-      path: target.path ?? null,
-      line: typeof target.line === "number" ? target.line : null,
-      ownerId: target.owner,
-    };
-    const after: QuantityNode = {
-      ...before,
-      id: newId,
-      name: trimmedName,
-      dtype: updates.dtype,
-      doc: updates.docstring || null,
-    };
+    const newId = `${owner}.${target.dtype === VOCAB_TERM ? target.label : trimmedName}`;
+    const before = quantitySnapshot(target);
+    const afterNode = updated.nodes.find((n) => n.id === newId);
+    const after: QuantityNode = afterNode ? quantitySnapshot(afterNode) : { ...before, id: newId, name: trimmedName, doc: description };
     appendAudit(
-      { type: "edit-quantity", classId: target.owner, before, after },
-      `Edited quantity ${before.name} on ${target.owner}`
+      { type: "edit-quantity", classId: owner, before, after },
+      `Edited quantity ${before.name} on ${owner}`,
+      editIdsOf(updated),
+      updated.package
     );
 
     if (selected?.kind === "quantity" && selected.id === quantityId) {
@@ -2153,49 +2254,36 @@ export default function App() {
     }
   };
 
-  const removeQuantity = (quantityId: string) => {
+  const removeQuantity = async (quantityId: string) => {
     const current = ensureEditableReady();
     if (!current) return;
-    const ownerHint = selected?.kind === "quantity" ? selected.owner : selectedClassId;
-    const umlQuantity = findQuantityInUml(quantityId, ownerHint);
-    if (umlQuantity?.qty.inherited) {
-      const inheritedFrom = umlQuantity.qty.inheritedFromName || umlQuantity.qty.inheritedFromId || "a parent class";
-      setQuantityActionErr(
-        `Quantity '${umlQuantity.qty.name}' is inherited from ${inheritedFrom} and cannot be removed on ${umlQuantity.cls.name}.`
-      );
+    const target = editableQuantity(current, quantityId, "removed");
+    if (!target?.owner) return;
+
+    let edit: EditRequest;
+    if (target.dtype === VOCAB_TERM) {
+      if (!target.details?.code) {
+        setQuantityActionErr("This term has no code to remove it by.");
+        return;
+      }
+      edit = { op: "remove_enum_value", target: target.owner, payload: { value: target.details.code } };
+    } else {
+      edit = { op: "remove_attribute", target: target.owner, payload: { attribute: target.label } };
+    }
+    let updated: ApiGraph;
+    try {
+      updated = await submitEdits([edit]);
+    } catch (e: unknown) {
+      setQuantityActionErr(formatApiError(e));
       return;
     }
-
-    const target = current.nodes.find((n) => n.id === quantityId && n.kind === "quantity");
-    if (!target) {
-      setQuantityActionErr("Quantity not found in current graph.");
-      return;
-    }
-    if (!target.owner) {
-      setQuantityActionErr("Cannot remove a quantity without an owner.");
-      return;
-    }
-
-    const nextNodes = current.nodes.filter((n) => n.id !== quantityId);
-    const nextEdges = current.edges.filter((e) => e.source !== quantityId && e.target !== quantityId);
-    const nextGraph = { ...current, nodes: nextNodes, edges: nextEdges };
-
-    setGraph(nextGraph);
     setQuantityActionErr(null);
-    const removed: QuantityNode = {
-      id: target.id,
-      name: target.label,
-      dtype: target.dtype ?? target.data_type ?? target.type ?? undefined,
-      shape: target.shape ?? null,
-      card: target.card ?? null,
-      doc: target.doc ?? null,
-      path: target.path ?? null,
-      line: typeof target.line === "number" ? target.line : null,
-      ownerId: target.owner,
-    };
+    const removed = quantitySnapshot(target);
     appendAudit(
       { type: "remove-quantity", classId: target.owner, quantity: removed },
-      `Removed quantity ${removed.name} from ${target.owner}`
+      `Removed quantity ${removed.name} from ${target.owner}`,
+      editIdsOf(updated),
+      updated.package
     );
 
     if (selected?.kind === "quantity" && selected.id === quantityId) {
@@ -2212,6 +2300,43 @@ export default function App() {
     a.href = s;
     a.download = `${currentGraph.package}_${currentGraph.root || "all"}.json`;
     a.click();
+  };
+
+  // Profiles without a LinkML converter say so; Dev Mode lists no profiles, so the server decides there.
+  const canExportLinkml = currentSchemaProfile?.linkml_export ?? true;
+  // What the schema source offers besides the schema; Dev Mode lists no profiles, so everything stays on there.
+  const profileCapabilities = currentSchemaProfile?.capabilities;
+  const showUsage = !profileCapabilities || profileCapabilities.includes("usage");
+  const showMethods = !profileCapabilities || profileCapabilities.includes("methods");
+
+  const exportLinkml = async () => {
+    if (!currentGraph?.package) return;
+    setLinkmlStatus("Preparing LinkML export...");
+    try {
+      const res = await api.get("/schema/linkml", {
+        params: { package: currentGraph.package, branch: isLightMode ? undefined : workspaceBranch || undefined },
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(res.data as Blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${currentGraph.package}.linkml.yaml`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setLinkmlStatus(null);
+    } catch (error) {
+      let detail = error instanceof Error ? error.message : String(error);
+      const data = axios.isAxiosError(error) ? error.response?.data : null;
+      if (data instanceof Blob) {
+        try {
+          const parsed = JSON.parse(await data.text());
+          if (typeof parsed?.detail === "string") detail = parsed.detail;
+        } catch {
+          // keep the generic message
+        }
+      }
+      setLinkmlStatus(`LinkML export failed: ${detail}`);
+    }
   };
 
   const handleImportJson = () => {
@@ -2359,11 +2484,13 @@ export default function App() {
     setSchemaUpdating(true);
     setSchemaUpdateStatus(null);
     try {
-      const res = await api.post("/schema/update");
+      const res = await api.post("/schema/update", null, { params: { profile: schemaProfileKey || undefined } });
       const version = res.data?.version as string | undefined;
       setSchemaVersion(version || null);
       setSchemaSource(res.data?.source || null);
+      setSchemaProfileError(null);
       setSchemaUpdateStatus(version ? `Schema updated to ${version}` : "Schema updated.");
+      await loadSchemaProfiles();
     } catch (error) {
       setSchemaUpdateStatus(`Update failed: ${formatApiError(error)}`);
     } finally {
@@ -2440,7 +2567,7 @@ export default function App() {
           <p className="subdued">
             {isLightMode
               ? "Running in Light Mode (local, single-user, non-production)."
-              : "Craft diagrams, compare branches, and edit schemas. Currently defaults to nomad-simulations."}
+              : "Craft diagrams, compare branches, and edit schemas across compatible repositories."}
           </p>
           <div className="row" style={{ marginTop: 10, flexWrap: "wrap", gap: 8 }}>
             <span className="tag">{loading || diffLoading ? "Working…" : "Ready"}</span>
@@ -2450,6 +2577,7 @@ export default function App() {
             ) : (
               <span className="tag muted">Schema version…</span>
             )}
+            {schemaProfileKey ? <span className="tag muted">Profile: {schemaProfileKey}</span> : null}
             {selectedClassName ? <span className="tag">Selected: {selectedClassName}</span> : null}
           </div>
           <div style={{ marginTop: 12 }}>
@@ -2526,12 +2654,58 @@ export default function App() {
                 {mode === "overview" ? "Back to diagram" : "Bird's-eye view"}
               </button>
             </div>
+            {isLightMode ? (
+              <div className="card" style={{ padding: 12, border: "1px solid var(--border)", borderRadius: 8, display: "grid", gap: 10 }}>
+                <div>
+                  <div className="label">Select schema family</div>
+                  <div className="small" style={{ color: "var(--muted)", marginTop: 4 }}>
+                    Pick the schema source before loading packages or editing the graph.
+                  </div>
+                </div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {schemaProfiles.map((profile) => {
+                    const isSelected = schemaProfileKey === profile.key;
+                    return (
+                      <button
+                        key={profile.key}
+                        type="button"
+                        className={`btn ${isSelected ? "" : "secondary"}`}
+                        onClick={() => applySchemaProfile(profile.key)}
+                        style={{ justifyContent: "space-between", textAlign: "left" }}
+                      >
+                        <span>{profile.label}</span>
+                        <span className="small" style={{ color: isSelected ? "inherit" : "var(--muted)" }}>
+                          {profile.available
+                            ? profile.source === "bundled"
+                              ? "bundled"
+                              : profile.version?.slice(0, 9) || "ready"
+                            : "not loaded"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {currentSchemaProfile && !currentSchemaProfile.available ? (
+                  <div className="small" style={{ color: "#fca5a5" }}>
+                    {currentSchemaProfile.error || "This schema is not available yet. Load it while online to continue."}
+                  </div>
+                ) : null}
+                {schemaProfileError ? (
+                  <div className="small" style={{ color: "#fca5a5" }}>{schemaProfileError}</div>
+                ) : null}
+                {currentSchemaProfile && !currentSchemaProfile.available ? (
+                  <button className="btn secondary" type="button" onClick={loadSelectedSchemaProfile} disabled={schemaUpdating}>
+                    {schemaUpdating ? "Loading schema…" : `Load ${currentSchemaProfile.label}`}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             <div className="row" style={{ gap: 10, alignItems: "flex-end" }}>
               <div style={{ flex: 1 }}>
                 {isLightMode ? (
                   <>
                     <label className="label">Schema branch</label>
-                    <div className="small">{DEFAULT_BRANCH} (fixed in Light Mode)</div>
+                    <div className="small">{currentSchemaProfile?.default_branch || DEFAULT_BRANCH} (fixed per schema family in Light Mode)</div>
                   </>
                 ) : (
                   <>
@@ -2637,7 +2811,7 @@ export default function App() {
             </div>
 
             <div className="row" style={{ marginTop: 14, justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-              <button className="btn" onClick={() => loadGraph()}>
+              <button className="btn" onClick={() => loadGraph()} disabled={!startEmpty && !selectedSchemaReady}>
                 Build graph
               </button>
               <div className="row" style={{ flex: 1, justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
@@ -2656,6 +2830,16 @@ export default function App() {
                     <button className="btn secondary" onClick={exportJson}>
                       Export JSON
                     </button>
+                    {canExportLinkml ? (
+                      <button
+                        className="btn secondary"
+                        onClick={exportLinkml}
+                        disabled={!currentGraph.package}
+                        title="Download the schema of this module as LinkML YAML"
+                      >
+                        Export LinkML
+                      </button>
+                    ) : null}
                     <button
                       className="btn secondary"
                       onClick={exportPdf}
@@ -2667,12 +2851,22 @@ export default function App() {
                   </>
                 ) : null}
               </div>
+              {linkmlStatus ? (
+                <div className="small" style={{ color: linkmlStatus.startsWith("LinkML export failed") ? "#fca5a5" : "var(--muted)", textAlign: "right" }}>
+                  {linkmlStatus}
+                </div>
+              ) : null}
               {importStatus ? (
                 <div className="small" style={{ color: importStatus.startsWith("Import failed") ? "#fca5a5" : "var(--muted)", textAlign: "right" }}>
                   {importStatus}
                 </div>
               ) : null}
             </div>
+            {schemaSelectionRequired ? (
+              <div className="small" style={{ color: "var(--muted)" }}>
+                Select a schema family above before building a graph.
+              </div>
+            ) : null}
 
             {isLightMode && sendDesignEnabled ? (
               <div className="card" style={{ marginTop: 12, padding: 12, border: "1px solid var(--border)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -2705,15 +2899,17 @@ export default function App() {
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection
-          title="Under the hood"
-          hint="Raw schema structure"
-          id="section-under"
-          open={openUnderTheHood}
-          onToggle={setOpenUnderTheHood}
-        >
-          <UnderTheHoodPanel apiBase={apiBase} token={token} />
-        </CollapsibleSection>
+        {showUsage ? (
+          <CollapsibleSection
+            title="Under the hood"
+            hint="Raw schema structure"
+            id="section-under"
+            open={openUnderTheHood}
+            onToggle={setOpenUnderTheHood}
+          >
+            <UnderTheHoodPanel apiBase={apiBase} token={token} branch={isLightMode ? undefined : workspaceBranch || undefined} />
+          </CollapsibleSection>
+        ) : null}
 
         {!isLightMode ? (
           <CollapsibleSection
@@ -2863,6 +3059,7 @@ export default function App() {
                 pinnedClassIds={pinnedClassIds}
                 showQuantityMetadata={showQuantityMetadata}
                 showInheritance={includeInheritance}
+                showMethods={showMethods}
                 theme={theme}
                 onReady={setGraphHandle}
               />
@@ -2930,11 +3127,13 @@ export default function App() {
                   selectedClassId={selectedClassId}
                   showQuantityMetadata={showQuantityMetadata}
                   showInheritance={includeInheritance}
+                  showMethods={showMethods}
                   theme={theme}
                   onReady={setGraphHandle}
                   onSelectClass={handleCanvasClassSelect}
                   onCreateQuantity={createQuantityOnCanvas}
                   onCreateClass={createClassOnCanvas}
+                  editRules={editRules}
                   creatingQuantityFor={creatingQuantityFor}
                   creatingClass={creatingClass}
                   onClearSelection={handleCanvasClear}
@@ -2949,7 +3148,7 @@ export default function App() {
               </div>
               <div style={{ lineHeight: 1.5, display: "grid", gap: 10 }}>
                 <div>
-                  1) Go to <button className="link-button" type="button" onClick={() => focusAndOpen("workspace")}>Workspace 👈</button> and pick a root, then hit “Build graph” to load the nomad-simulations schema.
+                  1) Go to <button className="link-button" type="button" onClick={() => focusAndOpen("workspace")}>Workspace 👈</button>, choose a schema family, then pick a root and hit “Build graph”.
                 </div>
                 <div>
                   2) See the <button className="link-button" type="button" onClick={() => focusAndOpen("documentation")}>Documentation 👉</button> panel to read class/quantity details as you browse.
@@ -3014,6 +3213,7 @@ export default function App() {
               onToggle={setOpenDocumentation}
             >
               <DocPanel
+                editRules={editRules}
                 editableMode={editableMode}
                 onRemoveQuantity={removeQuantity}
                 onEditQuantity={editQuantity}
@@ -3065,11 +3265,26 @@ export default function App() {
                     className="btn secondary"
                     type="button"
                     onClick={clearAuditTrail}
-                    disabled={!auditTrail.length && !(graph?.applied_edits?.length)}
+                    disabled={!auditTrail.length && !(graph?.applied_edits?.length) && !(graph?.edit_conflicts?.length)}
                   >
                     Clear
                   </button>
                 </div>
+                {graph?.edit_conflicts?.length ? (
+                  <div className="small" role="status" style={{ color: "#b45309" }}>
+                    <div>
+                      {graph.edit_conflicts.filter((c) => !c.applied).length} stored edit(s) could not be applied,{" "}
+                      {graph.edit_conflicts.filter((c) => c.applied).length} applied over a change in the schema source:
+                    </div>
+                    <ul style={{ margin: "4px 0 0", paddingLeft: 16 }}>
+                      {graph.edit_conflicts.map((conflict, index) => (
+                        <li key={`${conflict.edit.id ?? index}-${conflict.reason}`}>
+                          {conflict.edit.op} {conflict.edit.target.split(".").pop()}: {conflict.detail} ({conflict.reason})
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 <div className="small" style={{ color: "var(--muted)" }}>
                   {auditEntriesForCurrentPackage.length
                     ? `${activeAuditCount} active edits${archivedAuditCount > 0 ? ` (${archivedAuditCount} archived)` : ""}`

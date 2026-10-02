@@ -30,10 +30,10 @@ Both modes support schema graphing, docs/usage inspection, custom class/quantity
   - Auth/workspace/health: `POST /auth/login`, `POST /auth/register`, `GET /workspace`, `PUT /workspace`, `GET /health`, `GET /`
   - Branch-aware graphing: `POST /graph`, `POST /graph/diff`, `GET /git/branches`, `GET /git/packages`
   - Async tasks: `POST /tasks/graph`, `POST /tasks/graph/diff`, `GET /tasks/{id}`
-  - Shared: `GET /roots`, `GET /schema`, `GET /overview`, `GET /usage`, custom edit endpoints
+  - Shared: `GET /roots`, `GET /schema`, `GET /overview`, `GET /usage`, schema edit endpoints
 - Light Mode:
   - Core: `GET /health`, `GET /workspace`, `PUT /workspace`, `GET /roots`, `GET /schema`, `GET /overview`, `GET /usage`
-  - Custom edits: `POST /schema/custom-class`, `POST /schema/custom-quantity`, `DELETE /schema/custom-edits`, `DELETE /schema/custom-edit`
+  - Schema edits: `GET /schema/edits`, `POST /schema/edits`, `DELETE /schema/edits`, `DELETE /schema/edits/{id}`
   - Schema versioning/update: `GET /schema/version`, `POST /schema/update`
   - Submission: `POST /send-design`
   - `GET /git/packages` works with fixed branch policy; `GET /git/branches` returns `410` (disabled).
@@ -88,14 +88,18 @@ export SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA=0
 - Workspace includes **Show base sections** (default off) to hide/show framework/base hierarchy in the canvas.
 - **Exports**: download the current graph JSON or a PDF snapshot.
 - Branch diff highlights (Dev Mode only): 🟩 Added, 🟨 Changed, 🟥 Removed (edges dashed red; quantity deltas are included).
-- **Empty canvas**: start from `<base>.custom_schema`, edit freely, and reset persisted custom edits when needed (UI calls `/schema/custom-edits`).
+- **Empty canvas**: start from `<base>.custom_schema`, edit freely, and reset its stored edits when needed (UI calls `DELETE /schema/edits`). Its edits apply to the whole profile's schema, so new classes can build on existing ones.
 
-**Custom edit model (important for agents):**
-- Custom edits are persisted server-side per mode:
-  - Dev Mode: Mongo (per user + branch + package).
-  - Light Mode: local SQLite (single user, fixed `develop` branch policy).
-- Backend replays persisted edits onto freshly built graphs and reports conflicts in `edit_conflicts` when applicable.
-- Frontend audit trail is UI history and replay support; hard reset uses `DELETE /schema/custom-edits`.
+**Edit model (important for agents):**
+- An edit is an operation on the LinkML schema (`api/sources/edits.py`): add, rename or remove a class or attribute, set range, description or required, add or remove enum values. Each stored edit records profile, module, the schema commit it was made on, target and payload.
+- Edits are stored per mode and profile, each under the module of the class it changes (a new class: the module it is added to):
+  - Dev Mode: Mongo (per user).
+  - Light Mode: local SQLite (single user). An older database format is recreated, not migrated.
+- The backend replays all of the profile's stored edits, in order, onto the freshly converted LinkML schema of the module's snapshot, then builds the graph from that (`api/sources/editing.py`); a class shows the same edits in every module that draws it. The module's own edits that no longer apply, or that applied over a change in the schema source, are reported in `edit_conflicts`.
+- In Dev Mode a branch (`/graph`, `/tasks/graph`, and `branch` on `/roots`, `/schema/linkml` and `POST /schema/edits`) is read from its git worktree, and the stored edits are replayed onto it the same way.
+- `POST /schema/edits` builds the resulting graph before it stores anything, so an error stores nothing, and stores its edits all or none (SQLite: one transaction; Mongo: one document per request, since a standalone MongoDB has no transactions). `DELETE /schema/edits` deletes a list of edit ids and, if a module is named, that module's edits: in one transaction in Light Mode; in Dev Mode undoing one request's edits is one write, while deleting a module's edits may touch several documents and can be repeated safely.
+- Which edits a profile allows comes from the profile (`edit_rules`): NOMAD dtypes for both NOMAD profiles, openBIS data types and codes for bam-masterdata. Inherited members are edited on the class that declares them.
+- Frontend audit trail is UI history; each entry keeps the ids of the edits it stored, and undo deletes them (the entry stays if that fails). Clear deletes the current module's edits and those its entries made.
 
 **API compatibility headers:**
 - Frontend sends `X-Schema-UML-Version` and `X-Schema-UML-Features` so backends can gate behavior across different schema repos.
@@ -113,10 +117,10 @@ export SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA=0
 **Contract tests:**
 - `npm run test:run` (from `web/`) executes frontend UI flows + contract parsing/identifier checks using Vitest + happy-dom.
 - `npm run test:contracts` runs only the contract/identifier subset.
-- Custom classes: `POST /schema/custom-class` with `relation` (`inherits` | `hasSubSection`), always assigns id `{package}.{name}`; adds parent edge if provided.
-- Custom quantities: `POST /schema/custom-quantity` with `class_name` (label), optional `parent_name`/`parent_relation` to reattach parent edge if the class must be materialized server-side.
-- Custom quantities cannot redefine an inherited ancestor quantity on a child class (server validation).
-- Frontend keeps an audit trail and replays all prior edits onto each fresh server graph so earlier custom edges don’t disappear when adding new ones.
+- New classes: `add_class` gives id `{package}.{name}` (bam-masterdata: the name follows from the object type code); a subsection link is a second edit, `add_attribute` with kind `subsection` on the parent.
+- New quantities: `add_attribute` on the class id; they get the annotations extracted ones have, so the graph shows them the same way.
+- A quantity cannot redefine an inherited one on a child class (server validation).
+- `POST /schema/edits` stores a list of edits all or none; the graph it returns already holds them.
 
 ---
 
@@ -141,7 +145,7 @@ schema-studio/
 │
 ├─ extractor/
 │  ├─ graph_builder.py          # build_graph(package, **opts); embeds docstrings
-│  ├─ usage_index.py            # get_usage_for_section(section_qualname) for /usage
+│  ├─ scripts/usage_index.py    # get_usage_for_section(section_qualname) for /usage
 │
 ├─ web/                         # React frontend (Vite)
 │  ├─ src/
@@ -281,22 +285,25 @@ Example (shortened):
 
 The frontend shows these entries as a list under **Under the hood** for the currently selected section.
 
-### 2.4 Custom quantity request (`POST /schema/custom-quantity`)
+### 2.4 Edit request (`POST /schema/edits`)
 
 ~~~json
 {
   "package": "nomad_simulations.schema_packages.model_method",
-  "class_name": "ModelMethod",
-  "quantity_name": "my_quantity",
-  "dtype": "float",
-  "docstring": "Optional docstring here"
+  "edits": [
+    {
+      "op": "add_attribute",
+      "target": "nomad_simulations.schema_packages.model_method.ModelMethod",
+      "payload": {"name": "my_quantity", "kind": "quantity", "dtype": "float64", "description": "Optional"}
+    }
+  ]
 }
 ~~~
 
 **Notes**
 
-- Supported dtypes are validated server-side (`SUPPORTED_CUSTOM_DTYPES` in both `api/main.py` and `api/light_mode/app.py`).
-- The endpoint rebuilds the graph once, injects the quantity, and returns the updated graph payload used by editable mode in the UI.
+- The edits are checked against the profile's rules and the current (edited) schema, then stored with the schema commit; the response is the module's graph with `persisted_edits`, `applied_edits` and, if any, `edit_conflicts`.
+- The allowed dtypes come from the profile (`edit_rules` in `GET /schema/profiles`, or `GET /schema/edits`).
 
 ---
 
@@ -327,11 +334,11 @@ The frontend shows these entries as a list under **Under the hood** for the curr
    - Builds from the current workspace package/root (no branch diff).
    - Replays persisted edits and includes workspace metadata.
 
-7. **Custom edits (`POST /schema/custom-class`, `POST /schema/custom-quantity`, `DELETE /schema/custom-edits`)**
-   - Validate edit payloads, rebuild graph, persist edit in Mongo, return updated graph.
+7. **Schema edits (`GET`/`POST`/`DELETE /schema/edits`, `DELETE /schema/edits/{id}`)**
+   - Check edits against the edited LinkML schema, store them in Mongo, return the rebuilt graph.
 
 8. **`GET /usage`**
-   - Resolves section FQCN and returns normalize/helper usage via `extractor/usage_index.py`.
+   - Resolves section FQCN and returns normalize/helper usage via `extractor/scripts/usage_index.py`.
 
 9. **Async task endpoints (`POST /tasks/graph`, `POST /tasks/graph/diff`, `GET /tasks/{id}`)**
    - Optional Celery-backed background extraction and diffing.
@@ -351,8 +358,8 @@ The frontend shows these entries as a list under **Under the hood** for the curr
    - Builds graph from installed package modules.
    - Replays persisted local edits from SQLite.
 
-4. **Custom edits (`POST /schema/custom-class`, `POST /schema/custom-quantity`, `DELETE /schema/custom-edits`, `DELETE /schema/custom-edit`)**
-   - Same edit semantics as Dev Mode; persisted locally.
+4. **Schema edits (`GET`/`POST`/`DELETE /schema/edits`, `DELETE /schema/edits/{id}`)**
+   - Same edit semantics as Dev Mode; stored locally in SQLite.
    - Inherited-quantity redefinition on child classes is rejected.
 
 5. **`GET /overview`, `GET /usage`**
@@ -377,7 +384,7 @@ The frontend shows these entries as a list under **Under the hood** for the curr
   - `api/light_mode/schema_source.py` — installed package policy + update behavior.
   - `api/light_mode/store.py` — SQLite workspace/custom edit persistence.
 - `extractor/graph_builder.py` — embeds graph structure + docstrings for sections and quantities.
-- `extractor/usage_index.py` — introspects normalize methods and helpers; exposes `get_usage_for_section`.
+- `extractor/scripts/usage_index.py` — introspects normalize methods and helpers; exposes `get_usage_for_section`.
 
 ---
 
@@ -395,7 +402,7 @@ The frontend shows these entries as a list under **Under the hood** for the curr
   - Right column:
     - Top: `DocPanel` (schema docs + quantities, includes inline edit/remove hooks).
     - Bottom: audit trail (edit history, archive/restore, export/clear).
-  - **Editable mode:** toggles whether class/quantity mutation actions are enabled; uses `/schema/custom-class` and `/schema/custom-quantity` for persisted additions, and client-side updates for rename/delete.
+  - **Editable mode:** toggles whether class/quantity mutation actions are enabled; every addition, rename, change and removal is stored through `/schema/edits`.
   - Workspace controls include **Show base sections** (default off): off keeps diagrams focused on selected schema namespace; on restores full base/framework hierarchy.
   - Mode selection:
     - Compile-time: `VITE_LIGHT_MODE=true` disables branch-diff/task paths.
@@ -483,7 +490,7 @@ The frontend shows these entries as a list under **Under the hood** for the curr
 
 **Extend usage / normalization discovery**
 
-- Edit `extractor/usage_index.py`.  
+- Edit `extractor/scripts/usage_index.py`.  
   - Add new heuristics for `"utility_function"` or additional normalize helpers.  
   - Keep the `UsageEntry` dataclass and `/usage` response model in sync with the frontend.
 

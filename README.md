@@ -6,7 +6,7 @@ Interactive schema explorer and editor for data models.
 - Local single-user app (no auth)
 - No MongoDB/Redis required
 - Custom edits persisted in local SQLite
-- Schema source pinned to `nomad-simulations` `develop`
+- Schema family selectable between `nomad-simulations`, `nomad-measurements` and `bam-masterdata`
 
 Back end: **FastAPI**  
 Front end: **React + Cytoscape + ELK**  
@@ -43,19 +43,47 @@ pip install -e .
 uv sync
 ```
 
-### 2) Run
+### 2) Set up the schema environments
+
+Schema Studio does not install any schema package next to itself. Each schema
+family lives in its own small environment under `environments/<profile>/`, and
+the app reads a schema by running a script with that environment's Python.
+This needs [`uv`](https://docs.astral.sh/uv/) on your `PATH`.
+
+Set up the ones you want to browse (run from the repository root):
+
+```bash
+uv sync --project environments/nomad-simulations    # tracks `develop`
+uv sync --project environments/nomad-measurements   # tracks `main`
+uv sync --project environments/bam-masterdata       # tracks `main`
+```
+
+The two NOMAD environments install `nomad-lab` and are large downloads. You can
+also skip this step and use the **Load …** button next to a schema family in
+the app, which runs the same setup for that one profile.
+
+Each environment is pinned by its `uv.lock`. To move one to the latest commit
+of its branch, click **Update schema** in the app, or run:
+
+```bash
+uv lock --project environments/bam-masterdata --upgrade-package bam-masterdata
+uv sync --project environments/bam-masterdata
+```
+
+### 3) Run
 ```bash
 schema-studio
 ```
 
 This starts the local server on `http://127.0.0.1:5179` and opens your browser automatically.
 
-### 3) First-use flow
-1. Pick a package.
-2. Pick a root section (or leave empty for all sections).
-3. Click **Build graph**.
-4. Click classes/quantities to view docs and metadata.
-5. Toggle **Editable mode** to add classes/quantities.
+### 4) First-use flow
+1. Pick a schema family.
+2. Pick a package.
+3. Pick a root section (or leave empty for all sections).
+4. Click **Build graph**.
+5. Click classes/quantities to view docs and metadata.
+6. Toggle **Editable mode** to add classes/quantities.
 
 ## What You Get in Light Mode
 
@@ -86,10 +114,12 @@ Make sure to set the environment variables before running `schema-studio`.
 |---|---|---|
 | `SCHEMA_STUDIO_HOST` | `127.0.0.1` | Bind host |
 | `SCHEMA_STUDIO_PORT` | `5179` | Bind port |
-| `SCHEMA_STUDIO_HOME` | platform config dir | Where Light Mode stores SQLite data |
+| `SCHEMA_STUDIO_HOME` | platform config dir | Where Light Mode stores SQLite data and cached schema reads |
 | `SCHEMA_STUDIO_DEFAULT_PACKAGE` | `nomad_simulations.schema_packages.model_method` | Initial package |
 | `SCHEMA_STUDIO_DEFAULT_NAMESPACE` | `nomad_simulations.schema_packages` | Initial base namespace |
-| `SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA` | `1` | Auto-bootstrap schema when missing |
+| `SCHEMA_STUDIO_ENVIRONMENTS_DIR` | `environments/` in the checkout | Folder that holds the schema environments |
+| `SCHEMA_STUDIO_EXTRACTOR_TIMEOUT_SECONDS` | `300` | Time limit for one schema read in an environment |
+| `SCHEMA_STUDIO_EXTRACTION` | `linkml` | How graphs, roots and usage info are built: `linkml` (from the LinkML snapshot) or `legacy` (graph builder in the schema environment). One value for all profiles, or per profile, e.g. `nomad-simulations=legacy` or `bam-masterdata=legacy`; profiles not named use `linkml`. Dev Mode reads it for graphs (including branch graphs), roots and usage; its overview and package list scan the git worktree instead. |
 | `SCHEMA_STUDIO_SEND_ENDPOINT` | unset | Enable `POST /send-design` passthrough |
 | `SCHEMA_STUDIO_DIST_DIR` | auto-detected | Override frontend static assets directory |
 | `UVICORN_LOG_LEVEL` | `info` | Server logging level |
@@ -101,9 +131,14 @@ Light Mode stores data in:
 
 ## Keeping Schema Fresh
 
-Light Mode can update its pinned schema source:
+Light Mode can create or update the environment of the currently selected schema family.
+This is the only action that installs anything, and it only touches `environments/<profile>/`:
 - In the UI: click **Update schema**
 - API: `POST http://127.0.0.1:5179/schema/update`
+
+A schema environment is never created or updated as a side effect of building a graph.
+The first read of a module after an update takes a few seconds, because the schema
+package is imported in its own environment; results are then cached per schema commit.
 
 Version info endpoint:
 - `GET http://127.0.0.1:5179/schema/version`
@@ -122,10 +157,11 @@ Then restart `schema-studio`.
 ### `GET /git/branches` returns `410`
 Expected in Light Mode. Branch switching is intentionally disabled.
 
-### Branch/package lists are empty
-Run schema update once:
+### A schema family shows "not loaded" or requests answer `503`
+Its environment is not set up yet. Set it up as described in
+[Set up the schema environments](#2-set-up-the-schema-environments), or run schema update once:
 ```bash
-curl -X POST http://127.0.0.1:5179/schema/update
+curl -X POST "http://127.0.0.1:5179/schema/update?profile=nomad-simulations"
 ```
 
 ### `ImportError: cannot import name 'model_validator'`
@@ -140,6 +176,7 @@ git clone https://github.com/EBB2675/schema-studio.git
 cd schema-studio
 cp .env.example .env
 # set SCHEMA_UML_REPO_HOST, SCHEMA_UML_SECRET, SCHEMA_UML_PW_SALT
+# SCHEMA_PROFILES lists the schema environments built into the API image
 docker compose up --build -d
 ```
 
@@ -176,8 +213,10 @@ Current desktop characteristics:
 For desktop-specific setup, testing, packaging, and maintenance notes, use the dedicated docs:
 
 - [Desktop Light Mode](docs/desktop-light-mode.md)
+- [Light Mode Schema Selection](docs/light-mode-schema-selection.md)
 - [Desktop Mode Extension](docs/desktop-mode-extension.md)
 - [Desktop Roadmap](docs/desktop-roadmap.md)
+- [BAM Schema Selection Plan](docs/bam-schema-selection-plan.md)
 
 ## API (Light Mode)
 
@@ -185,8 +224,8 @@ Core endpoints:
 - `GET /health`
 - `GET /workspace`, `PUT /workspace`
 - `GET /roots`, `GET /schema`, `GET /overview`, `GET /usage`
-- `POST /schema/custom-class`, `POST /schema/custom-quantity`
-- `DELETE /schema/custom-edits`, `DELETE /schema/custom-edit`
+- `GET /schema/edits`, `POST /schema/edits`, `DELETE /schema/edits`, `DELETE /schema/edits/{id}`
+- `GET /schema/linkml` (with the module's edits unless `edits=false`), `GET /schema/linkml/report`
 - `GET /schema/version`, `POST /schema/update`, `POST /send-design`
 - `GET /git/packages` (fixed branch behavior)
 

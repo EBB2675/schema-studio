@@ -1,77 +1,54 @@
 from __future__ import annotations
-import json, os, subprocess, sys
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Dict, Any
+
+from .git_utils import materialize_worktree
+from .repo_utils import primary_repo, python_root
 from .settings import EXTRACTOR_ENTRY
+from .sources import editing
+from .sources.extraction import build_graph
 
-EXTRACTOR_TIMEOUT_SECONDS = int(os.getenv("SCHEMA_UML_EXTRACTOR_TIMEOUT_SECONDS", "120"))
 
-# Path to *this* project (so we can import `extractor.*`)
-APP_ROOT = Path(__file__).resolve().parents[1]
-
-RUNNER_SCRIPT = r"""
-import json, sys, importlib, os
-entry = os.environ.get("SCHEMA_UML_EXTRACTOR", %r)
-mod_name, func_name = entry.split(":")
-mod = importlib.import_module(mod_name)
-fn = getattr(mod, func_name)
-
-args = {}
-for a in sys.argv[2:]:
-    if a.startswith("--") and "=" in a:
-        k,v = a[2:].split("=",1)
-        if v.lower() in ("true","false"): v = v.lower()=="true"
-        args[k] = v
-
-out = fn(sys.argv[1], **args)
-print(json.dumps(out, ensure_ascii=False))
-""" % EXTRACTOR_ENTRY
+def branch_source(branch: str, package: str, base_namespace: str | None) -> editing.Source:
+    """The git worktree of a branch, to read the module's schema from."""
+    worktree, sha = materialize_worktree(branch, primary_repo(package, base_namespace))
+    return editing.Source(root=python_root(worktree), sha=sha)
 
 
 def build_graph_in_subprocess(
     worktree: Path,
     package: str,
     extractor: str | None = None,
+    *,
+    sha: str | None = None,
+    edits: Sequence[Mapping[str, Any]] | None = None,
     **kwargs
 ) -> Dict[str, Any]:
-    env = os.environ.copy()
+    """
+    Build a graph from a git worktree.
 
-    # Make the schema worktree importable AND this app’s modules (extractor/*)
-    py_paths = [
-        str(worktree),
-        str(worktree / "src"),
-        str(APP_ROOT),                 # e.g. /…/schema-uml
-        str(APP_ROOT / "extractor"),   # safety: direct path to extractor package
-    ]
-    existing = env.get("PYTHONPATH")
-    if existing:
-        py_paths.append(existing)
-    env["PYTHONPATH"] = os.pathsep.join(py_paths)
-
-    # Propagate extractor entry
-    if extractor:
-        env["SCHEMA_UML_EXTRACTOR"] = extractor
-    else:
-        env.setdefault("SCHEMA_UML_EXTRACTOR", EXTRACTOR_ENTRY)
-
-    args = [package]
-    for k, v in kwargs.items():
-        if v is not None:
-            args.append(f"--{k}={v}")
+    The extraction runs with the interpreter of the matching profile
+    environment, never with the app's own. The worktree's source folder is
+    handed to the script, which puts it first on its import path, so the schema
+    comes from the worktree and its dependencies from the environment.
+    `sha` is the worktree's commit; with it the result can be cached.
+    With `edits` (the user's stored edits) they are replayed onto the
+    worktree's schema, as for the installed one; without, the graph is the
+    branch as it is (branch comparison).
+    """
     try:
-        proc = subprocess.run(
-            [sys.executable, "-c", RUNNER_SCRIPT, *args],
-            cwd=str(worktree),
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=EXTRACTOR_TIMEOUT_SECONDS,
+        if edits is not None:
+            return editing.build_graph(
+                package, edits, source=editing.Source(root=python_root(worktree), sha=sha),
+                extractor=extractor or EXTRACTOR_ENTRY, **kwargs,
+            )
+        return build_graph(
+            package,
+            extractor=extractor or EXTRACTOR_ENTRY,
+            source_root=python_root(worktree),
+            source_version=sha,
+            **kwargs,
         )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(
-            f"Extractor timed out after {EXTRACTOR_TIMEOUT_SECONDS}s for package '{package}'."
-        ) from exc
-    if proc.returncode != 0:
-        raise RuntimeError(f"Extractor failed:\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}")
-    return json.loads(proc.stdout)
+    except (ImportError, RuntimeError) as exc:
+        raise RuntimeError(f"Extractor failed for package '{package}': {exc}") from exc

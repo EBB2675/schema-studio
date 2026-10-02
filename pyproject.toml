@@ -17,7 +17,9 @@ dependencies = [
   "orjson",
   "httpx",
   "platformdirs",
-  "nomad-simulations",
+  "jsonschema>=4.0",
+  "linkml-runtime==1.11.1",
+  "pyyaml>=6",
 ]
 
 [project.optional-dependencies]
@@ -26,8 +28,6 @@ full = [
   "PyJWT",
   "celery[redis]>=5.3,<6",
   "redis>=5,<6",
-  "nomad-lab[infrastructure]==1.4.0",
-  "matid==2.1.3",
 ]
 
 [project.scripts]
@@ -41,8 +41,16 @@ include = ["api", "api.*", "extractor", "extractor.*"]
 
 [tool.setuptools.package-data]
 "api" = ["light_mode/static/**", "../web/dist/**"]
+"extractor" = ["contract.schema.json"]
 
 [dependency-groups]
 dev = [
     "pyinstaller>=6.19.0",
+    "pytest>=7",
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: needs the real schema environments under environments/ (run with `pytest -m slow`)",
+]
+addopts = "-m 'not slow'"
