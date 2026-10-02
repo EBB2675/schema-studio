@@ -71,6 +71,7 @@ type SchemaProfileSummary = {
   error?: string | null;
   packaged?: boolean;
   linkml_export?: boolean;
+  capabilities?: string[];
 };
 
 type TaskEnqueueResponse = WorkspaceEnvelope & {
@@ -621,6 +622,9 @@ export default function App() {
           error: typeof entry.error === "string" ? entry.error : null,
           packaged: Boolean(entry.packaged),
           linkml_export: typeof entry.linkml_export === "boolean" ? entry.linkml_export : undefined,
+          capabilities: Array.isArray(entry.capabilities)
+            ? entry.capabilities.filter((item: unknown): item is string => typeof item === "string")
+            : undefined,
         }))
         .filter((entry: SchemaProfileSummary) => Boolean(entry.key));
       setSchemaProfiles(parsed);
@@ -1400,7 +1404,9 @@ export default function App() {
             inheritedFromId: q.inheritedFromId ?? null,
             inheritedFromName: q.inheritedFromName ?? null,
             sourceId: q.sourceId ?? null,
+            details: q.details ?? null,
           })),
+          details: cls.details ?? null,
         });
         return;
       }
@@ -1419,6 +1425,7 @@ export default function App() {
         inheritedFromId: qty.inheritedFromId ?? null,
         inheritedFromName: qty.inheritedFromName ?? null,
         sourceId: qty.sourceId ?? null,
+        details: qty.details ?? null,
       });
       return;
     }
@@ -1444,7 +1451,9 @@ export default function App() {
         inheritedFromId: q.inheritedFromId ?? null,
         inheritedFromName: q.inheritedFromName ?? null,
         sourceId: q.sourceId ?? null,
+        details: q.details ?? null,
       })),
+      details: cls.details ?? null,
     });
   }, [selectedClassId, selectedQuantityId, setSelected, umlState]);
 
@@ -2375,6 +2384,10 @@ export default function App() {
 
   // Profiles without a LinkML converter say so; Dev Mode lists no profiles, so the server decides there.
   const canExportLinkml = currentSchemaProfile?.linkml_export ?? true;
+  // What the schema source offers besides the schema; Dev Mode lists no profiles, so everything stays on there.
+  const profileCapabilities = currentSchemaProfile?.capabilities;
+  const showUsage = !profileCapabilities || profileCapabilities.includes("usage");
+  const showMethods = !profileCapabilities || profileCapabilities.includes("methods");
 
   const exportLinkml = async () => {
     if (!currentGraph?.package) return;
@@ -2966,15 +2979,17 @@ export default function App() {
           </div>
         </CollapsibleSection>
 
-        <CollapsibleSection
-          title="Under the hood"
-          hint="Raw schema structure"
-          id="section-under"
-          open={openUnderTheHood}
-          onToggle={setOpenUnderTheHood}
-        >
-          <UnderTheHoodPanel apiBase={apiBase} token={token} />
-        </CollapsibleSection>
+        {showUsage ? (
+          <CollapsibleSection
+            title="Under the hood"
+            hint="Raw schema structure"
+            id="section-under"
+            open={openUnderTheHood}
+            onToggle={setOpenUnderTheHood}
+          >
+            <UnderTheHoodPanel apiBase={apiBase} token={token} />
+          </CollapsibleSection>
+        ) : null}
 
         {!isLightMode ? (
           <CollapsibleSection
@@ -3124,6 +3139,7 @@ export default function App() {
                 pinnedClassIds={pinnedClassIds}
                 showQuantityMetadata={showQuantityMetadata}
                 showInheritance={includeInheritance}
+                showMethods={showMethods}
                 theme={theme}
                 onReady={setGraphHandle}
               />
@@ -3191,6 +3207,7 @@ export default function App() {
                   selectedClassId={selectedClassId}
                   showQuantityMetadata={showQuantityMetadata}
                   showInheritance={includeInheritance}
+                  showMethods={showMethods}
                   theme={theme}
                   onReady={setGraphHandle}
                   onSelectClass={handleCanvasClassSelect}

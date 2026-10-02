@@ -1,6 +1,7 @@
 """Snapshot cache and the LinkML download endpoints, with stored extraction documents."""
 from __future__ import annotations
 
+import dataclasses
 import importlib
 import json
 import sys
@@ -97,9 +98,21 @@ def test_whole_profile_scope_is_the_base_namespace(snapshots):
 
 
 def test_profile_without_converter_is_refused(snapshots):
+    without = dataclasses.replace(profile("bam-masterdata"), contract_script=None)
     with pytest.raises(snapshots.LinkMLUnavailable):
-        snapshots.get_snapshot(profile("bam-masterdata"))
+        snapshots.get_snapshot(without)
     assert snapshots.calls == []
+
+
+def test_bam_snapshot_uses_the_bam_converter(snapshots):
+    snapshot = snapshots.get_snapshot(profile("bam-masterdata"), "bam_masterdata.datamodel.object_types")
+    assert snapshot["linkml"]["default_prefix"] == "bammd"
+    assert snapshot["source"]["commit"] == load_fixture("bam-masterdata")["source"]["commit"]
+    # The schema is named after the module it holds, not after the whole datamodel.
+    schema = snapshot["linkml"]
+    assert schema["name"] == "bam_masterdata.datamodel.object_types"
+    assert schema["id"].endswith("/bam-masterdata/bam_masterdata.datamodel.object_types")
+    assert schema["annotations"]["source_module"] == "bam_masterdata.datamodel.object_types"
 
 
 @pytest.fixture()
@@ -135,15 +148,35 @@ async def test_linkml_download_endpoint(client):
 
 
 @pytest.mark.anyio
-async def test_linkml_download_for_profile_without_converter(client):
+async def test_linkml_download_for_profile_without_converter(client, monkeypatch):
+    import api.sources.linkml_routes as routes
+
+    without = dataclasses.replace(profile("bam-masterdata"), contract_script=None)
+    monkeypatch.setattr(routes, "schema_profile_for_package", lambda package: without)
     response = await client.get("/schema/linkml", params={"package": "bam_masterdata.datamodel.object_types"})
     assert response.status_code == 400
     assert "not available for bam-masterdata" in response.json()["detail"]
 
 
 @pytest.mark.anyio
+async def test_linkml_download_for_bam(client):
+    response = await client.get("/schema/linkml", params={"package": "bam_masterdata.datamodel.object_types"})
+    assert response.status_code == 200
+    assert response.text.startswith("# LinkML schema exported by schema-studio\n# profile: bam-masterdata\n")
+    schema = yaml.safe_load(response.text)
+    assert schema["default_prefix"] == "bammd"
+    assert schema["name"] == "bam_masterdata.datamodel.object_types"
+    assert schema["title"] == "bam-masterdata bam_masterdata.datamodel.object_types"
+    assert schema["id"].endswith("/bam-masterdata/bam_masterdata.datamodel.object_types")
+    assert schema["annotations"]["source_module"] == "bam_masterdata.datamodel.object_types"
+
+
+@pytest.mark.anyio
 async def test_profiles_say_which_ones_export_linkml(client):
     profiles = (await client.get("/schema/profiles")).json()["profiles"]
     assert {entry["key"]: entry["linkml_export"] for entry in profiles} == {
-        "nomad-simulations": True, "nomad-measurements": True, "bam-masterdata": False,
+        "nomad-simulations": True, "nomad-measurements": True, "bam-masterdata": True,
+    }
+    assert {entry["key"]: entry["capabilities"] for entry in profiles} == {
+        "nomad-simulations": ["methods", "usage"], "nomad-measurements": ["methods", "usage"], "bam-masterdata": [],
     }

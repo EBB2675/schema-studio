@@ -404,6 +404,7 @@ async def schema_profiles():
             "error": None,
             "packaged": False,
             "linkml_export": supports_linkml(profile),
+            "capabilities": sorted(profile.capabilities),
         }
         try:
             info = current_schema_info(profile)

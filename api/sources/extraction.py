@@ -9,7 +9,7 @@
   environment (see `legacy.py` here).
 
 The value is either one setting for every profile (`legacy`) or a
-comma-separated list per profile (`nomad-simulations=legacy,nomad-measurements=linkml`);
+comma-separated list per profile (`nomad-simulations=legacy,bam-masterdata=legacy`);
 profiles not listed use `linkml`. A profile without a LinkML conversion always
 uses `legacy`.
 """

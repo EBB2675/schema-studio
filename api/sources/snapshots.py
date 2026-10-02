@@ -32,7 +32,7 @@ from ..light_mode.schema_source import (
 from ..light_mode.store import config_root
 from .legacy import EXTRACTOR_TIMEOUT_SECONDS, raise_script_error
 from .linkml_yaml import dump_yaml
-from .to_linkml import Conversion, convert_nomad
+from .to_linkml import Conversion, convert as convert_document
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ def extractor_fingerprint() -> str:
 def convert(profile: SchemaProfile, document: dict[str, Any]) -> Conversion:
     if not supports_linkml(profile):
         raise LinkMLUnavailable(f"LinkML export is not available for {profile.label} yet.")
-    return convert_nomad(document, prefix=profile.linkml_prefix)
+    return convert_document(document, prefix=profile.linkml_prefix)
 
 
 def make_snapshot(profile: SchemaProfile, scope: str, document: dict[str, Any]) -> dict[str, Any]:

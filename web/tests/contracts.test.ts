@@ -22,6 +22,26 @@ describe("contracts", () => {
     expect(parsed.nodes[1].owner).toBe("example.pkg.Root");
   });
 
+  it("ensureGraphResponse keeps source facts of bam-masterdata nodes as details", () => {
+    const parsed = ensureGraphResponse({
+      package: "bam.pkg",
+      root: null,
+      nodes: [
+        {
+          id: "bam.pkg.C.p", kind: "quantity", label: "p", owner: "bam.pkg.C", code: "P", title: "P label",
+          title_de: "P Bezeichnung", doc_de: "Deutsch", mandatory: true, section: "General", unit: "mm", iri: null,
+        },
+        { id: "nomad.pkg.S.q", kind: "quantity", label: "q", owner: "nomad.pkg.S", unit: "meter" },
+      ],
+      edges: [],
+    });
+    expect(parsed.nodes[0].details).toEqual({
+      code: "P", title: "P label", titleDe: "P Bezeichnung", docDe: "Deutsch", mandatory: true, section: "General", unit: "mm",
+    });
+    // NOMAD quantities carry a unit but no openBIS code: nothing new is shown for them.
+    expect(parsed.nodes[1].details).toBeNull();
+  });
+
   it("ensureGraphResponse rejects missing nodes", () => {
     expect(() => ensureGraphResponse({ package: "pkg", edges: [] } as unknown)).toThrow();
   });

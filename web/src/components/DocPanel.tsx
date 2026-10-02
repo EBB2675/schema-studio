@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import QuantityEditPanel from "./QuantityEditPanel";
 import { useSelection, type QtyMeta, type Selected } from "../store/selection";
+import type { NodeDetails } from "../types/api";
 
 type Props = {
   editableMode: boolean;
@@ -11,6 +12,40 @@ type Props = {
   onEditClass: (id: string, updates: { docstring: string }) => void | Promise<void>;
   clearActionError: () => void;
 };
+
+// Source facts of a class or quantity (openBIS facts for bam-masterdata).
+function DetailsBlock({ details }: { details?: NodeDetails | null }) {
+  if (!details) return null;
+  const rows: [string, string][] = [];
+  if (details.code) rows.push(["Code", details.code]);
+  if (details.title) rows.push(["Label", details.title]);
+  if (details.titleDe) rows.push(["Label (German)", details.titleDe]);
+  if (details.mandatory !== undefined) rows.push(["Mandatory", details.mandatory ? "yes" : "no"]);
+  if (details.section) rows.push(["Section", details.section]);
+  if (details.unit) rows.push(["Unit", details.unit]);
+  if (details.iri) rows.push(["IRI", details.iri]);
+  if (!rows.length && !details.docDe) return null;
+  return (
+    <div className="doc-card" style={{ marginBottom: 14 }} aria-label="Source details">
+      {rows.length ? (
+        <dl style={{ display: "grid", gridTemplateColumns: "max-content 1fr", gap: "4px 12px", margin: 0, fontSize: 13 }}>
+          {rows.map(([label, value]) => (
+            <div key={label} style={{ display: "contents" }}>
+              <dt className="meta-label">{label}</dt>
+              <dd style={{ margin: 0, overflowWrap: "anywhere" }}>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      {details.docDe ? (
+        <div style={{ marginTop: rows.length ? 10 : 0 }}>
+          <div className="meta-label">German description</div>
+          <pre className="doc-docstring" lang="de">{details.docDe}</pre>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function QtyRow({ q, onClick, onEdit, onRemove, editableMode, disabled }: { q: QtyMeta; onClick: () => void; onEdit: () => void; onRemove: () => void; editableMode: boolean; disabled: boolean }) {
   const meta: string[] = [];
@@ -126,6 +161,7 @@ export default function DocPanel({
       inheritedFromId: q.inheritedFromId ?? null,
       inheritedFromName: q.inheritedFromName ?? null,
       sourceId: q.sourceId ?? null,
+      details: q.details ?? null,
       diff: q.diff
     });
   };
@@ -201,6 +237,7 @@ export default function DocPanel({
               <pre className="doc-docstring">{selected.doc || "No docstring available."}</pre>
             )}
           </div>
+          <DetailsBlock details={selected.details} />
 
           <div className="doc-subtitle">
             <span>Quantities</span>
@@ -253,6 +290,7 @@ export default function DocPanel({
             </div>
           ) : null}
           <pre className="doc-docstring">{selected.doc || "No docstring available."}</pre>
+          <DetailsBlock details={selected.details} />
 
           <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--panel-border)" }}>
             {selected.diff ? (

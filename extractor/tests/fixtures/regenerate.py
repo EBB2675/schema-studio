@@ -1,4 +1,4 @@
-"""Regenerate the stored NOMAD extraction documents from the profile environments.
+"""Regenerate the stored extraction documents from the profile environments.
 
 The schema branches move, so tests read these stored documents instead of the
 live environments. Regenerate them on purpose only, and review the diff:
@@ -20,9 +20,11 @@ from extractor.contract import validate_document  # noqa: E402
 from extractor.runner import ExtractorEnvironment, run_script  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent
-SCRIPT = PROJECT_ROOT / "extractor" / "scripts" / "nomad.py"
+SCRIPTS = PROJECT_ROOT / "extractor" / "scripts"
 
-# A few modules per profile, not whole packages, to keep the files small.
+# A few modules per profile, not whole packages, to keep the files small. For
+# bam-masterdata, a few classes of one module (and what they refer to):
+# inherited properties (Amorphous, DeviceTraining), object links and vocabularies.
 MODULES = {
     "nomad-simulations": [
         "nomad_simulations.schema_packages.model_method",
@@ -32,7 +34,10 @@ MODULES = {
         "nomad_measurements.general",
         "nomad_measurements.transmission.schema",
     ],
+    "bam-masterdata": ["bam_masterdata.datamodel.object_types"],
 }
+ROOTS = {"bam-masterdata": ["Amorphous", "DeviceTraining", "Calibration"]}
+SCRIPT = {"bam-masterdata": "bam.py"}
 
 
 def regenerate(profile: str) -> Path:
@@ -40,7 +45,9 @@ def regenerate(profile: str) -> Path:
     arguments = ["--dist", profile]
     for module in MODULES[profile]:
         arguments += ["--module", module]
-    payload = run_script(environment, SCRIPT, arguments=tuple(arguments))
+    for root in ROOTS.get(profile, []):
+        arguments += ["--root", root]
+    payload = run_script(environment, SCRIPTS / SCRIPT.get(profile, "nomad.py"), arguments=tuple(arguments))
     document = validate_document(payload["result"])
     path = FIXTURES / f"{profile}.json"
     path.write_text(json.dumps(document, indent=1, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
