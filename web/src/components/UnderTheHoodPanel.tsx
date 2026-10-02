@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSelection } from '../store/selection';
+import { apiFetch } from '../client';
 
 type UsageEntry = {
   kind: 'normalize_method' | 'normalize_function' | 'utility_function';
@@ -39,9 +40,7 @@ const UnderTheHoodPanel: React.FC<Props> = ({ apiBase, token, branch }) => {
 
     setLoading(true);
     const branchParam = branch ? `&branch=${encodeURIComponent(branch)}` : '';
-    fetch(`${apiBase}/usage?section_id=${encodeURIComponent(sectionId)}${branchParam}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    })
+    apiFetch(`/usage?section_id=${encodeURIComponent(sectionId)}${branchParam}`, {}, { baseURL: apiBase, token: token ?? '' })
       .then((res) => (res.ok ? res.json() : []))
       .then((data: UsageEntry[] | { usage?: UsageEntry[] }) => {
         const payload = Array.isArray(data) ? data : data?.usage;

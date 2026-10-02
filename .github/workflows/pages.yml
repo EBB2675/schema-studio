@@ -1,0 +1,93 @@
+name: GitHub Pages
+
+# The static site: the web app without a server, with snapshot files of every schema profile and
+# the Python core running in the browser (Pyodide). Published when a release is published, or
+# started by hand.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+          # nomad-lab is a large download; keep it between runs.
+          cache-dependency-glob: |
+            uv.lock
+            environments/*/uv.lock
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Set up the app environment
+        run: uv sync --locked --python 3.11
+
+      - name: Set up the schema environments
+        run: |
+          for profile in nomad-simulations nomad-measurements bam-masterdata; do
+            uv sync --locked --project "environments/$profile"
+          done
+
+      - name: Install the frontend
+        run: npm --prefix web ci
+
+      - name: Test the frontend
+        run: npm --prefix web run test:run
+
+      - name: Build the static frontend
+        run: npm --prefix web run build:pages
+
+      - name: Build the snapshots
+        env:
+          SCHEMA_STUDIO_HOME: ${{ runner.temp }}/schema-studio-home
+        run: .venv/bin/python scripts/build_snapshots.py --out web/dist/data --graphs
+
+      - name: Report the site size
+        run: |
+          {
+            echo "### Static site"
+            echo '```'
+            du -sh web/dist web/dist/assets web/dist/pyodide web/dist/data
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

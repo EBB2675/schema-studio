@@ -1,0 +1,46 @@
+[
+  {"method": "PUT", "path": "/workspace", "body": {"package": "nomad_measurements.general", "base_namespace": "nomad_measurements"}},
+  {"method": "GET", "path": "/workspace", "compare": ["workspace", "user"]},
+  {"method": "GET", "path": "/roots", "params": {"package": "nomad_measurements.general"}},
+  {"method": "GET", "path": "/schema", "params": {"package": "nomad_measurements.general", "root": "ActivityReference", "base_namespace": "nomad_measurements"}},
+  {"method": "GET", "path": "/schema", "params": {"package": "nomad_measurements.general", "root": "InSituMeasurement", "include_quantities": false, "include_inheritance": false, "base_namespace": "nomad_measurements"}},
+  {"method": "GET", "path": "/schema", "params": {"package": "nomad_measurements.general", "base_namespace": "nomad_measurements"}},
+  {"method": "POST", "path": "/schema/edits", "params": {"root": "InSituMeasurement", "base_namespace": "nomad_measurements"}, "body": {"package": "nomad_measurements.general", "edits": [
+    {"op": "add_class", "target": "", "payload": {"name": "Added", "is_a": "nomad_measurements.general.InSituMeasurement"}},
+    {"op": "add_attribute", "target": "nomad_measurements.general.Added", "payload": {"name": "extra", "kind": "quantity", "dtype": "float64"}},
+    {"op": "rename_class", "target": "nomad_measurements.general.InSituMeasurement", "payload": {"new_name": "Renamed"}}
+  ]}, "compare_without": ["created_at"]},
+  {"method": "GET", "path": "/schema", "params": {"package": "nomad_measurements.general", "root": "Renamed", "base_namespace": "nomad_measurements"}, "compare_without": ["created_at"]},
+  {"method": "GET", "path": "/roots", "params": {"package": "nomad_measurements.general"}},
+  {"method": "GET", "path": "/schema/edits", "params": {"package": "nomad_measurements.general"}, "compare_without": ["created_at"]},
+  {"method": "GET", "path": "/usage", "params": {"section_id": "nomad_measurements.general.Renamed"}},
+  {"method": "GET", "path": "/usage", "params": {"section_id": "nomad_measurements.general.Added"}},
+  {"method": "GET", "path": "/usage", "params": {"section_id": "nomad.datamodel.metainfo.basesections.v1.Activity"}},
+  {"method": "GET", "path": "/schema/linkml", "params": {"package": "nomad_measurements.general"}, "compare_without": ["created_at"]},
+  {"method": "POST", "path": "/schema/edits", "params": {"base_namespace": "nomad_measurements"}, "body": {"package": "nomad_measurements.general", "edits": [
+    {"op": "add_attribute", "target": "nomad_measurements.general.Added", "payload": {"name": "extra", "kind": "quantity", "dtype": "str"}}
+  ]}},
+  {"method": "DELETE", "path": "/schema/edits", "body": {"ids": [1]}},
+  {"method": "GET", "path": "/schema", "params": {"package": "nomad_measurements.general", "root": "Renamed", "base_namespace": "nomad_measurements"}, "compare_without": ["created_at"]},
+  {"method": "DELETE", "path": "/schema/edits/3"},
+  {"method": "DELETE", "path": "/schema/edits", "params": {"package": "nomad_measurements.general"}, "body": {"ids": []}},
+  {"method": "GET", "path": "/schema/edits", "params": {"package": "nomad_measurements.general"}},
+  {"method": "GET", "path": "/schema", "params": {"package": "nomad_measurements.general", "root": "NoSuchRoot", "base_namespace": "nomad_measurements"}},
+  {"method": "GET", "path": "/git/packages", "params": {"base_package": "nomad_measurements"}},
+  {"method": "GET", "path": "/overview", "params": {"base": "nomad_measurements,bam_masterdata.datamodel"}},
+  {"method": "GET", "path": "/schema", "params": {"package": "nomad_measurements.custom_schema", "base_namespace": "nomad_measurements", "empty": true}},
+  {"method": "POST", "path": "/schema/edits", "params": {"base_namespace": "nomad_measurements", "empty": true}, "body": {"package": "nomad_measurements.custom_schema", "edits": [
+    {"op": "add_class", "target": "", "payload": {"name": "CanvasClass"}}
+  ]}, "compare_without": ["created_at"]},
+  {"method": "GET", "path": "/roots", "params": {"package": "nomad_measurements.custom_schema"}},
+  {"method": "PUT", "path": "/workspace", "body": {"package": "bam_masterdata.datamodel.object_types", "base_namespace": "bam_masterdata.datamodel"}},
+  {"method": "GET", "path": "/schema", "params": {"package": "bam_masterdata.datamodel.object_types", "root": "Amorphous", "base_namespace": "bam_masterdata.datamodel"}},
+  {"method": "POST", "path": "/schema/edits", "params": {"root": "Amorphous", "base_namespace": "bam_masterdata.datamodel"}, "body": {"package": "bam_masterdata.datamodel.object_types", "edits": [
+    {"op": "add_class", "target": "", "payload": {"code": "lower.case"}}
+  ]}},
+  {"method": "POST", "path": "/schema/edits", "params": {"root": "Amorphous", "base_namespace": "bam_masterdata.datamodel"}, "body": {"package": "bam_masterdata.datamodel.object_types", "edits": [
+    {"op": "add_class", "target": "", "payload": {"code": "SCHEMA_STUDIO_TEST", "description": "Made by a test."}}
+  ]}, "compare_without": ["created_at"]},
+  {"method": "GET", "path": "/schema/linkml", "params": {"package": "bam_masterdata.datamodel.object_types", "edits": false}},
+  {"method": "PUT", "path": "/workspace", "body": {"package": "bam_masterdata.datamodel.object_types", "branch": "develop"}}
+]

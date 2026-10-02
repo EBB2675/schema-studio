@@ -140,6 +140,10 @@ schema-studio/
 │  │  ├─ store.py               # Local SQLite workspace/custom edit store
 │  │  ├─ cli.py                 # `schema-studio` entrypoint
 │  │  └─ tests/                 # Light Mode backend tests (no Mongo dependency)
+│  ├─ sources/                  # Snapshots, LinkML conversion, graph adapter and schema edits
+│  │  ├─ core.py                # Edits replayed onto a snapshot; graph, roots, usage, YAML (stdlib only)
+│  │  ├─ browser.py             # The static site's requests to the core (runs in Pyodide)
+│  │  └─ editing.py             # The server's side: finds snapshots, legacy path
 │  ├─ _data/                    # Dev Mode auto-generated bare mirror & worktrees (gitignored)
 │  └─ requirements.txt
 │
@@ -150,6 +154,8 @@ schema-studio/
 ├─ web/                         # React frontend (Vite)
 │  ├─ src/
 │  │  ├─ App.tsx                # Sidebar, API calls, diff banner, overview, export
+│  │  ├─ client.ts              # The one place requests go out: HTTP, or the static backend
+│  │  ├─ static/                # Static site: backend in the browser, edit store, Pyodide worker
 │  │  ├─ GraphView.tsx          # Cytoscape UML renderer (sections only; quantities folded)
 │  │  ├─ components/
 │  │  │  ├─ DocPanel.tsx        # Class/quantity docstrings; quantity list (clickable)
@@ -163,6 +169,8 @@ schema-studio/
 │  ├─ index.html
 │  └─ package.json
 │
+├─ scripts/build_snapshots.py   # Snapshot files of every profile for builds without environments
+├─ .github/workflows/pages.yml  # Builds and publishes the static site (GitHub Pages)
 ├─ README.md                    # Quick start, features, troubleshooting
 └─ REPO_GUIDE.md                
 ~~~
@@ -404,8 +412,10 @@ The frontend shows these entries as a list under **Under the hood** for the curr
     - Bottom: audit trail (edit history, archive/restore, export/clear).
   - **Editable mode:** toggles whether class/quantity mutation actions are enabled; every addition, rename, change and removal is stored through `/schema/edits`.
   - Workspace controls include **Show base sections** (default off): off keeps diagrams focused on selected schema namespace; on restores full base/framework hierarchy.
+  - Every request goes through `client.ts` (`createApiClient`, `apiFetch`); no component calls `fetch` or Axios directly.
   - Mode selection:
     - Compile-time: `VITE_LIGHT_MODE=true` disables branch-diff/task paths.
+    - Compile-time: `VITE_STATIC_MODE=true` (the GitHub Pages build, `npm run build:pages`) also implies Light Mode; `client.ts` then answers every request with `static/backend.ts`, which reads the site's snapshot files (`data/index.json`) and runs `api/sources/core.py` in Pyodide in a web worker (`static/worker.ts`). Edits are kept in `localStorage` (`static/editStore.ts`).
     - Runtime: frontend also detects Light Mode when `/schema/version` is available and switches behavior accordingly.
 
 - **`GraphView.tsx`**
