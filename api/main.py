@@ -544,6 +544,7 @@ class UsageResponse(BaseModel):
 @app.get("/usage", response_model=UsageResponse)
 async def get_usage(
     section_id: str = Query(..., description="Fully qualified section class name"),
+    branch: str | None = Query(None, description="Read the module from this branch's worktree"),
     user_ws=Depends(get_user_and_workspace),
     db=Depends(db_dep),
 ):
@@ -556,7 +557,8 @@ async def get_usage(
     user, workspace = user_ws
     package = workspace.get("package")
     stored = await _stored_edits(db, user, package) if package else []
-    entries = await run_in_threadpool(editing.usage_for_section, section_id, package, stored)
+    source = await _branch_source(branch, package, workspace.get("base_namespace")) if package else None
+    entries = await run_in_threadpool(lambda: editing.usage_for_section(section_id, package, stored, source=source))
     usage = [
         UsageEntryModel(
             kind=e.kind,

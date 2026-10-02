@@ -2907,7 +2907,7 @@ export default function App() {
             open={openUnderTheHood}
             onToggle={setOpenUnderTheHood}
           >
-            <UnderTheHoodPanel apiBase={apiBase} token={token} />
+            <UnderTheHoodPanel apiBase={apiBase} token={token} branch={isLightMode ? undefined : workspaceBranch || undefined} />
           </CollapsibleSection>
         ) : null}
 

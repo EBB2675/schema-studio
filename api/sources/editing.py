@@ -35,7 +35,7 @@ from .extraction import DEFAULT_EXTRACTOR
 from .extraction import build_graph as extracted_graph
 from .extraction import extraction_mode, get_usage_for_section
 from .extraction import list_sections as extracted_sections
-from .legacy import ExtractionFailed
+from .legacy import ExtractionFailed, UsageEntry
 from .linkml_yaml import dump_yaml
 from .snapshots import get_snapshot, snapshot_yaml
 
@@ -203,17 +203,31 @@ def list_sections(
     return graph.section_names(state.schema, _module_view(state, package, False), package)
 
 
-def usage_for_section(section_id: str, package: str | None, stored: Sequence[Mapping[str, Any]] = ()) -> tuple:
-    """Usage info of a section; a class an edit renamed keeps the usage of its source class."""
-    if stored and package:
+def usage_for_section(
+    section_id: str, package: str | None, stored: Sequence[Mapping[str, Any]] = (), *, source: Source | None = None,
+) -> tuple:
+    """Usage info of a section; a class an edit renamed keeps the usage of its source class.
+
+    With a `source` (Dev Mode branch) it comes from the branch's snapshots:
+    the module's, or the whole profile's when the module does not hold the class.
+    """
+    state = None
+    if package and (stored or source is not None):
         profile = schema_profile_for_package(package)
         if editable(profile):
-            cls = (edited(package, stored).schema.get("classes") or {}).get(section_id)
+            state = edited(package, stored, source=source)
+            cls = (state.schema.get("classes") or {}).get(section_id)
             if cls is not None and graph.annotation(cls, edit_ops.ADDED) == "true":
                 return ()  # no code acts on a class that only the edits have
             if cls is not None:
                 section_id = graph.source_class_id(section_id, cls)
-    return get_usage_for_section(section_id, package)
+    if source is None or state is None:
+        return get_usage_for_section(section_id, package)
+    for snapshot in (state.snapshot, _snapshot(state.profile, state.profile.default_base_namespace, source)):
+        entries = graph.usage_entries(snapshot["extraction"], section_id)
+        if entries is not None:
+            return tuple(UsageEntry(**entry) for entry in entries)
+    return ()
 
 
 def _owner(state: Edited, edit: Mapping[str, Any], package: str) -> str:

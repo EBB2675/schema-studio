@@ -52,17 +52,30 @@ class _Result:
 class FakeCollection:
     def __init__(self):
         self.rows: list[dict[str, Any]] = []
-        self.fail_after: int | None = None  # insert this many, then fail
+        self.fail_writes = False
 
     def find(self, query):
         return _Cursor([dict(row) for row in self.rows if _matches(row, query)])
 
-    async def insert_many(self, documents, ordered=True):
-        for index, document in enumerate(documents):
-            if self.fail_after is not None and index >= self.fail_after:
-                raise RuntimeError("write failed")
-            self.rows.append({**document, "_id": document.get("_id") or ObjectId()})
-        return _Result(inserted_ids=[document["_id"] for document in documents])
+    async def insert_one(self, document):
+        if self.fail_writes:
+            raise RuntimeError("write failed")  # a single-document write either happens or not
+        self.rows.append({**document, "_id": document.get("_id") or ObjectId()})
+        return _Result(inserted_id=self.rows[-1]["_id"])
+
+    async def update_one(self, query, update):
+        for row in self.rows:
+            if _matches(row, query):
+                row.update(update["$set"])
+                return _Result(modified_count=1)
+        return _Result(modified_count=0)
+
+    async def delete_one(self, query):
+        for row in self.rows:
+            if _matches(row, query):
+                self.rows.remove(row)
+                return _Result(deleted_count=1)
+        return _Result(deleted_count=0)
 
     async def delete_many(self, query):
         before = len(self.rows)
@@ -201,7 +214,7 @@ async def test_a_failed_batch_leaves_no_edits(client: httpx.AsyncClient, dev_mod
     from api.edit_store import EDITS_COLLECTION
 
     _app, db = dev_mode
-    db[EDITS_COLLECTION].fail_after = 1
+    db[EDITS_COLLECTION].fail_writes = True
     with pytest.raises(RuntimeError):
         await client.post("/schema/edits", json=_edits(
             ("add_class", "", {"name": "One"}), ("add_class", "", {"name": "Two"}),
@@ -221,3 +234,41 @@ async def test_batch_delete_and_module_clear(client: httpx.AsyncClient):
     cleared = await client.request("DELETE", "/schema/edits", params={"package": PACKAGE}, json={"ids": []})
     assert cleared.json()["deleted"] == 1
     assert (await client.get("/schema/edits", params={"package": other})).json()["edits"][0]["op"] == "add_class"
+
+
+@pytest.mark.anyio
+async def test_one_request_is_one_batch_and_undo_removes_it_whole(client: httpx.AsyncClient, dev_mode):
+    from api.edit_store import EDITS_COLLECTION
+
+    _app, db = dev_mode
+    first = (await client.post("/schema/edits", json=_edits(
+        ("add_class", "", {"name": "One"}), ("add_class", "", {"name": "Two"}),
+    ))).json()["persisted_edits"]
+    await client.post("/schema/edits", json=_edits(("add_class", "", {"name": "Three"})))
+    assert [len(row["edits"]) for row in db[EDITS_COLLECTION].rows] == [2, 1]
+    # One of a batch's edits: the batch keeps the other.
+    assert (await client.request("DELETE", "/schema/edits", json={"ids": [first[1]["id"]]})).json()["deleted"] == 1
+    assert [len(row["edits"]) for row in db[EDITS_COLLECTION].rows] == [1, 1]
+    listed = (await client.get("/schema/edits", params={"package": PACKAGE})).json()["edits"]
+    assert [edit["payload"]["name"] for edit in listed] == ["One", "Three"]
+    # All of it: the batch goes.
+    assert (await client.request("DELETE", "/schema/edits", json={"ids": [first[0]["id"]]})).json()["deleted"] == 1
+    assert [len(row["edits"]) for row in db[EDITS_COLLECTION].rows] == [1]
+
+
+@pytest.mark.anyio
+async def test_usage_reads_the_branch(client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    def branch_snapshot(profile, scope=None, **kwargs):
+        snapshot = fake_snapshot.fake_snapshot(profile, scope, **kwargs)
+        root = f"{scope}.RootSection"
+        snapshot["extraction"]["usage"] = {root: [{
+            "kind": "normalize_method", "qualname": f"{root}.normalize", "module": scope,
+            "short_name": "normalize", "doc": f"On {kwargs.get('source_version')}."}]}
+        return snapshot
+
+    from api.sources import editing
+
+    monkeypatch.setattr(editing, "get_snapshot", branch_snapshot)
+    usage = await client.get("/usage", params={"section_id": f"{PACKAGE}.RootSection", "branch": "feature"})
+    assert usage.status_code == 200, usage.text
+    assert [entry["doc"] for entry in usage.json()["usage"]] == ["On sha-of-feature."]

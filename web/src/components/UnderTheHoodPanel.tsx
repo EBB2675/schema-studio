@@ -12,6 +12,8 @@ type UsageEntry = {
 type Props = {
   apiBase: string;
   token?: string;
+  // Dev Mode: the branch the graph is drawn from, so usage comes from the same code.
+  branch?: string;
 };
 
 const kindLabel: Record<string, string> = {
@@ -20,7 +22,7 @@ const kindLabel: Record<string, string> = {
   utility_function: 'Utility',
 };
 
-const UnderTheHoodPanel: React.FC<Props> = ({ apiBase, token }) => {
+const UnderTheHoodPanel: React.FC<Props> = ({ apiBase, token, branch }) => {
   const { selected } = useSelection();
   const [usage, setUsage] = useState<UsageEntry[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,7 +38,8 @@ const UnderTheHoodPanel: React.FC<Props> = ({ apiBase, token }) => {
     const sectionId = selected.id; // fully-qualified id from backend
 
     setLoading(true);
-    fetch(`${apiBase}/usage?section_id=${encodeURIComponent(sectionId)}`, {
+    const branchParam = branch ? `&branch=${encodeURIComponent(branch)}` : '';
+    fetch(`${apiBase}/usage?section_id=${encodeURIComponent(sectionId)}${branchParam}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     })
       .then((res) => (res.ok ? res.json() : []))
@@ -49,7 +52,7 @@ const UnderTheHoodPanel: React.FC<Props> = ({ apiBase, token }) => {
         setUsage([]);
         setLoading(false);
       });
-  }, [selected, apiBase, token]);
+  }, [selected, apiBase, token, branch]);
 
   return (
     <div className="panel under-the-hood-panel">
