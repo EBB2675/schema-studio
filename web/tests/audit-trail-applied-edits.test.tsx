@@ -16,11 +16,13 @@ const graphWithApplied = {
   edges: [{ source: classId, target: `${classId}.user_defined`, type: 'hasQuantity' }],
   applied_edits: [
     {
-      edit_type: 'quantity',
-      class_name: 'AtomsState',
-      quantity_name: 'user_defined',
-      dtype: 'float',
+      id: '1',
+      op: 'add_attribute',
+      target: classId,
+      payload: { name: 'user_defined', kind: 'quantity', dtype: 'float' },
       package: 'pkg.custom_schema',
+      profile: 'nomad-simulations',
+      commit: 'c0ffee',
     },
   ],
 };

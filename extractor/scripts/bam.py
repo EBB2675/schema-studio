@@ -14,7 +14,7 @@ are kept as annotations. Changes from that file:
   still give its annotations;
 - several modules in one run (`--base` walks `bam_masterdata.datamodel`), each
   listed under `modules` with the entities it exposes at module level, in
-  module order, and the other names it binds them to (`aliases`);
+  module order, and every module-level name bound to one of them (`names`);
 - vocabulary terms keep their Python attribute name as the value annotation
   `python_name`, because the graph names term nodes after it; terms inherited
   from a base vocabulary stay on the base (the graph collects them);
@@ -307,7 +307,7 @@ def extract(
     report = list(report or [])
     pending: deque[type] = deque()
     exposed: dict[str, list[str]] = {}
-    aliases: dict[str, dict[str, str]] = {}
+    names: dict[str, dict[str, str]] = {}
 
     def warn(path: str, reason: str, status: str = "skipped") -> None:
         report.append({"path": path, "status": status, "reason": reason})
@@ -324,9 +324,9 @@ def extract(
         if roots:
             pending.extend(entities)
             continue
-        aliases[module.__name__] = {
+        names[module.__name__] = {
             name: identifier(value) for name, value in vars(module).items()
-            if any(value is cls for cls in entities) and name != value.__name__
+            if any(value is cls for cls in entities)
         }
         pending.extend(entities)
 
@@ -493,8 +493,8 @@ def extract(
         "source": source,
         "modules": [
             {"name": name, "classes": list(dict.fromkeys(cid for cid in ids if cid in classes)),
-             **({"aliases": found} if (found := {
-                 alias: cid for alias, cid in aliases.get(name, {}).items() if cid in classes
+             **({"names": found} if (found := {
+                 binding: cid for binding, cid in names.get(name, {}).items() if cid in classes
              }) else {})}
             for name, ids in sorted(exposed.items())
         ],

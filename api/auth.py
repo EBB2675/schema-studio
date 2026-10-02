@@ -21,6 +21,7 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .light_mode.schema_source import schema_profile_for_package
 from .settings import DEFAULT_BASE_PACKAGE, DEFAULT_BRANCH, DEFAULT_PACKAGE
 
 TOKEN_EXPIRES_HOURS = int(os.getenv("SCHEMA_UML_TOKEN_HOURS", "12"))
@@ -266,7 +267,9 @@ async def get_user_and_workspace(user=Depends(get_current_user), db=Depends(db_d
 
 
 def workspace_payload(workspace: Dict[str, str]) -> Dict[str, str]:
+    package = workspace.get("package", DEFAULT_PACKAGE)
     return {
+        "profile": schema_profile_for_package(package, workspace.get("base_namespace")).key,
         "branch": workspace.get("branch", DEFAULT_BRANCH),
         "package": workspace.get("package", DEFAULT_PACKAGE),
         "base_namespace": workspace.get("base_namespace", DEFAULT_BASE_PACKAGE),

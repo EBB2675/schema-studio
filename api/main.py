@@ -8,12 +8,12 @@ from fastapi import Depends, FastAPI, Query, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from .light_mode.schema_source import SchemaUnavailable
-from .sources.extraction import build_graph, get_usage_for_section, list_sections
+from .light_mode.schema_source import SchemaUnavailable, schema_profile_for_package
+from .sources import editing
 from .sources.legacy import root_namespace as _root_namespace
-from .sources.linkml_routes import linkml_download, linkml_report
+from .sources.linkml_routes import edit_error, linkml_download, linkml_report
 
 from .routes_git import router as git_router
 from .routes_tasks import router as tasks_router
@@ -31,39 +31,12 @@ from .auth import (
     init_db as auth_init,
 )
 from .edit_store import (
-    EditConflict,
-    PersistedEdit,
+    add_edits,
+    delete_edit,
+    delete_edits,
     init_db as edit_init,
     list_edits,
-    delete_edits,
-    save_edit,
-    split_conflicts,
 )
-from .custom_graph_edits import (
-    attach_custom_class as _attach_custom_class_impl,
-    attach_custom_quantity as _attach_custom_quantity_impl,
-)
-
-# Keep this list in sync with `web/src/components/quantityShared.ts`.
-SUPPORTED_CUSTOM_DTYPES = {
-    # Booleans / strings / datetime
-    "bool",
-    "str",
-    "datetime",
-    # Generic numbers
-    "int",
-    "float",
-    # NumPy-style integers
-    "int32",
-    "int64",
-    "np.int32",
-    "np.int64",
-    # NumPy-style floats
-    "float32",
-    "float64",
-    "np.float32",
-    "np.float64",
-}
 
 class LoginRequest(BaseModel):
     username: str
@@ -156,12 +129,12 @@ async def root(user_ws=Depends(get_user_and_workspace)):
     return {"message": "Schema UML API is running", "workspace": workspace_payload(workspace)}
 
 @app.get("/roots")
-async def roots(package: str | None = Query(None), user_ws=Depends(get_user_and_workspace)):
+async def roots(package: str | None = Query(None), user_ws=Depends(get_user_and_workspace), db=Depends(db_dep)):
     """List available section classes for a given package."""
-    _, workspace = user_ws
+    user, workspace = user_ws
     pkg = package or workspace.get("package") or DEFAULT_BASE_PACKAGE
     try:
-        sections = await run_in_threadpool(list_sections, pkg)
+        sections = await run_in_threadpool(editing.list_sections, pkg, await _stored_edits(db, user, pkg))
         return {"package": pkg, "sections": sorted(sections), "workspace": workspace_payload(workspace)}
     except SchemaUnavailable:
         raise
@@ -169,16 +142,35 @@ async def roots(package: str | None = Query(None), user_ws=Depends(get_user_and_
         raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
 
 @app.get("/schema/linkml")
-async def schema_linkml(package: str | None = Query(None), user_ws=Depends(get_user_and_workspace)):
+async def schema_linkml(
+    package: str | None = Query(None),
+    edits: bool = Query(True, description="Include the module's edits"),
+    user_ws=Depends(get_user_and_workspace),
+    db=Depends(db_dep),
+):
     """Download the module's schema as LinkML YAML (installed profile environment, not a worktree)."""
-    _, workspace = user_ws
-    return await linkml_download(package or workspace.get("package") or DEFAULT_BASE_PACKAGE)
+    user, workspace = user_ws
+    pkg = package or workspace.get("package") or DEFAULT_BASE_PACKAGE
+    return await linkml_download(pkg, await _stored_edits(db, user, pkg) if edits else ())
 
 
 @app.get("/schema/linkml/report")
 async def schema_linkml_report(package: str | None = Query(None), user_ws=Depends(get_user_and_workspace)):
     _, workspace = user_ws
     return await linkml_report(package or workspace.get("package") or DEFAULT_BASE_PACKAGE)
+
+
+async def _stored_edits(db, user: dict, package: str) -> list[dict]:
+    profile = schema_profile_for_package(package)
+    return await list_edits(db, str(user["id"]), profile.key, package)
+
+
+async def _graph_response(db, user: dict, workspace: dict, package: str, **flags) -> dict:
+    """The module's graph from its edited schema, with the workspace."""
+    stored = await _stored_edits(db, user, package)
+    data = await run_in_threadpool(lambda: editing.build_graph(package, stored, **flags))
+    data["workspace"] = workspace_payload(workspace)
+    return data
 
 
 @app.get("/schema")
@@ -190,7 +182,7 @@ async def schema(
     include_inheritance: bool = Query(True),
     allow_cross_module: bool = Query(True),
     base_namespace: str | None = Query(None),
-    empty: bool = Query(False, description="Return an empty graph shell (replay persisted edits only)"),
+    empty: bool = Query(False, description="Start only from classes the module's edits added"),
     user_ws=Depends(get_user_and_workspace),
     db=Depends(db_dep),
 ):
@@ -201,32 +193,100 @@ async def schema(
         ns = _root_namespace(pkg)
     if package or base_namespace:
         workspace = await update_workspace(db, user["id"], package=pkg, base_namespace=ns)
-    if empty:
-        data = {"package": pkg, "root": root, "nodes": [], "edges": []}
-    else:
-        data = await run_in_threadpool(
-            build_graph,
-            package=pkg,
-            root=root,
-            include_quantities=include_quantities,
-            include_subsections=include_subsections,
-            include_inheritance=include_inheritance,
-            allow_cross_module=allow_cross_module,
-            base_namespace=ns
-        )
-    persisted, stale_conflicts, current_sha = await _persisted_state(
-        db=db, user_id=user["id"], workspace=workspace, package=pkg, base_namespace=ns
+    return await _graph_response(
+        db, user, workspace, pkg, root=root, include_quantities=include_quantities,
+        include_subsections=include_subsections, include_inheritance=include_inheritance,
+        allow_cross_module=allow_cross_module, base_namespace=ns, empty=empty,
     )
-    data, apply_conflicts = _apply_persisted_edits(data, persisted)
-    applied = _applied_edits(persisted, apply_conflicts)
-    if applied:
-        data["applied_edits"] = [_serialize_edit(edit) for edit in applied]
-    data["workspace"] = workspace_payload(workspace)
-    conflicts = stale_conflicts + apply_conflicts
-    if conflicts:
-        data["edit_conflicts"] = conflicts
-        data["branch_head"] = current_sha
+
+
+class EditRequest(BaseModel):
+    op: str
+    target: str = ""
+    payload: dict = Field(default_factory=dict)
+
+
+class EditsRequest(BaseModel):
+    package: str | None = None
+    edits: list[EditRequest]
+
+
+@app.get("/schema/edits")
+async def list_schema_edits(
+    package: str | None = Query(None), user_ws=Depends(get_user_and_workspace), db=Depends(db_dep),
+):
+    """The module's stored edits, in order, and the edit rules of its profile."""
+    user, workspace = user_ws
+    pkg = package or workspace.get("package") or DEFAULT_BASE_PACKAGE
+    profile = schema_profile_for_package(pkg)
+    return {
+        "package": pkg,
+        "profile": profile.key,
+        "edits": await _stored_edits(db, user, pkg),
+        "rules": editing.rules_summary(profile),
+        "workspace": workspace_payload(workspace),
+    }
+
+
+@app.post("/schema/edits")
+async def add_schema_edits(
+    req: EditsRequest,
+    root: str | None = Query(None),
+    include_quantities: bool = Query(True),
+    include_subsections: bool = Query(True),
+    include_inheritance: bool = Query(True),
+    allow_cross_module: bool = Query(True),
+    base_namespace: str | None = Query(None),
+    empty: bool = Query(False),
+    user_ws=Depends(get_user_and_workspace),
+    db=Depends(db_dep),
+):
+    """Check and store edits (all or none), then return the module's graph with them."""
+    user, workspace = user_ws
+    pkg = req.package or workspace.get("package") or DEFAULT_BASE_PACKAGE
+    ns = base_namespace or (workspace.get("base_namespace") if workspace.get("package") == pkg else None)
+    ns = ns or _root_namespace(pkg)
+    workspace = await update_workspace(db, user["id"], package=pkg, base_namespace=ns)
+    stored = await _stored_edits(db, user, pkg)
+    try:
+        prepared = await run_in_threadpool(
+            editing.prepare, pkg, stored, [edit.model_dump() for edit in req.edits], base_namespace=ns,
+        )
+    except (editing.EditError, editing.EditsUnavailable) as exc:
+        raise edit_error(exc)
+    saved = await add_edits(
+        db, str(user["id"]), profile=schema_profile_for_package(pkg, ns).key, branch=workspace.get("branch"),
+        package=pkg, edits=prepared,
+    )
+    data = await _graph_response(
+        db, user, workspace, pkg, root=root, include_quantities=include_quantities,
+        include_subsections=include_subsections, include_inheritance=include_inheritance,
+        allow_cross_module=allow_cross_module, base_namespace=ns, empty=empty,
+    )
+    data["persisted_edits"] = saved
     return data
+
+
+@app.delete("/schema/edits/{edit_id}")
+async def delete_schema_edit(edit_id: str, user_ws=Depends(get_user_and_workspace), db=Depends(db_dep)):
+    """Delete one stored edit; later edits that depended on it show up as conflicts."""
+    user, workspace = user_ws
+    deleted = await delete_edit(db, str(user["id"]), edit_id)
+    return {"deleted": deleted, "workspace": workspace_payload(workspace)}
+
+
+@app.delete("/schema/edits")
+async def clear_schema_edits(
+    package: str | None = Query(None),
+    all_packages: bool = Query(False, description="Every module of the package's profile"),
+    user_ws=Depends(get_user_and_workspace),
+    db=Depends(db_dep),
+):
+    user, workspace = user_ws
+    pkg = package or workspace.get("package") or DEFAULT_BASE_PACKAGE
+    profile = schema_profile_for_package(pkg)
+    deleted = await delete_edits(db, str(user["id"]), profile=profile.key, package=None if all_packages else pkg)
+    return {"deleted": deleted, "workspace": workspace_payload(workspace)}
 
 
 def _repo_root(base_package: str | None = None) -> Path:
@@ -253,17 +313,6 @@ def _run_git(repo: Path, *args: str) -> str:
         raise subprocess.CalledProcessError(cp.returncode, cp.args, cp.stdout, cp.stderr)
     return cp.stdout
 
-
-def _current_branch_head(branch: str | None, base_namespace: str | None) -> str | None:
-    """Best-effort helper to read the branch head SHA for conflict tracking."""
-    if not branch:
-        return None
-    try:
-        repo = _repo_root(base_namespace)
-        return _run_git(repo, "rev-parse", branch).strip()
-    except Exception:
-        # Fallback to None when git metadata is unavailable (e.g., synthetic packages).
-        return None
 
 def _git_path_exists(repo: Path, branch: str, path: str) -> bool:
     # returns True if path exists at branch (dir tree or file)
@@ -352,331 +401,6 @@ class OverviewResponse(BaseModel):
     base: str
     items: list[PackageClasses]
 
-
-class CustomQuantityRequest(BaseModel):
-    package: str
-    class_name: str
-    quantity_name: str
-    dtype: str
-    docstring: str | None = None
-    parent_name: str | None = None
-    parent_relation: Literal["inherits", "hasSubSection"] | None = None
-
-class CustomClassRequest(BaseModel):
-    package: str
-    name: str
-    parent: str | None = None
-    relation: Literal["inherits", "hasSubSection"] = "inherits"
-    card: str | None = None
-    docstring: str | None = None
-    update_existing: bool = False
-
-
-def _serialize_edit(edit: PersistedEdit) -> dict:
-    return {
-        "id": edit.edit_id,
-        "user_id": edit.user_id,
-        "branch": edit.branch,
-        "package": edit.package,
-        "class_name": edit.class_name,
-        "quantity_name": edit.quantity_name,
-        "dtype": edit.dtype,
-        "docstring": edit.docstring,
-        "parent_name": edit.parent_name,
-        "parent_relation": edit.parent_relation,
-        "card": edit.card,
-        "edit_type": edit.edit_type,
-        "base_sha": edit.base_sha,
-        "created_at": edit.created_at,
-        "updated_at": edit.updated_at,
-    }
-
-
-def _apply_persisted_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dict, list[dict]]:
-    """Replay persisted edits onto a graph; collect application-time conflicts."""
-
-    conflicts: list[dict] = []
-    sorted_edits = sorted(edits, key=lambda e: 0 if e.edit_type == "class" else 1)
-    for edit in sorted_edits:
-        try:
-            if edit.edit_type == "class":
-                graph = _attach_custom_class(
-                    graph,
-                    CustomClassRequest(
-                        package=edit.package,
-                        name=edit.class_name,
-                        parent=edit.parent_name,
-                        relation=edit.parent_relation or "inherits",
-                        card=edit.card,
-                        docstring=edit.docstring,
-                        update_existing=True,
-                    ),
-                )
-            else:
-                graph = _attach_custom_quantity(
-                    graph,
-                    CustomQuantityRequest(
-                        package=edit.package,
-                        class_name=edit.class_name,
-                        quantity_name=edit.quantity_name or "",
-                        dtype=edit.dtype or "str",
-                        docstring=edit.docstring,
-                        parent_name=edit.parent_name,
-                        parent_relation=edit.parent_relation,
-                    ),
-                )
-        except HTTPException as exc:
-            conflicts.append({"edit": _serialize_edit(edit), "reason": "validation_error", "detail": exc.detail})
-    return graph, conflicts
-
-
-def _applied_edits(persisted: list[PersistedEdit], apply_conflicts: list[dict]) -> list[PersistedEdit]:
-    """
-    Return only the persisted edits that were successfully applied (i.e., not present in apply_conflicts).
-    Conflicts carry a serialized edit; we compare by edit_id when available, otherwise by a tuple signature.
-    """
-    conflict_keys: set[tuple[str, str, str | None]] = set()
-    for conflict in apply_conflicts or []:
-        edit_obj = conflict.get("edit") if isinstance(conflict, dict) else None
-        if not isinstance(edit_obj, dict):
-            continue
-        edit_id = edit_obj.get("id")
-        if edit_id:
-            conflict_keys.add(("id", edit_id, None))
-            continue
-        signature = (
-            edit_obj.get("edit_type") or "",
-            edit_obj.get("class_name") or "",
-            edit_obj.get("quantity_name") or None,
-        )
-        conflict_keys.add(signature)
-
-    def _key(e: PersistedEdit) -> tuple[str, str, str | None]:
-        if e.edit_id:
-            return ("id", e.edit_id, None)
-        return (e.edit_type, e.class_name, e.quantity_name or None)
-
-    return [e for e in persisted if _key(e) not in conflict_keys]
-
-
-async def _persisted_state(
-    *, db, user_id: str | int, workspace: dict, package: str, base_namespace: str | None
-) -> tuple[list[PersistedEdit], list[dict], str | None]:
-    branch = workspace.get("branch") or DEFAULT_BRANCH
-    current_sha = _current_branch_head(branch, base_namespace)
-    edits = await list_edits(db, user_id, branch, package)
-    applicable, stale = split_conflicts(edits, current_sha=current_sha)
-    stale_conflicts = [
-        {"edit": _serialize_edit(edit), "reason": "stale_branch_head", "current_sha": current_sha}
-        for edit in stale
-    ]
-    return applicable, stale_conflicts, current_sha
-
-
-async def _persist_edit(
-    *,
-    db,
-    user_id: str | int,
-    workspace: dict,
-    edit_type: Literal["class", "quantity"],
-    req: CustomClassRequest | CustomQuantityRequest,
-    current_sha: str | None,
-) -> PersistedEdit:
-    branch = workspace.get("branch") or DEFAULT_BRANCH
-    try:
-        if edit_type == "class":
-            payload = PersistedEdit(
-                user_id=user_id,
-                branch=branch,
-                package=req.package,
-                class_name=req.name,
-                parent_name=req.parent,
-                parent_relation=req.relation,
-                card=req.card if req.relation == "hasSubSection" else None,
-                docstring=req.docstring,
-                edit_type="class",
-                base_sha=current_sha,
-            )
-        else:
-            payload = PersistedEdit(
-                user_id=user_id,
-                branch=branch,
-                package=req.package,
-                class_name=req.class_name,
-                quantity_name=req.quantity_name,
-                dtype=req.dtype,
-                docstring=req.docstring,
-                parent_name=req.parent_name,
-                parent_relation=req.parent_relation,
-                edit_type="quantity",
-                base_sha=current_sha,
-            )
-        return await save_edit(db, payload, current_sha=current_sha)
-    except EditConflict as conflict:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": "Edit is based on an older branch head; refresh the graph before retrying.",
-                "stored_base_sha": conflict.existing.base_sha,
-                "current_base_sha": conflict.current_sha,
-                "existing_edit": _serialize_edit(conflict.existing),
-            },
-        )
-
-
-def _attach_custom_quantity(graph: dict, req: CustomQuantityRequest) -> dict:
-    return _attach_custom_quantity_impl(graph, req, supported_dtypes=SUPPORTED_CUSTOM_DTYPES)
-
-
-def _attach_custom_class(graph: dict, req: CustomClassRequest) -> dict:
-    return _attach_custom_class_impl(graph, req)
-
-
-@app.post("/schema/custom-quantity")
-async def add_custom_quantity(
-    req: CustomQuantityRequest,
-    root: str | None = Query(None),
-    include_subsections: bool = Query(True),
-    include_inheritance: bool = Query(True),
-    allow_cross_module: bool = Query(True),
-    base_namespace: str | None = Query(None),
-    empty: bool = Query(False, description="Skip base graph; start from an empty canvas"),
-    user_ws=Depends(get_user_and_workspace),
-    db=Depends(db_dep),
-):
-    user, workspace = user_ws
-    ns = base_namespace
-    if ns is None and workspace.get("package") == req.package:
-        ns = workspace.get("base_namespace")
-    if ns is None and not empty:
-        ns = _root_namespace(req.package)
-    workspace = await update_workspace(
-        db,
-        user["id"],
-        package=req.package,
-        base_namespace=ns or workspace.get("base_namespace"),
-    )
-    try:
-        if empty:
-            graph = {"package": req.package, "root": root, "nodes": [], "edges": []}
-        else:
-            graph = await run_in_threadpool(
-                build_graph,
-                package=req.package,
-                root=root,
-                include_quantities=True,
-                include_subsections=include_subsections,
-                include_inheritance=include_inheritance,
-                allow_cross_module=allow_cross_module,
-                base_namespace=ns
-            )
-        persisted, stale_conflicts, current_sha = await _persisted_state(
-            db=db, user_id=user["id"], workspace=workspace, package=req.package, base_namespace=ns
-        )
-        graph, apply_conflicts = _apply_persisted_edits(graph, persisted)
-        result = _attach_custom_quantity(graph, req)
-        saved = await _persist_edit(
-            db=db,
-            user_id=user["id"],
-            workspace=workspace,
-            edit_type="quantity",
-            req=req,
-            current_sha=current_sha,
-        )
-        result["workspace"] = workspace_payload(workspace)
-        conflicts = stale_conflicts + apply_conflicts
-        if conflicts:
-            result["edit_conflicts"] = conflicts
-        result["persisted_edit"] = _serialize_edit(saved)
-        result["branch_head"] = current_sha
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
-
-
-@app.post("/schema/custom-class")
-async def add_custom_class(
-    req: CustomClassRequest,
-    root: str | None = Query(None),
-    include_quantities: bool = Query(True),
-    include_subsections: bool = Query(True),
-    include_inheritance: bool = Query(True),
-    allow_cross_module: bool = Query(True),
-    base_namespace: str | None = Query(None),
-    empty: bool = Query(False, description="Skip base graph; start from an empty canvas"),
-    user_ws=Depends(get_user_and_workspace),
-    db=Depends(db_dep),
-):
-    user, workspace = user_ws
-    ns = base_namespace
-    if ns is None and workspace.get("package") == req.package:
-        ns = workspace.get("base_namespace")
-    if ns is None and not empty:
-        ns = _root_namespace(req.package)
-    workspace = await update_workspace(
-        db,
-        user["id"],
-        package=req.package,
-        base_namespace=ns or workspace.get("base_namespace"),
-    )
-    try:
-        if empty:
-            graph = {"package": req.package, "root": root, "nodes": [], "edges": []}
-        else:
-            graph = await run_in_threadpool(
-                build_graph,
-                package=req.package,
-                root=root,
-                include_quantities=include_quantities,
-                include_subsections=include_subsections,
-                include_inheritance=include_inheritance,
-                allow_cross_module=allow_cross_module,
-                base_namespace=ns
-            )
-        persisted, stale_conflicts, current_sha = await _persisted_state(
-            db=db, user_id=user["id"], workspace=workspace, package=req.package, base_namespace=ns
-        )
-        graph, apply_conflicts = _apply_persisted_edits(graph, persisted)
-        result = _attach_custom_class(graph, req)
-        saved = await _persist_edit(
-            db=db,
-            user_id=user["id"],
-            workspace=workspace,
-            edit_type="class",
-            req=req,
-            current_sha=current_sha,
-        )
-        result["workspace"] = workspace_payload(workspace)
-        conflicts = stale_conflicts + apply_conflicts
-        if conflicts:
-            result["edit_conflicts"] = conflicts
-        result["persisted_edit"] = _serialize_edit(saved)
-        result["branch_head"] = current_sha
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"{type(e).__name__}: {e}")
-
-
-@app.delete("/schema/custom-edits")
-async def clear_custom_edits(
-    package: str | None = Query(None),
-    branch: str | None = Query(None),
-    user_ws=Depends(get_user_and_workspace),
-    db=Depends(db_dep),
-):
-    """
-    Remove all persisted custom edits for the current user / branch / package.
-    """
-    user, workspace = user_ws
-    pkg = package or workspace.get("package") or DEFAULT_BASE_PACKAGE
-    br = branch or workspace.get("branch") or DEFAULT_BRANCH
-    workspace = await update_workspace(db, user["id"], branch=br, package=pkg, base_namespace=workspace.get("base_namespace"))
-    deleted = await delete_edits(db, user["id"], br, pkg)
-    return {"deleted": deleted, "workspace": workspace_payload(workspace)}
 
 @app.get("/overview", response_model=OverviewResponse)
 async def overview(
@@ -779,9 +503,10 @@ class UsageResponse(BaseModel):
     usage: List[UsageEntryModel]
 
 @app.get("/usage", response_model=UsageResponse)
-def get_usage(
+async def get_usage(
     section_id: str = Query(..., description="Fully qualified section class name"),
     user_ws=Depends(get_user_and_workspace),
+    db=Depends(db_dep),
 ):
     """
     Return "under the hood" usage information for a given section class.
@@ -789,8 +514,10 @@ def get_usage(
     section_id should be the same as the node id for class nodes,
     e.g. "nomad_simulations.schema_packages.model_method.ModelMethod".
     """
-    _, workspace = user_ws
-    entries = get_usage_for_section(section_id, workspace.get("package"))
+    user, workspace = user_ws
+    package = workspace.get("package")
+    stored = await _stored_edits(db, user, package) if package else []
+    entries = await run_in_threadpool(editing.usage_for_section, section_id, package, stored)
     usage = [
         UsageEntryModel(
             kind=e.kind,

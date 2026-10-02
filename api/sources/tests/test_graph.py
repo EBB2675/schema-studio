@@ -289,10 +289,16 @@ def test_usage_entries_come_from_the_extraction_document():
     assert graph.usage_entries(EXTRACTION, "unknown.Class") is None
 
 
-def test_aliases_are_roots_too():
-    extraction = {**EXTRACTION, "modules": [{**EXTRACTION["modules"][0], "aliases": {"Piece": PART}}]}
+def test_roots_are_the_names_the_module_binds():
+    names = {"Child": CHILD, "GrandChild": GRANDCHILD, "Part": PART, "Piece": PART}
+    extraction = {**EXTRACTION, "modules": [{**EXTRACTION["modules"][0], "names": names}]}
     assert graph.section_names(SCHEMA, extraction, "pkg.app.main") == ["Child", "GrandChild", "Part", "Piece"]
     assert graph.build_graph(SCHEMA, extraction, "pkg.app.main", root="Piece") == build(root="Part") | {"root": "Piece"}
+    # A class bound only under another name is offered under that name alone, as the module has it.
+    del names["Part"]
+    assert graph.section_names(SCHEMA, extraction, "pkg.app.main") == ["Child", "GrandChild", "Piece"]
+    with pytest.raises(graph.RootNotFound):
+        graph.build_graph(SCHEMA, extraction, "pkg.app.main", root="Part")
 
 
 def test_roots_are_the_module_classes_in_its_namespace():
@@ -366,25 +372,33 @@ def test_graph_matches_the_legacy_graph_on_a_fake_package(fake_nomad, flags):
 
 # -------- design rule: plain data, standard library only --------
 
-def test_graph_adapter_uses_the_standard_library_only():
-    """It runs in the browser later (Pyodide), so it may import nothing but the standard library."""
+def test_graph_adapter_and_edits_use_the_standard_library_only():
+    """They run in the browser later (Pyodide), so they may import nothing but the standard library."""
+    sources = PROJECT_ROOT / "api" / "sources"
     code = (
-        "import importlib.util, json, sys; "
-        f"spec = importlib.util.spec_from_file_location('graph', {str(PROJECT_ROOT / 'api' / 'sources' / 'graph.py')!r}); "
-        "graph = importlib.util.module_from_spec(spec); spec.loader.exec_module(graph); "
-        "schema = {'classes': {'m.A': {'name': 'm.A', 'title': 'A', 'attributes': {'x': {'name': 'x', "
+        "import importlib.util, json, sys\n"
+        "def load(name):\n"
+        f"    spec = importlib.util.spec_from_file_location(name, {str(sources)!r} + '/' + name + '.py')\n"
+        "    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module); return module\n"
+        "graph, edits = load('graph'), load('edits')\n"
+        "schema = {'default_prefix': 'nomadsim', 'classes': {'m.A': {'name': 'm.A', 'title': 'A', 'attributes': {'x': {'name': 'x', "
         "'annotations': {'source_kind': 'quantity', 'display_dtype': 'str'}}, 'p': {'name': 'p', 'required': True, "
         "'annotations': {'source_kind': 'property', 'source_property_code': 'P', 'source_annotations': '{}'}}}}, "
         "'m.V': {'name': 'm.V', 'title': 'V', 'annotations': {'source_vocabulary_enum': 'm.V.terms'}}}, "
-        "'enums': {'m.V.terms': {'permissible_values': {'T': {'annotations': {'source_python_name': 't'}}}}}}; "
-        "result = graph.build_graph(schema, {'modules': [{'name': 'm', 'classes': ['m.A', 'm.V']}]}, 'm'); "
-        "json.dumps(result); "
-        "print(len(result['nodes'])); "
-        "print(sorted({n.split('.')[0] for n in sys.modules} - set(sys.stdlib_module_names) - {'graph', '__main__'}))"
+        "'enums': {'m.V.terms': {'permissible_values': {'T': {'annotations': {'source_python_name': 't'}}}}}}\n"
+        "stored = [edits.prepare_edit(schema, 'add_class', '', {'name': 'B', 'is_a': 'm.A'}, rules='nomad', package='m'),\n"
+        "          edits.prepare_edit(schema, 'set_description', 'm.A', {'description': 'A.'}, rules='nomad', package='m')]\n"
+        "edited, applied, conflicts = edits.apply_edits(schema, stored, rules='nomad')\n"
+        "result = graph.build_graph(edited, {'modules': [{'name': 'm', 'classes': ['m.A', 'm.V']}]}, 'm')\n"
+        "json.dumps([result, stored, conflicts])\n"
+        "print(len(result['nodes']), len(applied), len(conflicts))\n"
+        "print(sorted({n.split('.')[0] for n in sys.modules} - set(sys.stdlib_module_names) - {'graph', 'edits', '__main__'}))\n"
     )
     # -S: no site packages at all, so anything outside the standard library fails to import.
     out = subprocess.run([sys.executable, "-I", "-S", "-c", code], capture_output=True, text=True, check=True)
-    assert out.stdout.split("\n")[:2] == ["5", "[]"]
-    source = (PROJECT_ROOT / "api" / "sources" / "graph.py").read_text(encoding="utf-8")
-    for forbidden in ("fastapi", "sqlite3", "linkml_runtime", "extractor", "yaml", "pydantic"):
-        assert f"import {forbidden}" not in source and f"from {forbidden}" not in source
+    # A, its two quantities, V and its term, and B with A's two quantities.
+    assert out.stdout.split("\n")[:2] == ["8 2 0", "[]"]
+    for name in ("graph.py", "edits.py"):
+        source = (sources / name).read_text(encoding="utf-8")
+        for forbidden in ("fastapi", "sqlite3", "linkml_runtime", "extractor", "yaml", "pydantic"):
+            assert f"import {forbidden}" not in source and f"from {forbidden}" not in source

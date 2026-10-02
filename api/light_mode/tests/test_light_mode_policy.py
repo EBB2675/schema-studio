@@ -13,6 +13,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from api.sources.tests.fake_snapshot import SOURCE, fake_snapshot, reset as reset_source  # noqa: E402
+
 
 @pytest.fixture()
 def light_mode_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -37,8 +39,10 @@ def light_mode_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(app_mod, "current_schema_info", lambda *args, **kwargs: info)
     monkeypatch.setattr(app_mod, "update_schema", lambda *args, **kwargs: info)
-    monkeypatch.setattr(app_mod, "build_graph", lambda **kwargs: {"package": kwargs["package"], "root": kwargs.get("root"), "nodes": [], "edges": []})
-    monkeypatch.setattr(app_mod, "list_sections", lambda _package: ["RootSection"])
+    # Graphs come from a small LinkML snapshot, so edits are really replayed onto LinkML data.
+    reset_source()
+    monkeypatch.setattr(app_mod.editing, "get_snapshot", fake_snapshot)
+    monkeypatch.setattr(app_mod.editing, "extracted_sections", lambda _package: ["RootSection"])
     monkeypatch.setattr(
         app_mod,
         "list_schema_modules",
@@ -82,6 +86,7 @@ async def test_workspace_update_accepts_json_body_and_switches_profile(client: h
     )
     assert updated.status_code == 200
     assert updated.json()["workspace"] == {
+        "profile": "bam-masterdata",
         "branch": "main",
         "package": "bam_masterdata.datamodel.object_types",
         "base_namespace": "bam_masterdata.datamodel",
@@ -169,13 +174,6 @@ async def test_overview_skips_namespaces_that_cannot_be_read(
 
 
 @pytest.mark.anyio
-async def test_delete_custom_edits_rejects_non_develop_branch(client: httpx.AsyncClient):
-    rejected = await client.delete("/schema/custom-edits", params={"branch": "feature-z"})
-    assert rejected.status_code == 400
-    assert "only 'develop'" in rejected.json()["detail"]
-
-
-@pytest.mark.anyio
 async def test_health_reports_light_mode_schema_metadata(client: httpx.AsyncClient):
     resp = await client.get("/health")
     assert resp.status_code == 200
@@ -195,6 +193,10 @@ async def test_schema_profiles_reports_all_three_profiles(client: httpx.AsyncCli
     assert keys == ["nomad-simulations", "nomad-measurements", "bam-masterdata"]
     assert payload["current_profile"] == "nomad-simulations"
     assert all(entry["version"] == "deadbeef" for entry in payload["profiles"])
+    rules = {entry["key"]: entry["edit_rules"] for entry in payload["profiles"]}
+    assert [dtype["name"] for dtype in rules["nomad-simulations"]["dtypes"]][:3] == ["bool", "str", "datetime"]
+    assert rules["bam-masterdata"]["codes"] is True
+    assert all(entry["editable"] for entry in payload["profiles"])
 
 
 @pytest.mark.anyio
@@ -202,7 +204,7 @@ async def test_usage_endpoint_returns_under_the_hood_entries(
     client: httpx.AsyncClient, light_mode_module, monkeypatch: pytest.MonkeyPatch
 ):
     monkeypatch.setattr(
-        light_mode_module,
+        light_mode_module.editing,
         "get_usage_for_section",
         lambda _section_id, _package=None: [
             SimpleNamespace(
@@ -230,325 +232,187 @@ async def test_usage_endpoint_returns_under_the_hood_entries(
     ]
 
 
+def _edits(*edits, package="pkg.default"):
+    return {"package": package, "edits": [{"op": op, "target": target, "payload": payload} for op, target, payload in edits]}
+
+
+def _sections(payload):
+    return {node["id"]: node for node in payload["nodes"] if node["kind"] == "section"}
+
+
+def _quantities(payload):
+    return {node["id"]: node for node in payload["nodes"] if node["kind"] == "quantity"}
+
+
 @pytest.mark.anyio
-async def test_custom_edit_endpoints_do_not_require_api_main(client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch):
+async def test_edit_endpoints_do_not_require_api_main(client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch):
     # Guard against accidental reintroduction of `from api.main import ...` in light mode paths.
     monkeypatch.setitem(sys.modules, "api.main", None)
 
-    add_class = await client.post(
-        "/schema/custom-class",
-        params={
-            "package": "pkg.default",
-            "name": "LocalClass",
-            "relation": "inherits",
-        },
-    )
-    assert add_class.status_code == 200
-    assert add_class.json()["persisted_edit"]["edit_type"] == "class"
+    added = await client.post("/schema/edits", json=_edits(
+        ("add_class", "", {"name": "LocalClass", "is_a": "pkg.default.RootSection"}),
+        ("add_attribute", "pkg.default.LocalClass", {"name": "my_q", "kind": "quantity", "dtype": "float64"}),
+    ))
+    assert added.status_code == 200, added.text
+    payload = added.json()
+    assert [edit["op"] for edit in payload["persisted_edits"]] == ["add_class", "add_attribute"]
+    assert payload["persisted_edits"][0]["target"] == "pkg.default.LocalClass"
+    assert payload["persisted_edits"][0]["commit"] == "c0ffee"
+    assert payload["persisted_edits"][0]["profile"] == "nomad-simulations"
+    # Shown like an extracted quantity, with NOMAD's own dtype text; the inherited one too.
+    assert _quantities(payload)["pkg.default.LocalClass.my_q"]["dtype"] == "m_float64(float64)"
+    assert "pkg.default.LocalClass.label" in _quantities(payload)
+    assert len(payload["applied_edits"]) == 2 and "edit_conflicts" not in payload
 
-    add_quantity = await client.post(
-        "/schema/custom-quantity",
-        params={
-            "package": "pkg.default",
-            "class_name": "LocalClass",
-            "quantity_name": "my_q",
-            "dtype": "str",
-        },
-    )
-    assert add_quantity.status_code == 200
-    q_labels = [n.get("label") for n in add_quantity.json()["nodes"] if n.get("kind") == "quantity"]
-    assert "my_q" in q_labels
-
-
-@pytest.mark.anyio
-async def test_custom_edit_endpoints_accept_json_body(client: httpx.AsyncClient):
-    add_class = await client.post(
-        "/schema/custom-class",
-        json={
-            "package": "pkg.default",
-            "name": "BodyClass",
-            "relation": "inherits",
-        },
-    )
-    assert add_class.status_code == 200
-    assert add_class.json()["persisted_edit"]["edit_type"] == "class"
-
-    add_quantity = await client.post(
-        "/schema/custom-quantity",
-        json={
-            "package": "pkg.default",
-            "class_name": "BodyClass",
-            "quantity_name": "body_q",
-            "dtype": "str",
-        },
-    )
-    assert add_quantity.status_code == 200
-    q_labels = [n.get("label") for n in add_quantity.json()["nodes"] if n.get("kind") == "quantity"]
-    assert "body_q" in q_labels
+    listed = await client.get("/schema/edits", params={"package": "pkg.default"})
+    assert [edit["op"] for edit in listed.json()["edits"]] == ["add_class", "add_attribute"]
+    roots = await client.get("/roots", params={"package": "pkg.default"})
+    assert roots.json()["sections"] == ["LocalClass", "RootSection"]
 
 
 @pytest.mark.anyio
 async def test_redefining_inherited_quantity_is_rejected(client: httpx.AsyncClient):
-    parent_resp = await client.post(
-        "/schema/custom-class",
-        params={"empty": "true"},
-        json={"package": "pkg.default", "name": "Parent", "relation": "inherits"},
-    )
-    assert parent_resp.status_code == 200
-
-    parent_q = await client.post(
-        "/schema/custom-quantity",
-        params={"empty": "true"},
-        json={
-            "package": "pkg.default",
-            "class_name": "Parent",
-            "quantity_name": "shared_q",
-            "dtype": "str",
-        },
-    )
-    assert parent_q.status_code == 200
-
-    child_resp = await client.post(
-        "/schema/custom-class",
-        params={"empty": "true"},
-        json={
-            "package": "pkg.default",
-            "name": "Child",
-            "parent": "pkg.default.Parent",
-            "relation": "inherits",
-        },
-    )
-    assert child_resp.status_code == 200
-
-    redef = await client.post(
-        "/schema/custom-quantity",
-        params={"empty": "true"},
-        json={
-            "package": "pkg.default",
-            "class_name": "Child",
-            "parent_name": "Parent",
-            "parent_relation": "inherits",
-            "quantity_name": "shared_q",
-            "dtype": "str",
-        },
-    )
-    assert redef.status_code == 400
-    assert "inherited" in redef.json()["detail"]
+    redefined = await client.post("/schema/edits", json=_edits(
+        ("add_class", "", {"name": "Child", "is_a": "pkg.default.RootSection"}),
+        ("add_attribute", "pkg.default.Child", {"name": "label", "kind": "quantity", "dtype": "str"}),
+    ))
+    assert redefined.status_code == 400
+    assert "inherited" in redefined.json()["detail"]
+    # All or nothing: the class was not stored either.
+    listed = await client.get("/schema/edits", params={"package": "pkg.default"})
+    assert listed.json()["edits"] == []
 
 
 @pytest.mark.anyio
-async def test_custom_inheritance_edge_direction_is_child_to_parent(client: httpx.AsyncClient):
-    parent_resp = await client.post(
-        "/schema/custom-class",
-        params={"empty": "true"},
-        json={"package": "pkg.default", "name": "Parent", "relation": "inherits"},
-    )
-    assert parent_resp.status_code == 200
-
-    child_resp = await client.post(
-        "/schema/custom-class",
-        params={"empty": "true"},
-        json={
-            "package": "pkg.default",
-            "name": "Child",
-            "parent": "pkg.default.Parent",
-            "relation": "inherits",
-        },
-    )
-    assert child_resp.status_code == 200
-    payload = child_resp.json()
-
-    assert any(
-        e
-        for e in payload.get("edges", [])
-        if e.get("type") == "inherits"
-        and e.get("source") == "pkg.default.Child"
-        and e.get("target") == "pkg.default.Parent"
-    )
+async def test_new_class_inherits_from_child_to_parent(client: httpx.AsyncClient):
+    added = await client.post("/schema/edits", json=_edits(
+        ("add_class", "", {"name": "Child", "is_a": "pkg.default.RootSection"}),
+    ))
+    assert added.status_code == 200
+    edges = [(edge["source"], edge["target"], edge["type"]) for edge in added.json()["edges"]]
+    assert ("pkg.default.Child", "pkg.default.RootSection", "inherits") in edges
 
 
 @pytest.mark.anyio
-async def test_custom_subsection_cardinality_is_persisted(client: httpx.AsyncClient):
-    parent_resp = await client.post(
-        "/schema/custom-class",
-        params={"empty": "true"},
-        json={"package": "pkg.default", "name": "Parent", "relation": "inherits"},
-    )
-    assert parent_resp.status_code == 200
-
-    child_resp = await client.post(
-        "/schema/custom-class",
-        params={"empty": "true"},
-        json={
-            "package": "pkg.default",
-            "name": "Child",
-            "parent": "pkg.default.Parent",
-            "relation": "hasSubSection",
-            "card": "0..*",
-        },
-    )
-    assert child_resp.status_code == 200
-    payload = child_resp.json()
-
-    assert payload["persisted_edit"]["card"] == "0..*"
-    assert any(
-        e
-        for e in payload.get("edges", [])
-        if e.get("type") == "hasSubSection"
-        and e.get("source") == "pkg.default.Parent"
-        and e.get("target") == "pkg.default.Child"
-        and e.get("card") == "0..*"
-    )
-
+async def test_new_subsection_keeps_its_card_on_replay(client: httpx.AsyncClient):
+    added = await client.post("/schema/edits", json=_edits(
+        ("add_class", "", {"name": "Part"}),
+        ("add_attribute", "pkg.default.RootSection", {"name": "parts", "kind": "subsection", "range": "pkg.default.Part",
+                                                       "multivalued": True}),
+    ))
+    assert added.status_code == 200, added.text
     replayed = await client.get("/schema", params={"package": "pkg.default"})
-    assert replayed.status_code == 200
-    assert any(
-        e
-        for e in replayed.json().get("edges", [])
-        if e.get("type") == "hasSubSection"
-        and e.get("source") == "pkg.default.Parent"
-        and e.get("target") == "pkg.default.Child"
-        and e.get("card") == "0..*"
-    )
+    edges = {(edge["source"], edge["target"], edge["type"]): edge["card"] for edge in replayed.json()["edges"]}
+    assert edges[("pkg.default.RootSection", "pkg.default.Part", "hasSubSection")] == "0..*"
 
 
 @pytest.mark.anyio
-async def test_custom_schema_package_replays_without_importing_python_module(
-    client: httpx.AsyncClient,
-    light_mode_module,
-    monkeypatch: pytest.MonkeyPatch,
-):
+async def test_empty_canvas_package_builds_on_the_whole_profile(client: httpx.AsyncClient):
     package = "pkg.custom_schema"
-    class_resp = await client.post(
-        "/schema/custom-class",
-        params={"empty": "true"},
-        json={"package": package, "name": "ScratchClass", "relation": "inherits"},
-    )
-    assert class_resp.status_code == 200
-
-    def missing_package(**_kwargs):
-        raise ModuleNotFoundError("No module named 'pkg.custom_schema'", name=package)
-
-    monkeypatch.setattr(light_mode_module, "build_graph", missing_package)
-
-    replayed = await client.get("/schema", params={"package": package})
-    assert replayed.status_code == 200
-    assert any(
-        n
-        for n in replayed.json().get("nodes", [])
-        if n.get("kind") == "section" and n.get("label") == "ScratchClass"
-    )
-
-
-@pytest.mark.anyio
-async def test_custom_schema_roots_returns_empty_without_importing_python_module(
-    client: httpx.AsyncClient,
-    light_mode_module,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    package = "pkg.custom_schema"
-
-    def missing_package(_package):
-        raise ModuleNotFoundError("No module named 'pkg.custom_schema'", name=package)
-
-    monkeypatch.setattr(light_mode_module, "list_sections", missing_package)
-
     roots = await client.get("/roots", params={"package": package})
-    assert roots.status_code == 200
-    assert roots.json()["sections"] == []
+    assert roots.status_code == 200 and roots.json()["sections"] == []
+
+    added = await client.post("/schema/edits", params={"empty": "true"}, json=_edits(
+        # The whole profile's classes are there to build on.
+        ("add_class", "", {"name": "ScratchClass", "is_a": "nomad_simulations.schema_packages.RootSection"}),
+        package=package,
+    ))
+    assert added.status_code == 200, added.text
+    replayed = await client.get("/schema", params={"package": package, "empty": "true"})
+    sections = _sections(replayed.json())
+    assert "pkg.custom_schema.ScratchClass" in sections
+    roots = await client.get("/roots", params={"package": package})
+    assert roots.json()["sections"] == ["ScratchClass"]
 
 
 @pytest.mark.anyio
-async def test_custom_class_docstring_update_is_persisted(client: httpx.AsyncClient):
-    create_resp = await client.post(
-        "/schema/custom-class",
-        params={"empty": "true"},
-        json={"package": "pkg.default", "name": "DocClass", "docstring": "old"},
-    )
-    assert create_resp.status_code == 200
-
-    update_resp = await client.post(
-        "/schema/custom-class",
-        params={"empty": "true"},
-        json={
-            "package": "pkg.default",
-            "name": "DocClass",
-            "docstring": "new",
-            "update_existing": True,
-        },
-    )
-    assert update_resp.status_code == 200
-    assert update_resp.json()["persisted_edit"]["docstring"] == "new"
-    assert any(
-        n
-        for n in update_resp.json().get("nodes", [])
-        if n.get("kind") == "section" and n.get("label") == "DocClass" and n.get("doc") == "new"
-    )
-
-    replayed = await client.get("/schema", params={"package": "pkg.default", "empty": "true"})
-    assert replayed.status_code == 200
-    assert any(
-        n
-        for n in replayed.json().get("nodes", [])
-        if n.get("kind") == "section" and n.get("label") == "DocClass" and n.get("doc") == "new"
-    )
+async def test_description_edit_is_replayed(client: httpx.AsyncClient):
+    edited = await client.post("/schema/edits", json=_edits(
+        ("set_description", "pkg.default.RootSection", {"description": "new"}),
+    ))
+    assert edited.status_code == 200
+    assert edited.json()["persisted_edits"][0]["payload"]["before"]["description"] == "The root."
+    replayed = await client.get("/schema", params={"package": "pkg.default"})
+    assert _sections(replayed.json())["pkg.default.RootSection"]["doc"] == "new"
 
 
 @pytest.mark.anyio
-async def test_clear_custom_edits_all_packages_flag(client: httpx.AsyncClient):
-    add_pkg_a = await client.post(
-        "/schema/custom-class",
-        json={"package": "pkg.alpha", "name": "ClassA", "relation": "inherits"},
-    )
-    assert add_pkg_a.status_code == 200
+async def test_edits_made_on_an_older_commit_report_upstream_changes(client: httpx.AsyncClient):
+    await client.post("/schema/edits", json=_edits(
+        ("set_description", "pkg.default.RootSection", {"description": "mine"}),
+        ("add_attribute", "pkg.default.RootSection", {"name": "extra", "kind": "quantity", "dtype": "int"}),
+    ))
+    # Same source text on a new commit: nothing to report.
+    SOURCE["commit"] = "newer"
+    replayed = await client.get("/schema", params={"package": "pkg.default"})
+    assert "edit_conflicts" not in replayed.json()
+    assert _sections(replayed.json())["pkg.default.RootSection"]["doc"] == "mine"
+    # The source changed the description since: still applied, and reported.
+    SOURCE.update(commit="newest", description="Rewritten upstream.")
+    replayed = (await client.get("/schema", params={"package": "pkg.default"})).json()
+    assert _sections(replayed)["pkg.default.RootSection"]["doc"] == "mine"
+    assert [(c["edit"]["op"], c["reason"], c["applied"]) for c in replayed["edit_conflicts"]] == [
+        ("set_description", "changed_upstream", True),
+    ]
+    assert len(replayed["applied_edits"]) == 2
 
-    add_pkg_b = await client.post(
-        "/schema/custom-class",
-        json={"package": "pkg.beta", "name": "ClassB", "relation": "inherits"},
-    )
-    assert add_pkg_b.status_code == 200
 
-    cleared = await client.delete("/schema/custom-edits", params={"all_packages": "true"})
+@pytest.mark.anyio
+async def test_clear_edits_of_all_packages(client: httpx.AsyncClient):
+    for package in ("pkg.alpha", "pkg.beta"):
+        added = await client.post("/schema/edits", json=_edits(("add_class", "", {"name": "Added"}), package=package))
+        assert added.status_code == 200
+    cleared = await client.delete("/schema/edits", params={"all_packages": "true"})
     assert cleared.status_code == 200
-    assert cleared.json()["deleted"] >= 2
+    assert cleared.json()["deleted"] == 2
 
 
 @pytest.mark.anyio
-async def test_delete_custom_edit_endpoint_removes_single_persisted_edit(client: httpx.AsyncClient):
-    add_class = await client.post(
-        "/schema/custom-class",
-        json={"package": "pkg.alpha", "name": "OnlyThisOne", "relation": "inherits"},
-    )
-    assert add_class.status_code == 200
+async def test_delete_one_edit_turns_its_dependants_into_conflicts(client: httpx.AsyncClient):
+    added = await client.post("/schema/edits", json=_edits(
+        ("add_class", "", {"name": "OnlyThisOne"}),
+        ("add_attribute", "pkg.default.OnlyThisOne", {"name": "to_drop", "kind": "quantity", "dtype": "str"}),
+    ))
+    class_edit, quantity_edit = added.json()["persisted_edits"]
 
-    add_quantity = await client.post(
-        "/schema/custom-quantity",
-        json={
-            "package": "pkg.alpha",
-            "class_name": "OnlyThisOne",
-            "quantity_name": "to_drop",
-            "dtype": "str",
-        },
-    )
-    assert add_quantity.status_code == 200
+    deleted = await client.delete(f"/schema/edits/{class_edit['id']}")
+    assert deleted.json()["deleted"] == 1
+    replayed = (await client.get("/schema", params={"package": "pkg.default"})).json()
+    assert "pkg.default.OnlyThisOne" not in _sections(replayed)
+    assert [(conflict["edit"]["id"], conflict["reason"]) for conflict in replayed["edit_conflicts"]] == [
+        (quantity_edit["id"], "not_found"),
+    ]
+    deleted = await client.delete(f"/schema/edits/{quantity_edit['id']}")
+    assert deleted.json()["deleted"] == 1
+    assert "edit_conflicts" not in (await client.get("/schema", params={"package": "pkg.default"})).json()
 
-    delete_quantity = await client.delete(
-        "/schema/custom-edit",
-        params={
-            "package": "pkg.alpha",
-            "class_name": "pkg.alpha.OnlyThisOne",
-            "quantity_name": "to_drop",
-        },
-    )
-    assert delete_quantity.status_code == 200
-    assert delete_quantity.json()["deleted"] == 1
 
-    delete_class = await client.delete(
-        "/schema/custom-edit",
-        params={"package": "pkg.alpha", "class_name": "OnlyThisOne"},
-    )
-    assert delete_class.status_code == 200
-    assert delete_class.json()["deleted"] == 1
+@pytest.mark.anyio
+async def test_renamed_class_keeps_its_usage_and_added_class_has_none(
+    client: httpx.AsyncClient, light_mode_module, monkeypatch: pytest.MonkeyPatch
+):
+    asked = []
+    monkeypatch.setattr(light_mode_module.editing, "get_usage_for_section",
+                        lambda section_id, _package=None: asked.append(section_id) or [])
+    await client.put("/workspace", json={"package": "pkg.default"})
+    renamed = await client.post("/schema/edits", json=_edits(
+        ("rename_class", "pkg.default.RootSection", {"new_name": "Renamed"}),
+        ("add_class", "", {"name": "Fresh"}),
+    ))
+    assert "pkg.default.Renamed" in _sections(renamed.json())
+    assert (await client.get("/roots", params={"package": "pkg.default"})).json()["sections"] == ["Fresh", "Renamed"]
+    await client.get("/usage", params={"section_id": "pkg.default.Renamed"})
+    await client.get("/usage", params={"section_id": "pkg.default.Fresh"})
+    assert asked == ["pkg.default.RootSection"]
+
+
+@pytest.mark.anyio
+async def test_edits_need_the_linkml_path(client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("SCHEMA_STUDIO_EXTRACTION", "legacy")
+    refused = await client.post("/schema/edits", json=_edits(("add_class", "", {"name": "Nope"})))
+    assert refused.status_code == 400
+    assert "LinkML extraction" in refused.json()["detail"]
+
 
 @pytest.mark.anyio
 async def test_unavailable_schema_returns_503_and_never_installs(
@@ -599,7 +463,7 @@ async def test_usage_reports_unavailable_schema(
     def unavailable(_section_id, _package=None):
         raise light_mode_module.SchemaUnavailable("schema environment is not set up")
 
-    monkeypatch.setattr(light_mode_module, "get_usage_for_section", unavailable)
+    monkeypatch.setattr(light_mode_module.editing, "get_usage_for_section", unavailable)
 
     resp = await client.get("/usage", params={"section_id": "pkg.section.Section"})
     assert resp.status_code == 503

@@ -8577,12 +8577,59 @@
     "nomad_simulations.schema_packages.model_method.MultireferenceCI",
     "nomad_simulations.schema_packages.model_method.MultireferencePT"
    ],
-   "name": "nomad_simulations.schema_packages.model_method"
+   "name": "nomad_simulations.schema_packages.model_method",
+   "names": {
+    "ActiveSpace": "nomad_simulations.schema_packages.model_method.ActiveSpace",
+    "ArchiveSection": "nomad.datamodel.data.ArchiveSection",
+    "AtomsState": "nomad_simulations.schema_packages.atoms_state.AtomsState",
+    "BSDFT": "nomad_simulations.schema_packages.model_method.BSDFT",
+    "BSE": "nomad_simulations.schema_packages.model_method.BSE",
+    "BaseModelMethod": "nomad_simulations.schema_packages.model_method.BaseModelMethod",
+    "BaseMultireferenceMethod": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod",
+    "BaseSpinOrbitalState": "nomad_simulations.schema_packages.atoms_state.BaseSpinOrbitalState",
+    "BrokenSymmetryCenter": "nomad_simulations.schema_packages.model_method.BrokenSymmetryCenter",
+    "CC": "nomad_simulations.schema_packages.model_method.CC",
+    "CI": "nomad_simulations.schema_packages.model_method.CI",
+    "CoreHole": "nomad_simulations.schema_packages.atoms_state.CoreHole",
+    "CoreHoleSpectra": "nomad_simulations.schema_packages.model_method.CoreHoleSpectra",
+    "DFT": "nomad_simulations.schema_packages.model_method.DFT",
+    "DMFT": "nomad_simulations.schema_packages.model_method.DMFT",
+    "ElectronicState": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
+    "EmpiricalDispersionModel": "nomad_simulations.schema_packages.model_method.EmpiricalDispersionModel",
+    "ExcitedStateMethodology": "nomad_simulations.schema_packages.model_method.ExcitedStateMethodology",
+    "GW": "nomad_simulations.schema_packages.model_method.GW",
+    "HF": "nomad_simulations.schema_packages.model_method.HF",
+    "HubbardInteractions": "nomad_simulations.schema_packages.model_method.HubbardInteractions",
+    "ImplicitSolvationModel": "nomad_simulations.schema_packages.model_method.ImplicitSolvationModel",
+    "LocalCorrelation": "nomad_simulations.schema_packages.model_method.LocalCorrelation",
+    "LocalCorrelationSpace": "nomad_simulations.schema_packages.model_method.LocalCorrelationSpace",
+    "ModelMethod": "nomad_simulations.schema_packages.model_method.ModelMethod",
+    "ModelMethodElectronic": "nomad_simulations.schema_packages.model_method.ModelMethodElectronic",
+    "ModelSystem": "nomad_simulations.schema_packages.model_system.ModelSystem",
+    "MultireferenceCI": "nomad_simulations.schema_packages.model_method.MultireferenceCI",
+    "MultireferencePT": "nomad_simulations.schema_packages.model_method.MultireferencePT",
+    "MultireferenceSCF": "nomad_simulations.schema_packages.model_method.MultireferenceSCF",
+    "NDDO": "nomad_simulations.schema_packages.model_method.NDDO",
+    "NonlocalCorrelation": "nomad_simulations.schema_packages.model_method.NonlocalCorrelation",
+    "NumericalSettings": "nomad_simulations.schema_packages.numerical_settings.NumericalSettings",
+    "OrbitalLocalization": "nomad_simulations.schema_packages.model_method.OrbitalLocalization",
+    "PerturbationMethod": "nomad_simulations.schema_packages.model_method.PerturbationMethod",
+    "Photon": "nomad_simulations.schema_packages.model_method.Photon",
+    "RelativityModel": "nomad_simulations.schema_packages.model_method.RelativityModel",
+    "Screening": "nomad_simulations.schema_packages.model_method.Screening",
+    "SelfInteractionCorrection": "nomad_simulations.schema_packages.model_method.SelfInteractionCorrection",
+    "SlaterKoster": "nomad_simulations.schema_packages.model_method.SlaterKoster",
+    "SlaterKosterBond": "nomad_simulations.schema_packages.model_method.SlaterKosterBond",
+    "SphericalSymmetryState": "nomad_simulations.schema_packages.atoms_state.SphericalSymmetryState",
+    "TB": "nomad_simulations.schema_packages.model_method.TB",
+    "TDDFT": "nomad_simulations.schema_packages.model_method.TDDFT",
+    "Wannier": "nomad_simulations.schema_packages.model_method.Wannier",
+    "XCComponent": "nomad_simulations.schema_packages.model_method.XCComponent",
+    "XCFunctional": "nomad_simulations.schema_packages.model_method.XCFunctional",
+    "xTB": "nomad_simulations.schema_packages.model_method.xTB"
+   }
   },
   {
-   "aliases": {
-    "Symmetry": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry"
-   },
    "classes": [
     "nomad.datamodel.data.ArchiveSection",
     "nomad.datamodel.metainfo.basesections.v2.System",
@@ -8598,7 +8645,23 @@
     "nomad_simulations.schema_packages.model_system.ChemicalFormula",
     "nomad_simulations.schema_packages.model_system.ModelSystem"
    ],
-   "name": "nomad_simulations.schema_packages.model_system"
+   "name": "nomad_simulations.schema_packages.model_system",
+   "names": {
+    "AlternativeRepresentation": "nomad_simulations.schema_packages.model_system.AlternativeRepresentation",
+    "ArchiveSection": "nomad.datamodel.data.ArchiveSection",
+    "AtomsState": "nomad_simulations.schema_packages.atoms_state.AtomsState",
+    "ChemicalFormula": "nomad_simulations.schema_packages.model_system.ChemicalFormula",
+    "ElectronicState": "nomad_simulations.schema_packages.atoms_state.ElectronicState",
+    "GlobalCrystalSymmetry": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
+    "GlobalSymmetry": "nomad_simulations.schema_packages.model_system.GlobalSymmetry",
+    "LocalCrystalSymmetry": "nomad_simulations.schema_packages.model_system.LocalCrystalSymmetry",
+    "LocalSymmetry": "nomad_simulations.schema_packages.model_system.LocalSymmetry",
+    "ModelSystem": "nomad_simulations.schema_packages.model_system.ModelSystem",
+    "ParticleState": "nomad_simulations.schema_packages.atoms_state.ParticleState",
+    "Representation": "nomad_simulations.schema_packages.model_system.Representation",
+    "Symmetry": "nomad_simulations.schema_packages.model_system.GlobalCrystalSymmetry",
+    "System": "nomad.datamodel.metainfo.basesections.v2.System"
+   }
   }
  ],
  "report": [],

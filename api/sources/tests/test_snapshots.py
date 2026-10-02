@@ -149,10 +149,10 @@ async def test_linkml_download_endpoint(client):
 
 @pytest.mark.anyio
 async def test_linkml_download_for_profile_without_converter(client, monkeypatch):
-    import api.sources.linkml_routes as routes
+    import api.sources.editing as editing
 
     without = dataclasses.replace(profile("bam-masterdata"), contract_script=None)
-    monkeypatch.setattr(routes, "schema_profile_for_package", lambda package: without)
+    monkeypatch.setattr(editing, "schema_profile_for_package", lambda package, *_: without)
     response = await client.get("/schema/linkml", params={"package": "bam_masterdata.datamodel.object_types"})
     assert response.status_code == 400
     assert "not available for bam-masterdata" in response.json()["detail"]

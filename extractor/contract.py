@@ -118,9 +118,9 @@ def validate_document(document: Any) -> dict[str, Any]:
         for class_index, class_id in enumerate(module["classes"]):
             if class_id not in class_ids:
                 raise ContractError(f"{path}[{class_index}]: unknown class {class_id!r}")
-        for alias, class_id in module.get("aliases", {}).items():
+        for binding, class_id in module.get("names", {}).items():
             if class_id not in module["classes"]:
-                raise ContractError(f"$.modules[{index}].aliases.{alias}: {class_id!r} is not a class of the module")
+                raise ContractError(f"$.modules[{index}].names.{binding}: {class_id!r} is not a class of the module")
     for class_id in document.get("usage", {}):
         if class_id not in class_ids:
             raise ContractError(f"$.usage: unknown class {class_id!r}")

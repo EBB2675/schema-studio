@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSelection } from "../store/selection";
-import { SUPPORTED_DTYPES, type QuantityFormData } from "./quantityShared";
+import { NOMAD_EDIT_RULES, VOCAB_TERM, dtypeNameFor, type EditRules, type QuantityFormData } from "./quantityShared";
 
 type Props = {
+  editRules?: EditRules;
   editableMode: boolean;
   blockedReason?: string | null;
   actionError?: string | null;
   clearActionError: () => void;
-  onEditQuantity: (id: string, updates: QuantityFormData) => void;
-  onRemoveQuantity: (id: string) => void;
+  onEditQuantity: (id: string, updates: QuantityFormData) => void | Promise<void>;
+  onRemoveQuantity: (id: string) => void | Promise<void>;
 };
 
 export default function QuantityEditPanel({
+  editRules = NOMAD_EDIT_RULES,
   editableMode,
   blockedReason,
   actionError,
@@ -22,8 +24,13 @@ export default function QuantityEditPanel({
   const { selected } = useSelection();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formName, setFormName] = useState("");
-  const [formDtype, setFormDtype] = useState<string>(SUPPORTED_DTYPES[0]);
+  // "" keeps the current type (also when it is not one the user can pick, like a reference).
+  const [formDtype, setFormDtype] = useState<string>("");
+  const [formRange, setFormRange] = useState("");
+  const [formMandatory, setFormMandatory] = useState(false);
   const [formDoc, setFormDoc] = useState("");
+  const isTerm = selected?.kind === "quantity" && selected.dtype === VOCAB_TERM;
+  const needsRange = editRules.dtypes.find((dtype) => dtype.name === formDtype)?.needs_range ?? false;
   const inheritedBlockedReason =
     selected?.kind === "quantity" && selected.inherited
       ? `This quantity is inherited from ${selected.inheritedFromName || selected.inheritedFromId || "a parent class"} and is read-only here.`
@@ -39,22 +46,30 @@ export default function QuantityEditPanel({
     if (selected?.kind === "quantity" && selected.owner) {
       setEditingId(selected.id);
       setFormName(selected.name);
-      setFormDtype(selected.dtype || SUPPORTED_DTYPES[0]);
+      setFormDtype(dtypeNameFor(editRules, selected.dtype));
+      setFormRange("");
+      setFormMandatory(Boolean(selected.details?.mandatory));
       setFormDoc(selected.doc || "");
     } else {
       setEditingId(null);
     }
-  }, [selected, clearActionError]);
+  }, [selected, clearActionError, editRules]);
 
   const commitEdit = () => {
     if (!editingId) return;
-    onEditQuantity(editingId, { quantityName: formName, dtype: formDtype, docstring: formDoc });
+    void onEditQuantity(editingId, {
+      quantityName: formName,
+      dtype: formDtype,
+      docstring: formDoc,
+      range: needsRange ? formRange : undefined,
+      mandatory: editRules.codes ? formMandatory : undefined,
+    });
   };
 
   const confirmRemove = () => {
     if (!editingId || !editableMode || disableActions) return;
     if (confirm("Remove this quantity from the current diagram?")) {
-      onRemoveQuantity(editingId);
+      void onRemoveQuantity(editingId);
     }
   };
 
@@ -90,24 +105,54 @@ export default function QuantityEditPanel({
               className="input"
               value={formName}
               onChange={(e) => setFormName(e.target.value)}
-              disabled={disableActions}
+              disabled={disableActions || isTerm}
+              title={isTerm ? "A vocabulary term is named by its code" : undefined}
             />
           </div>
 
-          <div>
-            <label className="label" htmlFor="edit-dtype">Type</label>
-            <select
-              id="edit-dtype"
-              className="select"
-              value={formDtype}
-              onChange={(e) => setFormDtype(e.target.value)}
-              disabled={disableActions}
-            >
-              {SUPPORTED_DTYPES.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
+          {isTerm ? null : (
+            <div>
+              <label className="label" htmlFor="edit-dtype">Type</label>
+              <select
+                id="edit-dtype"
+                className="select"
+                value={formDtype}
+                onChange={(e) => setFormDtype(e.target.value)}
+                disabled={disableActions}
+              >
+                {formDtype === "" ? <option value="">{selected?.kind === "quantity" ? selected.dtype || "unchanged" : "unchanged"}</option> : null}
+                {editRules.dtypes.map((t) => (
+                  <option key={t.name} value={t.name}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {!isTerm && needsRange ? (
+            <div>
+              <label className="label" htmlFor="edit-range">Target (class id)</label>
+              <input
+                id="edit-range"
+                className="input"
+                value={formRange}
+                onChange={(e) => setFormRange(e.target.value)}
+                placeholder={formDtype === "CONTROLLEDVOCABULARY" ? "vocabulary class" : "object type class"}
+                disabled={disableActions}
+              />
+            </div>
+          ) : null}
+
+          {editRules.codes && !isTerm ? (
+            <label className="row" style={{ alignItems: "center", gap: 6, fontSize: 13 }}>
+              <input
+                type="checkbox"
+                checked={formMandatory}
+                onChange={(e) => setFormMandatory(e.target.checked)}
+                disabled={disableActions}
+              />
+              Mandatory
+            </label>
+          ) : null}
 
           <div>
             <label className="label" htmlFor="edit-doc">Docstring</label>

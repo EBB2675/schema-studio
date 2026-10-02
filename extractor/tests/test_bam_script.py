@@ -296,7 +296,8 @@ def test_document_follows_the_contract(fake_environment, package_root):
     none_term = enums[f"{VOCABULARIES}.DeviceStatus.terms"]["values"][1]
     assert none_term == {"value": "NONE", "title": "None", "annotations": {"python_name": "term_none"}}
     modules = {module["name"]: module for module in document["modules"]}
-    assert modules[OBJECTS]["aliases"] == {"Instrument": f"{OBJECTS}.Device"}
+    # Every module-level name of an entity, its own name and other ones (`Instrument = Device`).
+    assert modules[OBJECTS]["names"]["Instrument"] == modules[OBJECTS]["names"]["Device"] == f"{OBJECTS}.Device"
     assert f"{NS}.lab.object_types" in modules
     assert document["source"]["module"] == NS
 

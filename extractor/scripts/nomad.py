@@ -7,8 +7,9 @@ df3839b. Changes from that file:
   the distribution and the modules to read are arguments, and modules can be
   found through NOMAD schema entry points or by walking a package;
 - several modules in one run, each listed under `modules` with the classes it
-  exposes at module level, in module order, and the other names it binds
-  them to (`aliases`, for example `Symmetry = GlobalCrystalSymmetry`);
+  exposes at module level, in module order, and every module-level name bound
+  to one of them (`names`, name -> class id; for example both `Symmetry` and
+  `GlobalCrystalSymmetry` after `Symmetry = GlobalCrystalSymmetry`);
 - `effective_attributes` keep NOMAD's order (inherited members first, then in
   declaration order) instead of being sorted by name, because the graph
   follows that order;
@@ -350,7 +351,7 @@ def extract(
     visited: set[str] = set()
     definitions: dict[str, Any] = {}
     exposed: dict[str, list[str]] = {}
-    aliases: dict[str, dict[str, str]] = {}
+    names: dict[str, dict[str, str]] = {}
 
     def warn(path: str, reason: str, status: str = "skipped") -> None:
         report.append({"path": path, "status": status, "reason": reason})
@@ -373,10 +374,10 @@ def extract(
             continue
         exposed[module.__name__] = [identifier(cls) for cls in sections]
         if not roots:
-            # Names the app offers as roots, besides each class's own name.
-            aliases[module.__name__] = {
+            # The names the app offers as roots: every name the module binds to a section.
+            names[module.__name__] = {
                 name: identifier(value) for name, value in vars(module).items()
-                if any(value is cls for cls in sections) and name != value.__name__
+                if any(value is cls for cls in sections)
             }
         for cls in sections:
             pending.append((identifier(cls), cls))
@@ -554,8 +555,8 @@ def extract(
         "source": source,
         "modules": [
             {"name": name, "classes": list(dict.fromkeys(cid for cid in ids if cid in classes)),
-             **({"aliases": found} if (found := {
-                 alias: cid for alias, cid in aliases.get(name, {}).items() if cid in classes
+             **({"names": found} if (found := {
+                 binding: cid for binding, cid in names.get(name, {}).items() if cid in classes
              }) else {})}
             for name, ids in sorted(exposed.items())
         ],

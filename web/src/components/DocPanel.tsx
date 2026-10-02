@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import QuantityEditPanel from "./QuantityEditPanel";
+import type { EditRules, QuantityFormData } from "./quantityShared";
 import { useSelection, type QtyMeta, type Selected } from "../store/selection";
 import type { NodeDetails } from "../types/api";
 
@@ -7,8 +8,9 @@ type Props = {
   editableMode: boolean;
   blockedReason?: string | null;
   actionError?: string | null;
-  onRemoveQuantity: (id: string) => void;
-  onEditQuantity: (id: string, updates: { quantityName: string; dtype: string; docstring: string }) => void;
+  onRemoveQuantity: (id: string) => void | Promise<void>;
+  onEditQuantity: (id: string, updates: QuantityFormData) => void | Promise<void>;
+  editRules?: EditRules;
   onEditClass: (id: string, updates: { docstring: string }) => void | Promise<void>;
   clearActionError: () => void;
 };
@@ -115,6 +117,7 @@ export default function DocPanel({
   blockedReason,
   actionError,
   clearActionError,
+  editRules,
 }: Props) {
   const { selected, setSelected } = useSelection();
   const [classContext, setClassContext] = useState<Selected | null>(null);
@@ -316,6 +319,7 @@ export default function DocPanel({
               </div>
             ) : null}
             <QuantityEditPanel
+              editRules={editRules}
               editableMode={editableMode}
               blockedReason={blockedReason}
               actionError={actionError}
