@@ -153,9 +153,11 @@ def _present(**fields: Any) -> dict[str, Any]:
 
 
 def _class_details(cls: Mapping[str, Any]) -> dict[str, Any]:
-    """openBIS facts of a bam-masterdata class (none for NOMAD classes)."""
-    if annotation(cls, "source_entity_code") is None:
-        return {}
+    """openBIS facts of a bam-masterdata class, each only when stated (none for NOMAD classes).
+
+    A class without its own definition has no code but can still have a
+    German description, inherited from its base's definition.
+    """
     source = _json_annotation(cls, "source_annotations") or {}
     return _present(code=annotation(cls, "source_entity_code"), iri=source.get("iri"),
                     doc_de=annotation(cls, "description_de"))

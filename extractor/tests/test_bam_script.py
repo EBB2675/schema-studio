@@ -162,6 +162,13 @@ class Sensor(Device):
     )
 
 
+class Probe(BaseEntity):
+    # No definition of its own either: its description comes from BaseEntity's.
+    depth = PropertyTypeAssignment(
+        code="DEPTH", data_type=DataType.REAL, property_label="Depth", description="Depth", mandatory=False,
+    )
+
+
 Instrument = Device
 ''',
     "bam_masterdata/datamodel/vocabulary_types.py": '''
@@ -291,6 +298,16 @@ def test_document_follows_the_contract(fake_environment, package_root):
     modules = {module["name"]: module for module in document["modules"]}
     assert modules[OBJECTS]["aliases"] == {"Instrument": f"{OBJECTS}.Device"}
     assert f"{NS}.lab.object_types" in modules
+    assert document["source"]["module"] == NS
+
+
+def test_single_module_document_is_named_after_the_module(fake_environment, package_root):
+    from api.sources.to_linkml import convert_bam
+
+    document = extract(fake_environment, package_root, "--module", OBJECTS)
+    assert document["source"]["module"] == OBJECTS
+    schema = convert_bam(document).schema
+    assert (schema["name"], schema["id"].rpartition("/")[2]) == (OBJECTS, OBJECTS)
 
 
 def test_ambiguous_vocabulary_code_resolves_within_the_package(fake_environment, package_root):
@@ -380,3 +397,7 @@ def test_openbis_facts_reach_the_nodes(fake_environment, package_root):
     assert nodes[f"{device}.length"]["unit"] == "mm"
     assert nodes[f"{device}.base_value"]["section"] == "General"
     assert nodes[f"{device}.base_value"]["mandatory"] is False
+
+    # A class without its own definition: no code, but the German half of the inherited description.
+    probe = {node["id"]: node for node in linkml_graph(document, OBJECTS, root="Probe")["nodes"]}[f"{OBJECTS}.Probe"]
+    assert (probe["doc"], probe["doc_de"], probe.get("code")) == ("Base entity", "Basisobjekt", None)

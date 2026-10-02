@@ -1416,7 +1416,7 @@
    "pint": "0.26.1",
    "pydantic": "2.13.5"
   },
-  "module": "bam_masterdata.datamodel",
+  "module": "bam_masterdata.datamodel.object_types",
   "name": "bam-masterdata",
   "version": "0.14.0"
  }

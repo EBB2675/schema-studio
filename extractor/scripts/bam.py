@@ -528,11 +528,22 @@ def source_facts(dist: str, module: str, *, from_installed: bool) -> dict[str, A
     return source
 
 
+def _common_package(names: list[str]) -> str:
+    """The package the modules have in common: the module itself when there is one."""
+    parts = [name.split(".") for name in names]
+    common = []
+    for level in zip(*parts):
+        if len(set(level)) != 1:
+            break
+        common.append(level[0])
+    return ".".join(common) or names[0]
+
+
 def run(args: argparse.Namespace) -> dict[str, Any]:
     report: list[dict[str, str]] = []
     if args.module:
         module_names = sorted(set(args.module))
-        base = args.base or DATAMODEL
+        base = args.base or _common_package(module_names)
         modules = [importlib.import_module(name) for name in module_names]
     else:
         if not args.base:
