@@ -544,3 +544,11 @@ async def test_usage_reports_unavailable_schema(
     resp = await client.get("/usage", params={"section_id": "pkg.section.Section"})
     assert resp.status_code == 503
     assert "not set up" in resp.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_an_unknown_root_is_a_clear_request_error(client: httpx.AsyncClient):
+    # For example a root left over from the module shown before.
+    resp = await client.get("/schema", params={"package": "pkg.default", "root": "Outdoor"})
+    assert resp.status_code == 400
+    assert "Root section 'Outdoor' not found in pkg.default" in resp.json()["detail"]

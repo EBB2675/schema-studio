@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from .light_mode.schema_source import SchemaUnavailable, schema_profile_for_package
 from .sources import editing
+from .sources.legacy import ExtractionFailed, UnknownRoot
 from .sources.legacy import root_namespace as _root_namespace
 from .sources.linkml_routes import edit_error, linkml_download, linkml_report
 
@@ -79,6 +80,16 @@ app.include_router(tasks_router)
 @app.exception_handler(SchemaUnavailable)
 async def _schema_unavailable_handler(_request, exc: SchemaUnavailable):
     return ORJSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+@app.exception_handler(UnknownRoot)
+async def _unknown_root_handler(_request, exc: UnknownRoot):
+    return ORJSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(ExtractionFailed)
+async def _extraction_failed_handler(_request, exc: ExtractionFailed):
+    return ORJSONResponse(status_code=500, content={"detail": str(exc)})
 
 
 @app.post("/auth/login")

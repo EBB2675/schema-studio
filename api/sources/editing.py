@@ -35,7 +35,7 @@ from .extraction import DEFAULT_EXTRACTOR
 from .extraction import build_graph as extracted_graph
 from .extraction import extraction_mode, get_usage_for_section
 from .extraction import list_sections as extracted_sections
-from .legacy import ExtractionFailed, UsageEntry
+from .legacy import UnknownRoot, UsageEntry
 from .linkml_yaml import dump_yaml
 from .snapshots import get_snapshot, snapshot_yaml
 
@@ -182,7 +182,7 @@ def build_graph(
         try:
             result = graph.build_graph(state.schema, _module_view(state, package, empty), package, **flags)
         except graph.RootNotFound as exc:
-            raise ExtractionFailed(f"ValueError: {exc}") from exc
+            raise UnknownRoot(f"ValueError: {exc}") from exc
         result["root"] = root
         applied, conflicts = state.applied, state.conflicts
     if applied:

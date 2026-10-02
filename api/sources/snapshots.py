@@ -17,6 +17,7 @@ import os
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+import threading
 from threading import Lock
 from typing import Any
 
@@ -42,6 +43,8 @@ _SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "extractor" / "scripts"
 _MEMORY: dict[Path, dict[str, Any]] = {}
 _MEMORY_LIMIT = 8
 _LOCK = Lock()
+# One lock per snapshot file: parallel requests for the same snapshot wait for one extraction.
+_PATH_LOCKS: dict[Path, Lock] = {}
 
 
 class LinkMLUnavailable(RuntimeError):
@@ -179,6 +182,15 @@ def get_snapshot(
     fingerprint = converter_fingerprint()
     extractor = extractor_fingerprint()
     with _LOCK:
+        path_lock = _PATH_LOCKS.setdefault(path, Lock())
+    with path_lock:
+        return _load_or_make(profile, scope, path, fingerprint, extractor, source_root)
+
+
+def _load_or_make(
+    profile: SchemaProfile, scope: str, path: Path, fingerprint: str, extractor: str, source_root: Path | None,
+) -> dict[str, Any]:
+    with _LOCK:
         cached = _MEMORY.get(path)
         if cached is not None and cached.get("converter") == fingerprint and cached.get("extractor") == extractor:
             return cached
@@ -196,7 +208,7 @@ def get_snapshot(
         snapshot = make_snapshot(profile, scope, document)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = path.with_suffix(f".{os.getpid()}.tmp")
+            tmp = path.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
             tmp.write_text(json.dumps(snapshot, ensure_ascii=False), encoding="utf-8")
             tmp.replace(path)
         except OSError:

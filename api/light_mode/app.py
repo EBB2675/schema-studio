@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from ..sources import editing
 from ..sources.extraction import list_schema_modules
+from ..sources.legacy import ExtractionFailed, UnknownRoot
 from ..sources.legacy import root_namespace as _root_namespace
 from ..sources.linkml_routes import edit_error, linkml_download, linkml_report
 from ..sources.snapshots import supports_linkml
@@ -115,6 +116,17 @@ app.add_middleware(
 @app.exception_handler(SchemaUnavailable)
 async def _schema_unavailable_handler(_request, exc: SchemaUnavailable):
     return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+@app.exception_handler(UnknownRoot)
+async def _unknown_root_handler(_request, exc: UnknownRoot):
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(ExtractionFailed)
+async def _extraction_failed_handler(_request, exc: ExtractionFailed):
+    # A JSON answer the web app can show, instead of a bare server error.
+    return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 
 # ---------- helpers ----------
