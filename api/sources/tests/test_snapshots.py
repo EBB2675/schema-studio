@@ -149,10 +149,10 @@ async def test_linkml_download_endpoint(client):
 
 @pytest.mark.anyio
 async def test_linkml_download_for_profile_without_converter(client, monkeypatch):
-    import api.sources.linkml_routes as routes
+    import api.sources.editing as editing
 
     without = dataclasses.replace(profile("bam-masterdata"), contract_script=None)
-    monkeypatch.setattr(routes, "schema_profile_for_package", lambda package: without)
+    monkeypatch.setattr(editing, "schema_profile_for_package", lambda package, *_: without)
     response = await client.get("/schema/linkml", params={"package": "bam_masterdata.datamodel.object_types"})
     assert response.status_code == 400
     assert "not available for bam-masterdata" in response.json()["detail"]
@@ -180,3 +180,37 @@ async def test_profiles_say_which_ones_export_linkml(client):
     assert {entry["key"]: entry["capabilities"] for entry in profiles} == {
         "nomad-simulations": ["methods", "usage"], "nomad-measurements": ["methods", "usage"], "bam-masterdata": [],
     }
+
+
+def test_parallel_requests_extract_a_snapshot_once(studio_home, monkeypatch):
+    import threading
+    import time
+
+    from api.sources import snapshots
+
+    calls = []
+
+    def slow_extract(profile, scope, source_root=None):
+        calls.append(scope)
+        time.sleep(0.2)
+        return load_fixture("bam-masterdata")
+
+    monkeypatch.setattr(snapshots, "_extract", slow_extract)
+    monkeypatch.setattr(snapshots, "current_schema_info", lambda _profile: type("Info", (), {"version": "v1"})())
+    results, errors = [], []
+
+    def fetch():
+        try:
+            results.append(snapshots.get_snapshot(profile("bam-masterdata"), "bam_masterdata.datamodel.object_types"))
+        except Exception as error:  # pragma: no cover - reported below
+            errors.append(error)
+
+    threads = [threading.Thread(target=fetch) for _ in range(5)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert errors == [] and len(results) == 5
+    assert calls == ["bam_masterdata.datamodel.object_types"]
+    assert len(list((studio_home / "cache" / "snapshots").rglob("*.json"))) == 1
+    assert list((studio_home / "cache" / "snapshots").rglob("*.tmp")) == []

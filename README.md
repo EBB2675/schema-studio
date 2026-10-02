@@ -224,8 +224,8 @@ Core endpoints:
 - `GET /health`
 - `GET /workspace`, `PUT /workspace`
 - `GET /roots`, `GET /schema`, `GET /overview`, `GET /usage`
-- `POST /schema/custom-class`, `POST /schema/custom-quantity`
-- `DELETE /schema/custom-edits`, `DELETE /schema/custom-edit`
+- `GET /schema/edits`, `POST /schema/edits`, `DELETE /schema/edits`, `DELETE /schema/edits/{id}`
+- `GET /schema/linkml` (with the module's edits unless `edits=false`), `GET /schema/linkml/report`
 - `GET /schema/version`, `POST /schema/update`, `POST /send-design`
 - `GET /git/packages` (fixed branch behavior)
 

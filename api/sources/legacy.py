@@ -41,6 +41,10 @@ class ExtractionFailed(RuntimeError):
     """The extraction script reported an error that is not an import problem."""
 
 
+class UnknownRoot(ExtractionFailed):
+    """The requested root is not a class the module offers (a request error, not a failure)."""
+
+
 @dataclass(frozen=True)
 class UsageEntry:
     """One "under the hood" code path acting on a section (see extractor/scripts/usage_index.py)."""

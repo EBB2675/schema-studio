@@ -24,9 +24,13 @@ browser. The graph follows the conventions of `extractor/graph_builder.py`:
 - the query flags of the graph endpoints are applied here, with the same
   traversal, depth and size limits as the graph builder.
 
-The extraction document of the snapshot supplies what LinkML does not hold:
-the classes each module exposes (the starting points of a graph) and the
-public methods of each class.
+The current schema, edits included, decides which classes exist and what
+they hold. The extraction document of the snapshot only supplies what LinkML
+does not hold: the order of the classes each module exposes and the names it
+binds them to (the starting points and roots of a graph), and the public
+methods of each class. A class an edit renamed keeps its source id in the
+annotation `source_class`, so it keeps its module bindings and methods; a
+class an edit added (`edit_added`) is a starting point of its own module.
 """
 from __future__ import annotations
 
@@ -185,20 +189,60 @@ def _methods(record: Mapping[str, Any] | None, base_namespace: str) -> list[str]
     return sorted(names) or None
 
 
-def module_classes(extraction: Mapping[str, Any], package: str) -> list[str]:
-    """The classes a module exposes, in module order: the starting points of its graph."""
+def _module_record(extraction: Mapping[str, Any], package: str) -> Mapping[str, Any]:
     for module in extraction.get("modules") or ():
         if module["name"] == package:
-            return list(module["classes"])
-    return []
-
-
-def module_aliases(extraction: Mapping[str, Any], package: str) -> dict[str, str]:
-    """Other module-level names of the module's classes (`Symmetry = GlobalCrystalSymmetry`)."""
-    for module in extraction.get("modules") or ():
-        if module["name"] == package:
-            return dict(module.get("aliases") or {})
+            return module
     return {}
+
+
+def source_class_id(name: str, cls: Mapping[str, Any]) -> str:
+    """The id a class has in the extraction document: its own, or the one it had before an edit renamed it."""
+    return annotation(cls, "source_class") or name
+
+
+def _current_names(classes: Mapping[str, Mapping[str, Any]]) -> dict[str, str]:
+    """Extraction class id -> current class name, for every class of the schema."""
+    current = {name: name for name in classes}
+    for name, cls in classes.items():
+        original = annotation(cls, "source_class")
+        if original:
+            # The renamed class answers to its old id, even if a new class took that name.
+            current[original] = name
+    return current
+
+
+def entry_points(schema: Mapping[str, Any], extraction: Mapping[str, Any], package: str) -> tuple[list[str], dict[str, str]]:
+    """The classes a module's graph starts from, in module order, and the root names it offers (name -> class).
+
+    Both follow the current schema: a removed class is gone, a renamed one is
+    offered under its new name (an alias keeps its own name), and a class an
+    edit added to this module is offered under its name.
+    """
+    classes: Mapping[str, Mapping[str, Any]] = schema.get("classes") or {}
+    current = _current_names(classes)
+    module = _module_record(extraction, package)
+    starts: list[str] = []
+    offered: dict[str, str] = {}
+    for class_id in module.get("classes") or ():
+        name = current.get(class_id)
+        if name in classes and name not in starts:
+            starts.append(name)
+    bindings = module.get("names")
+    if bindings is None:
+        bindings = {class_id.rpartition(".")[2]: class_id for class_id in module.get("classes") or ()}
+    for binding, class_id in bindings.items():
+        name = current.get(class_id)
+        if name not in classes:
+            continue
+        # The class's own name follows a rename; any other name stays as the module binds it.
+        own = binding == class_id.rpartition(".")[2]
+        offered[_title(name, classes[name]) if own else binding] = name
+    for name, cls in classes.items():
+        if annotation(cls, "edit_added") == "true" and class_module(name, cls) == package and name not in starts:
+            starts.append(name)
+            offered.setdefault(_title(name, cls), name)
+    return starts, offered
 
 
 def _title(name: str, cls: Mapping[str, Any]) -> str:
@@ -209,13 +253,10 @@ def section_names(schema: Mapping[str, Any], extraction: Mapping[str, Any], pack
     """Names of the classes a module exposes that belong to its namespace: the roots it offers."""
     classes = schema.get("classes") or {}
     namespace = root_namespace(package)
-
-    def inside(name: str) -> bool:
-        return name in classes and class_module(name, classes[name]).startswith(namespace)
-
-    names = {_title(name, classes[name]) for name in module_classes(extraction, package) if inside(name)}
-    names.update(alias for alias, name in module_aliases(extraction, package).items() if inside(name))
-    return sorted(names)
+    _, offered = entry_points(schema, extraction, package)
+    return sorted(
+        root for root, name in offered.items() if class_module(name, classes[name]).startswith(namespace)
+    )
 
 
 def schema_modules(schema: Mapping[str, Any], extraction: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -280,7 +321,8 @@ def build_graph(
         nodes[name] = {
             "id": name, "kind": "section", "label": _title(name, cls),
             "doc": cls.get("description"), "module": module, "dtype": None, "shape": None, "card": None,
-            "owner": None, "methods": _methods(records.get(name), base_namespace), **_class_details(cls),
+            "owner": None, "methods": _methods(records.get(source_class_id(name, cls)), base_namespace),
+            **_class_details(cls),
         }
         if len(nodes) > max_nodes:
             return
@@ -336,14 +378,16 @@ def build_graph(
                 if len(nodes) > max_nodes:
                     return
 
-    starts = [name for name in module_classes(extraction, package) if name in classes]
+    starts, offered = entry_points(schema, extraction, package)
     if root:
-        aliases = {alias: name for alias, name in module_aliases(extraction, package).items() if name in classes}
-        matches = [aliases[root]] if root in aliases else [name for name in starts if _title(name, classes[name]) == root]
-        if not matches:
-            available = ", ".join(sorted({_title(name, classes[name]) for name in starts} | set(aliases))[:25])
+        if root not in offered:
+            available = ", ".join(sorted(offered)[:25])
             raise RootNotFound(f"Root section '{root}' not found in {package}. Available (first 25): {available}")
-        add_section(matches[0], 0)
+        add_section(offered[root], 0)
+        # Classes the edits added to this module are drawn too, so new work stays on the canvas.
+        for name in starts:
+            if annotation(classes[name], "edit_added") == "true":
+                add_section(name, 0)
     else:
         for name in starts:
             add_section(name, 0)

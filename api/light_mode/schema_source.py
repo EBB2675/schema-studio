@@ -54,6 +54,9 @@ class SchemaProfile:
     # What the source offers besides the schema: "usage" (the code that acts on
     # a class, shown under the hood) and "methods" (public methods on classes).
     capabilities: frozenset[str] = frozenset()
+    # Which edits the schema allows and how new elements are described: a rule
+    # set of `api/sources/edits.py` ("nomad" or "bam-masterdata").
+    edit_rules: str = "nomad"
 
     @property
     def environment(self) -> ExtractorEnvironment:
@@ -125,6 +128,7 @@ SCHEMA_PROFILES: dict[str, SchemaProfile] = {
         discovery=("walk",),
         linkml_prefix="bammd",
         contract_script=BAM_SCRIPT,
+        edit_rules="bam-masterdata",
     ),
 }
 DEFAULT_PROFILE_KEY = "nomad-simulations"

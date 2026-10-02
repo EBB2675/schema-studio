@@ -318,7 +318,15 @@ def test_a_module_becomes_a_valid_document(fake_environment, source_root):
         "fakeschema.measurement.Plot",
         "fakeschema.measurement.Result",
         "fakeschema.measurement.Measurement",
-    ], "aliases": {"Specimen": "fakeschema.measurement.Sample"}}]
+    ], "names": {
+        # Every module-level name of a section: its own names and `Specimen = Sample`.
+        "Entity": "fakeschema.base.Entity",
+        "Measurement": "fakeschema.measurement.Measurement",
+        "Plot": "fakeschema.measurement.Plot",
+        "Result": "fakeschema.measurement.Result",
+        "Sample": "fakeschema.measurement.Sample",
+        "Specimen": "fakeschema.measurement.Sample",
+    }}]
     measurement = _classes(document)["fakeschema.measurement.Measurement"]
     assert measurement["bases"] == ["fakeschema.base.Entity", "fakeschema.measurement.Plot"]
     # NOMAD's order: quantities, then subsections; inherited ones first.

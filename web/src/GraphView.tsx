@@ -4,7 +4,7 @@ import elk from "elkjs/lib/elk.bundled.js";
 import cytoscapeElk from "cytoscape-elk";
 import type { Core, ElementDefinition } from "cytoscape";
 import { useSelection, type QtyMeta, type QtySnapshot } from "./store/selection";
-import { SUPPORTED_DTYPES } from "./components/quantityShared";
+import { NOMAD_EDIT_RULES, VOCAB_TERM, type EditRules, type QuantityFormData } from "./components/quantityShared";
 import type { ApiEdge, ApiNode } from "./types/api";
 import type { QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
 import { fqidFromParts } from "./utils/identifier";
@@ -48,12 +48,14 @@ type Props = {
   pinnedClassIds?: string[];
   selectedClassId?: string | null;
   onSelectClass?: (cls: UmlClassNode) => void;
-  onCreateQuantity?: (classId: string, data: { quantityName: string; dtype: string; docstring: string }) => Promise<void>;
+  onCreateQuantity?: (classId: string, data: QuantityFormData) => Promise<void>;
   onCreateClass?: (data: { name: string; parentId?: string | null; docstring?: string; relation?: "inherits" | "hasSubSection"; card?: string }) => Promise<void>;
   creatingQuantityFor?: string | null;
   creatingClass?: boolean;
   onClearSelection?: () => void;
   editableMode?: boolean;
+  // What the schema lets the user add (types; bam-masterdata codes).
+  editRules?: EditRules;
 };
 
 const cleanType = (t?: string | null) => {
@@ -151,7 +153,8 @@ export default function GraphView({
   creatingQuantityFor,
   creatingClass,
   onClearSelection,
-  editableMode = false
+  editableMode = false,
+  editRules = NOMAD_EDIT_RULES,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
@@ -163,11 +166,11 @@ export default function GraphView({
   });
   const [activeQuantityTarget, setActiveQuantityTarget] = useState<string | null>(null);
   const dragRef = useRef<{ id: string; startX: number; startY: number; nodeX: number; nodeY: number } | null>(null);
-  const [quantityDraft, setQuantityDraft] = useState<{ quantityName: string; dtype: string; docstring: string }>({
-    quantityName: "",
-    dtype: SUPPORTED_DTYPES[0],
-    docstring: "",
-  });
+  const emptyQuantityDraft = useMemo<Required<QuantityFormData>>(
+    () => ({ quantityName: "", dtype: editRules.dtypes[0]?.name ?? "", docstring: "", code: "", label: "", range: "", mandatory: false }),
+    [editRules]
+  );
+  const [quantityDraft, setQuantityDraft] = useState<Required<QuantityFormData>>(emptyQuantityDraft);
   const [showClassForm, setShowClassForm] = useState<boolean>(false);
   const [classDraft, setClassDraft] = useState<{ name: string; parentId: string; docstring: string; relation: "inherits" | "hasSubSection"; card: string }>({
     name: "",
@@ -266,41 +269,38 @@ export default function GraphView({
     (classId: string) => {
       setActiveQuantityTarget(classId);
       setInlineError(null);
-      setQuantityDraft({
-        quantityName: "",
-        dtype: SUPPORTED_DTYPES[0],
-        docstring: "",
-      });
+      setQuantityDraft(emptyQuantityDraft);
     if (classId !== selectedClassId) {
       handleSelectClass(classId);
     }
     },
-    [handleSelectClass, selectedClassId]
+    [emptyQuantityDraft, handleSelectClass, selectedClassId]
   );
 
   const handleQuantitySubmit = useCallback(
     async (cls: UmlClassNode) => {
       if (!onCreateQuantity) return;
       const trimmed = quantityDraft.quantityName.trim();
-      if (!trimmed) {
-        setInlineError("Quantity name is required");
+      if (editRules.codes ? !quantityDraft.code.trim() : !trimmed) {
+        setInlineError(editRules.codes ? "Code is required" : "Quantity name is required");
         return;
       }
       try {
         await onCreateQuantity(cls.id, {
+          ...quantityDraft,
           quantityName: trimmed,
-          dtype: quantityDraft.dtype,
+          code: quantityDraft.code.trim(),
           docstring: quantityDraft.docstring.trim(),
         });
         setInlineError(null);
         setActiveQuantityTarget(null);
-        setQuantityDraft({ quantityName: "", dtype: SUPPORTED_DTYPES[0], docstring: "" });
+        setQuantityDraft(emptyQuantityDraft);
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : "Failed to add quantity";
         setInlineError(message);
       }
     },
-    [onCreateQuantity, quantityDraft]
+    [editRules, emptyQuantityDraft, onCreateQuantity, quantityDraft]
   );
 
   const handleClassSubmit = useCallback(async () => {
@@ -1015,13 +1015,13 @@ export default function GraphView({
                     Cancel
                   </button>
                 </div>
-                <label className="label" htmlFor="new-class-name">Name</label>
+                <label className="label" htmlFor="new-class-name">{editRules.codes ? "Code" : "Name"}</label>
                 <input
                   id="new-class-name"
                   className="input"
                   value={classDraft.name}
                   onChange={(e) => setClassDraft((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g. NewSection"
+                  placeholder={editRules.codes ? "e.g. PARENT_CODE.NEW_TYPE" : "e.g. NewSection"}
                 />
                 <label className="label" htmlFor="new-class-parent">Parent class</label>
                 <select
@@ -1059,7 +1059,7 @@ export default function GraphView({
                   title={classDraft.parentId ? "Choose how this class links to its parent" : "Select a parent to set relationship"}
                 >
                   <option value="inherits">Inheritance (is-a)</option>
-                  <option value="hasSubSection">Subsection (has-a)</option>
+                  {editRules.codes ? null : <option value="hasSubSection">Subsection (has-a)</option>}
                 </select>
                 {classDraft.parentId && classDraft.relation === "hasSubSection" ? (
                   <>
@@ -1270,24 +1270,81 @@ export default function GraphView({
                   handleQuantitySubmit(inlinePortal.cls);
                 }}
               >
-                <div className="label" style={{ marginBottom: 6 }}>New quantity</div>
-                <input
-                  className="input"
-                  placeholder="name"
-                  value={quantityDraft.quantityName}
-                  onChange={(e) => setQuantityDraft((prev) => ({ ...prev, quantityName: e.target.value }))}
-                />
-                <select
-                  className="select"
-                  value={quantityDraft.dtype}
-                  onChange={(e) => setQuantityDraft((prev) => ({ ...prev, dtype: e.target.value }))}
-                >
-                  {SUPPORTED_DTYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
+                {(() => {
+                  const isVocabulary = editRules.codes && inlinePortal.cls.quantities.some((q) => q.dtype === VOCAB_TERM);
+                  const needsRange = editRules.dtypes.find((d) => d.name === quantityDraft.dtype)?.needs_range;
+                  const wantsVocabulary = quantityDraft.dtype === "CONTROLLEDVOCABULARY";
+                  const rangeChoices = (umlState?.classes ?? []).filter(
+                    (c) => c.quantities.some((q) => q.dtype === VOCAB_TERM) === wantsVocabulary
+                  );
+                  return (
+                    <>
+                      <div className="label" style={{ marginBottom: 6 }}>
+                        {isVocabulary ? "New term" : editRules.codes ? "New property" : "New quantity"}
+                      </div>
+                      {editRules.codes ? (
+                        <>
+                          <input
+                            className="input"
+                            placeholder="CODE"
+                            value={quantityDraft.code}
+                            onChange={(e) => setQuantityDraft((prev) => ({ ...prev, code: e.target.value }))}
+                          />
+                          <input
+                            className="input"
+                            placeholder="Label (optional)"
+                            value={quantityDraft.label}
+                            onChange={(e) => setQuantityDraft((prev) => ({ ...prev, label: e.target.value }))}
+                          />
+                        </>
+                      ) : (
+                        <input
+                          className="input"
+                          placeholder="name"
+                          value={quantityDraft.quantityName}
+                          onChange={(e) => setQuantityDraft((prev) => ({ ...prev, quantityName: e.target.value }))}
+                        />
+                      )}
+                      {isVocabulary ? null : (
+                        <select
+                          className="select"
+                          value={quantityDraft.dtype}
+                          onChange={(e) => setQuantityDraft((prev) => ({ ...prev, dtype: e.target.value, range: "" }))}
+                        >
+                          {editRules.dtypes.map((t) => (
+                            <option key={t.name} value={t.name}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      {!isVocabulary && needsRange ? (
+                        <select
+                          className="select"
+                          value={quantityDraft.range}
+                          onChange={(e) => setQuantityDraft((prev) => ({ ...prev, range: e.target.value }))}
+                        >
+                          <option value="">{wantsVocabulary ? "Vocabulary…" : "Object type…"}</option>
+                          {rangeChoices.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
+                      {editRules.codes && !isVocabulary ? (
+                        <label className="row" style={{ alignItems: "center", gap: 6, fontSize: 13 }}>
+                          <input
+                            type="checkbox"
+                            checked={quantityDraft.mandatory}
+                            onChange={(e) => setQuantityDraft((prev) => ({ ...prev, mandatory: e.target.checked }))}
+                          />
+                          Mandatory
+                        </label>
+                      ) : null}
+                    </>
+                  );
+                })()}
                 <textarea
                   className="input"
                   placeholder="Docstring (optional)"

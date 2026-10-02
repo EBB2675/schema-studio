@@ -3938,7 +3938,16 @@
     "nomad_measurements.general.ProcessReference",
     "nomad_measurements.general.InSituMeasurement"
    ],
-   "name": "nomad_measurements.general"
+   "name": "nomad_measurements.general",
+   "names": {
+    "Activity": "nomad.datamodel.metainfo.basesections.v1.Activity",
+    "ActivityReference": "nomad_measurements.general.ActivityReference",
+    "InSituMeasurement": "nomad_measurements.general.InSituMeasurement",
+    "Measurement": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+    "Process": "nomad.datamodel.metainfo.basesections.v1.Process",
+    "ProcessReference": "nomad_measurements.general.ProcessReference",
+    "SectionReference": "nomad.datamodel.metainfo.basesections.v1.SectionReference"
+   }
   },
   {
    "classes": [
@@ -3980,7 +3989,46 @@
     "nomad_measurements.transmission.schema.ELNUVVisNirTransmission",
     "nomad_measurements.transmission.schema.RawFileTransmissionData"
    ],
-   "name": "nomad_measurements.transmission.schema"
+   "name": "nomad_measurements.transmission.schema",
+   "names": {
+    "Accessory": "nomad_measurements.transmission.schema.Accessory",
+    "Aperture": "nomad_measurements.transmission.schema.Aperture",
+    "ArchiveSection": "nomad.datamodel.data.ArchiveSection",
+    "AttenuatorSettings": "nomad_measurements.transmission.schema.AttenuatorSettings",
+    "CompositeSystem": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem",
+    "CompositeSystemReference": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference",
+    "CrystallographicTransmissionSampleReference": "nomad_measurements.transmission.schema.CrystallographicTransmissionSampleReference",
+    "Detector": "nomad_measurements.transmission.schema.Detector",
+    "DetectorGain": "nomad_measurements.transmission.schema.DetectorGain",
+    "DetectorIntegrationTime": "nomad_measurements.transmission.schema.DetectorIntegrationTime",
+    "DetectorSettings": "nomad_measurements.transmission.schema.DetectorSettings",
+    "ELNUVVisNirTransmission": "nomad_measurements.transmission.schema.ELNUVVisNirTransmission",
+    "Entity": "nomad.datamodel.metainfo.basesections.v1.Entity",
+    "EntryData": "nomad.datamodel.data.EntryData",
+    "GratingMonochromator": "nomad_measurements.transmission.schema.GratingMonochromator",
+    "Instrument": "nomad.datamodel.metainfo.basesections.v1.Instrument",
+    "InstrumentReference": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference",
+    "Lamp": "nomad_measurements.transmission.schema.Lamp",
+    "LampSettings": "nomad_measurements.transmission.schema.LampSettings",
+    "LightSource": "nomad_measurements.transmission.schema.LightSource",
+    "Measurement": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+    "MeasurementResult": "nomad.datamodel.metainfo.basesections.v1.MeasurementResult",
+    "Monochromator": "nomad_measurements.transmission.schema.Monochromator",
+    "MonochromatorSettings": "nomad_measurements.transmission.schema.MonochromatorSettings",
+    "MonochromatorSlitWidth": "nomad_measurements.transmission.schema.MonochromatorSlitWidth",
+    "PerkinElmersLambdaSpectrophotometer": "nomad_measurements.transmission.schema.PerkinElmersLambdaSpectrophotometer",
+    "PlotSection": "nomad.datamodel.metainfo.plot.PlotSection",
+    "PlotlyFigure": "nomad.datamodel.metainfo.plot.PlotlyFigure",
+    "PolDepol": "nomad_measurements.transmission.schema.PolDepol",
+    "RawFileTransmissionData": "nomad_measurements.transmission.schema.RawFileTransmissionData",
+    "ReadableIdentifiers": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
+    "SettingOverWavelengthRange": "nomad_measurements.transmission.schema.SettingOverWavelengthRange",
+    "Spectrophotometer": "nomad_measurements.transmission.schema.Spectrophotometer",
+    "TransmissionSampleReference": "nomad_measurements.transmission.schema.TransmissionSampleReference",
+    "UVVisNirTransmission": "nomad_measurements.transmission.schema.UVVisNirTransmission",
+    "UVVisNirTransmissionResult": "nomad_measurements.transmission.schema.UVVisNirTransmissionResult",
+    "UVVisNirTransmissionSettings": "nomad_measurements.transmission.schema.UVVisNirTransmissionSettings"
+   }
   }
  ],
  "report": [

@@ -11,22 +11,20 @@ import logging
 import mimetypes
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from ..custom_graph_edits import (
-    attach_custom_class as _attach_custom_class_impl,
-    attach_custom_quantity as _attach_custom_quantity_impl,
-)
-from ..sources.extraction import build_graph, get_usage_for_section, list_schema_modules, list_sections
+from ..sources import editing
+from ..sources.extraction import list_schema_modules
+from ..sources.legacy import ExtractionFailed, UnknownRoot
 from ..sources.legacy import root_namespace as _root_namespace
-from ..sources.linkml_routes import linkml_download, linkml_report
+from ..sources.linkml_routes import edit_error, linkml_download, linkml_report
 from ..sources.snapshots import supports_linkml
 from .schema_source import (
     DEFAULT_BASE_NAMESPACE as LIGHT_DEFAULT_BASE_NS,
@@ -40,7 +38,7 @@ from .schema_source import (
     schema_profile_for_package,
     update_schema,
 )
-from .store import LocalStore, Workspace, PersistedEdit, config_db_path
+from .store import LocalStore, Workspace, config_db_path
 
 LIGHT_MODE_USER = "local"
 APP_VERSION = os.getenv("SCHEMA_STUDIO_VERSION", "light")
@@ -76,54 +74,34 @@ ASSET_MEDIA_TYPES = {
     ".woff2": "font/woff2",
 }
 
-# Keep this list in sync with web/src/components/quantityShared.ts.
-SUPPORTED_CUSTOM_DTYPES = {
-    "bool",
-    "str",
-    "datetime",
-    "int",
-    "float",
-    "int32",
-    "int64",
-    "np.int32",
-    "np.int64",
-    "float32",
-    "float64",
-    "np.float32",
-    "np.float64",
-}
-
-
 class WorkspaceUpdate(BaseModel):
     branch: str | None = None
     package: str | None = None
     base_namespace: str | None = None
 
 
-class CustomClassRequest(BaseModel):
-    package: str
-    name: str
-    parent: str | None = None
-    relation: Literal["inherits", "hasSubSection"] = "inherits"
-    card: str | None = None
-    docstring: str | None = None
-    update_existing: bool = False
+class EditRequest(BaseModel):
+    op: str
+    target: str = ""
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
-class CustomQuantityRequest(BaseModel):
-    package: str
-    class_name: str
-    quantity_name: str
-    dtype: str = "str"
-    docstring: str | None = None
-    parent_name: str | None = None
-    parent_relation: str | None = None
+class EditsRequest(BaseModel):
+    package: str | None = None
+    edits: list[EditRequest]
+
+
+class EditIds(BaseModel):
+    ids: list[int] = Field(default_factory=list)
 
 
 # Prepare persistence
 store = LocalStore(
     db_path=config_db_path(),
-    defaults=Workspace(branch=LIGHT_DEFAULT_BRANCH, package=DEFAULT_PACKAGE, base_namespace=DEFAULT_BASE_NS),
+    defaults=Workspace(
+        branch=LIGHT_DEFAULT_BRANCH, package=DEFAULT_PACKAGE, base_namespace=DEFAULT_BASE_NS,
+        profile=schema_profile_for_package(DEFAULT_PACKAGE, DEFAULT_BASE_NS).key,
+    ),
 )
 
 app = FastAPI(title="Schema Studio – Light Mode", default_response_class=JSONResponse)
@@ -140,31 +118,23 @@ async def _schema_unavailable_handler(_request, exc: SchemaUnavailable):
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
+@app.exception_handler(UnknownRoot)
+async def _unknown_root_handler(_request, exc: UnknownRoot):
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(ExtractionFailed)
+async def _extraction_failed_handler(_request, exc: ExtractionFailed):
+    # A JSON answer the web app can show, instead of a bare server error.
+    return JSONResponse(status_code=500, content={"detail": str(exc)})
+
+
 # ---------- helpers ----------
-
-
-def _serialize_edit(edit: PersistedEdit) -> dict:
-    return {
-        "id": edit.edit_id,
-        "user_id": edit.user_id,
-        "branch": edit.branch,
-        "package": edit.package,
-        "class_name": edit.class_name,
-        "quantity_name": edit.quantity_name,
-        "dtype": edit.dtype,
-        "docstring": edit.docstring,
-        "parent_name": edit.parent_name,
-        "parent_relation": edit.parent_relation,
-        "card": edit.card,
-        "edit_type": edit.edit_type,
-        "base_sha": edit.base_sha,
-        "created_at": edit.created_at,
-        "updated_at": edit.updated_at,
-    }
 
 
 def _workspace_payload(ws: Workspace) -> dict:
     return {
+        "profile": ws.profile,
         "branch": ws.branch,
         "package": ws.package,
         "base_namespace": ws.base_namespace,
@@ -191,10 +161,24 @@ def _enforce_light_branch(branch: str | None, *, package: str | None, base_names
 
 def _workspace() -> Workspace:
     ws = store.get_workspace()
-    expected = _expected_light_branch(package=ws.package, base_namespace=ws.base_namespace)
-    if ws.branch != expected:
-        ws = store.update_workspace(branch=expected)
+    profile = _profile_for_workspace(ws)
+    if ws.branch != profile.default_branch or ws.profile != profile.key:
+        ws = store.update_workspace(branch=profile.default_branch, profile=profile.key)
     return ws
+
+
+def _set_workspace(*, package: str, base_namespace: str) -> Workspace:
+    """Point the workspace at a module; the profile and branch follow from it."""
+    profile = schema_profile_for_package(package, base_namespace)
+    return store.update_workspace(
+        branch=profile.default_branch, package=package, base_namespace=base_namespace, profile=profile.key,
+    )
+
+
+def _stored_edits(package: str, base_namespace: str | None = None) -> list[dict]:
+    """Every edit of the module's profile: each module's graph replays them all (see `editing`)."""
+    profile = schema_profile_for_package(package, base_namespace)
+    return store.list_edits(user_id=LIGHT_MODE_USER, profile=profile.key)
 
 
 def _schema_info(*, package: str | None = None, base_namespace: str | None = None):
@@ -235,144 +219,6 @@ def _schema_status_payload(ws: Workspace) -> dict:
     return payload
 
 
-def _resolve_custom_class_request(
-    req: CustomClassRequest | None,
-    *,
-    package: str | None,
-    name: str | None,
-    parent: str | None,
-    relation: Literal["inherits", "hasSubSection"] | None,
-    card: str | None,
-    docstring: str | None,
-    update_existing: bool,
-) -> CustomClassRequest:
-    if req is not None:
-        return req
-    if not package or not name:
-        raise HTTPException(status_code=422, detail="Missing required fields: package, name")
-    return CustomClassRequest(
-        package=package,
-        name=name,
-        parent=parent,
-        relation=relation or "inherits",
-        card=card,
-        docstring=docstring,
-        update_existing=update_existing,
-    )
-
-
-def _resolve_custom_quantity_request(
-    req: CustomQuantityRequest | None,
-    *,
-    package: str | None,
-    class_name: str | None,
-    quantity_name: str | None,
-    dtype: str | None,
-    docstring: str | None,
-    parent_name: str | None,
-    parent_relation: str | None,
-) -> CustomQuantityRequest:
-    if req is not None:
-        return req
-    if not package or not class_name or not quantity_name:
-        raise HTTPException(status_code=422, detail="Missing required fields: package, class_name, quantity_name")
-    return CustomQuantityRequest(
-        package=package,
-        class_name=class_name,
-        quantity_name=quantity_name,
-        dtype=dtype or "str",
-        docstring=docstring,
-        parent_name=parent_name,
-        parent_relation=parent_relation,
-    )
-
-
-def _attach_custom_quantity(graph: dict, req) -> dict:
-    return _attach_custom_quantity_impl(graph, req, supported_dtypes=SUPPORTED_CUSTOM_DTYPES)
-
-
-def _attach_custom_class(graph: dict, req) -> dict:
-    return _attach_custom_class_impl(graph, req)
-
-
-def _apply_persisted_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dict, list[dict]]:
-    conflicts: list[dict] = []
-    sorted_edits = sorted(edits, key=lambda e: 0 if e.edit_type == "class" else 1)
-    for edit in sorted_edits:
-        try:
-            if edit.edit_type == "class":
-                graph = _attach_custom_class(
-                    graph,
-                    type(
-                        "Obj",
-                        (),
-                        {
-                            "package": edit.package,
-                            "name": edit.class_name,
-                            "parent": edit.parent_name,
-                            "relation": edit.parent_relation or "inherits",
-                            "card": edit.card,
-                            "docstring": edit.docstring,
-                            "update_existing": True,
-                        },
-                    )(),
-                )
-            else:
-                graph = _attach_custom_quantity(
-                    graph,
-                    type(
-                        "Obj",
-                        (),
-                        {
-                            "package": edit.package,
-                            "class_name": edit.class_name,
-                            "quantity_name": edit.quantity_name or "",
-                            "dtype": edit.dtype or "str",
-                            "docstring": edit.docstring,
-                            "parent_name": edit.parent_name,
-                            "parent_relation": edit.parent_relation,
-                        },
-                    )(),
-                )
-        except HTTPException as exc:
-            conflicts.append({"edit": _serialize_edit(edit), "reason": "validation_error", "detail": exc.detail})
-    return graph, conflicts
-
-
-def _applied_edits(persisted: list[PersistedEdit], apply_conflicts: list[dict]) -> list[PersistedEdit]:
-    conflict_keys: set[tuple[str, str, str | None]] = set()
-    for conflict in apply_conflicts or []:
-        edit_obj = conflict.get("edit") if isinstance(conflict, dict) else None
-        if not isinstance(edit_obj, dict):
-            continue
-        edit_id = edit_obj.get("id")
-        if edit_id:
-            conflict_keys.add(("id", str(edit_id), None))
-            continue
-        signature = (
-            edit_obj.get("edit_type") or "",
-            edit_obj.get("class_name") or "",
-            edit_obj.get("quantity_name") or None,
-        )
-        conflict_keys.add(signature)
-
-    def _key(e: PersistedEdit) -> tuple[str, str, str | None]:
-        if e.edit_id is not None:
-            return ("id", str(e.edit_id), None)
-        return (e.edit_type or "", e.class_name or "", e.quantity_name or None)
-
-    return [edit for edit in persisted if _key(edit) not in conflict_keys]
-
-
-def _apply_custom_edits(graph: dict, edits: list[PersistedEdit]) -> tuple[dict, list[dict]]:
-    graph_with_edits, conflicts = _apply_persisted_edits(graph, edits)
-    applied = _applied_edits(edits, conflicts)
-    if applied:
-        graph_with_edits = dict(graph_with_edits)
-        graph_with_edits["applied_edits"] = [_serialize_edit(e) for e in applied]
-    return graph_with_edits, conflicts
-
-
 def _empty_graph(package: str, root: str | None) -> dict:
     return {"package": package, "root": root, "nodes": [], "edges": []}
 
@@ -405,6 +251,8 @@ async def schema_profiles():
             "packaged": False,
             "linkml_export": supports_linkml(profile),
             "capabilities": sorted(profile.capabilities),
+            "editable": supports_linkml(profile) and editing.editable(profile),
+            "edit_rules": editing.rules_summary(profile),
         }
         try:
             info = current_schema_info(profile)
@@ -439,9 +287,13 @@ async def schema_version():
 
 
 @app.get("/schema/linkml")
-async def schema_linkml(package: str | None = Query(None, description="Schema module; the profile's base namespace exports the whole profile")):
-    """Download the module's schema as LinkML YAML."""
-    return await linkml_download(package or _workspace().package)
+async def schema_linkml(
+    package: str | None = Query(None, description="Schema module; the profile's base namespace exports the whole profile"),
+    edits: bool = Query(True, description="Include the module's edits"),
+):
+    """Download the module's schema as LinkML YAML, with its edits unless `edits=false`."""
+    pkg = package or _workspace().package
+    return await linkml_download(pkg, _stored_edits(pkg) if edits else ())
 
 
 @app.get("/schema/linkml/report")
@@ -498,16 +350,8 @@ async def update_workspace(
     current = _workspace()
     target_package = package or current.package
     target_base_namespace = base_namespace or current.base_namespace
-    target_branch = _enforce_light_branch(
-        branch,
-        package=target_package,
-        base_namespace=target_base_namespace,
-    )
-    ws = store.update_workspace(
-        branch=target_branch,
-        package=target_package,
-        base_namespace=target_base_namespace,
-    )
+    _enforce_light_branch(branch, package=target_package, base_namespace=target_base_namespace)
+    ws = _set_workspace(package=target_package, base_namespace=target_base_namespace)
     return {"workspace": _workspace_payload(ws), "user": {"username": LIGHT_MODE_USER}}
 
 
@@ -520,7 +364,7 @@ async def roots(package: str | None = Query(None)):
         base_namespace=ws.base_namespace,
     )
     try:
-        sections = await run_in_threadpool(list_sections, pkg)
+        sections = await run_in_threadpool(editing.list_sections, pkg, _stored_edits(pkg, ws.base_namespace))
         return {"package": pkg, "sections": sorted(sections), "workspace": _workspace_payload(ws)}
     except SchemaUnavailable:
         raise
@@ -530,6 +374,42 @@ async def roots(package: str | None = Query(None)):
         raise HTTPException(status_code=400, detail=f"{type(exc).__name__}: {exc}") from exc
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=400, detail=f"{type(exc).__name__}: {exc}")
+
+
+async def _graph_response(
+    package: str,
+    ws: Workspace,
+    *,
+    root: str | None,
+    include_quantities: bool,
+    include_subsections: bool,
+    include_inheritance: bool,
+    allow_cross_module: bool,
+    base_namespace: str,
+    empty: bool,
+    stored: list[dict] | None = None,
+) -> dict:
+    """The module's graph from its edited schema (the stored edits, unless given), with the workspace."""
+    if stored is None:
+        stored = _stored_edits(package, base_namespace)
+    try:
+        graph = await run_in_threadpool(
+            editing.build_graph,
+            package,
+            stored,
+            root=root,
+            include_quantities=include_quantities,
+            include_subsections=include_subsections,
+            include_inheritance=include_inheritance,
+            allow_cross_module=allow_cross_module,
+            base_namespace=base_namespace,
+            empty=empty,
+        )
+    except ModuleNotFoundError as exc:
+        if not _missing_requested_package(exc, package):
+            raise
+        graph = _empty_graph(package, root)
+    return graph | {"workspace": _workspace_payload(ws)}
 
 
 @app.get("/schema")
@@ -546,49 +426,36 @@ async def schema(
     ws = _workspace()
     pkg = package or ws.package
     ns = base_namespace or ws.base_namespace or _root_namespace(pkg)
-    branch = _expected_light_branch(package=pkg, base_namespace=ns)
     _ = _schema_info_or_503(
         package=pkg,
         base_namespace=ns,
     )
     if package or base_namespace:
-        ws = store.update_workspace(branch=branch, package=pkg, base_namespace=ns)
-    edits = store.list_edits(user_id=LIGHT_MODE_USER, branch=ws.branch, package=pkg)
-    if empty:
-        graph = _empty_graph(pkg, root)
-    else:
-        try:
-            graph = await run_in_threadpool(
-                build_graph,
-                package=pkg,
-                root=root,
-                include_quantities=include_quantities,
-                include_subsections=include_subsections,
-                include_inheritance=include_inheritance,
-                allow_cross_module=allow_cross_module,
-                base_namespace=ns,
-            )
-        except ModuleNotFoundError as exc:
-            if not _missing_requested_package(exc, pkg) or (not edits and not pkg.endswith(".custom_schema")):
-                raise
-            graph = _empty_graph(pkg, root)
-    graph, conflicts = _apply_custom_edits(graph, edits)
-    response = graph | {"workspace": _workspace_payload(ws)}
-    if conflicts:
-        response["edit_conflicts"] = conflicts
-    return response
+        ws = _set_workspace(package=pkg, base_namespace=ns)
+    return await _graph_response(
+        pkg, ws, root=root, include_quantities=include_quantities, include_subsections=include_subsections,
+        include_inheritance=include_inheritance, allow_cross_module=allow_cross_module, base_namespace=ns, empty=empty,
+    )
 
 
-@app.post("/schema/custom-class")
-async def add_custom_class(
-    req: CustomClassRequest | None = None,
-    package: str | None = Query(None),
-    name: str | None = Query(None),
-    parent: str | None = Query(None),
-    relation: Literal["inherits", "hasSubSection"] | None = Query(None),
-    card: str | None = Query(None),
-    docstring: str | None = Query(None),
-    update_existing: bool = Query(False),
+@app.get("/schema/edits")
+async def list_schema_edits(package: str | None = Query(None)):
+    """The module's stored edits, in order, and the edit rules of its profile."""
+    ws = _workspace()
+    pkg = package or ws.package
+    profile = schema_profile_for_package(pkg, ws.base_namespace)
+    return {
+        "package": pkg,
+        "profile": profile.key,
+        "edits": store.list_edits(user_id=LIGHT_MODE_USER, profile=profile.key, package=pkg),
+        "rules": editing.rules_summary(profile),
+        "workspace": _workspace_payload(ws),
+    }
+
+
+@app.post("/schema/edits")
+async def add_schema_edits(
+    req: EditsRequest,
     root: str | None = Query(None),
     include_quantities: bool = Query(True),
     include_subsections: bool = Query(True),
@@ -597,213 +464,52 @@ async def add_custom_class(
     base_namespace: str | None = Query(None),
     empty: bool = Query(False),
 ):
-    req = _resolve_custom_class_request(
-        req,
-        package=package,
-        name=name,
-        parent=parent,
-        relation=relation,
-        card=card,
-        docstring=docstring,
-        update_existing=update_existing,
-    )
-    _ = _schema_info_or_503(
-        package=req.package,
-        base_namespace=base_namespace or _root_namespace(req.package),
-    )
-    branch = _expected_light_branch(
-        package=req.package,
-        base_namespace=base_namespace or _root_namespace(req.package),
-    )
-    ws = store.update_workspace(
-        branch=branch,
-        package=req.package,
-        base_namespace=base_namespace or _root_namespace(req.package),
-    )
-    if empty:
-        graph = {"package": req.package, "root": root, "nodes": [], "edges": []}
-    else:
-        graph = await run_in_threadpool(
-            build_graph,
-            package=req.package,
-            root=root,
-            include_quantities=include_quantities,
-            include_subsections=include_subsections,
-            include_inheritance=include_inheritance,
-            allow_cross_module=allow_cross_module,
-            base_namespace=ws.base_namespace,
-        )
-    edits_before = store.list_edits(user_id=LIGHT_MODE_USER, branch=ws.branch, package=req.package)
-    graph, conflicts = _apply_custom_edits(graph, edits_before)
-    graph = _attach_custom_class(
-        graph,
-        type(
-            "Obj",
-            (),
-            {
-                "package": req.package,
-                "name": req.name,
-                "parent": req.parent,
-                "relation": req.relation,
-                "card": req.card,
-                "docstring": req.docstring,
-                "update_existing": req.update_existing,
-            },
-        )(),
-    )
-    saved = store.save_edit(
-        edit=PersistedEdit(
-            edit_id=None,
-            user_id=LIGHT_MODE_USER,
-            branch=ws.branch,
-            package=req.package,
-            class_name=req.name,
-            parent_name=req.parent,
-            parent_relation=req.relation,
-            card=req.card if req.relation == "hasSubSection" else None,
-            docstring=req.docstring,
-            edit_type="class",
-        ),
-        current_sha=None,
-    )
-    graph["persisted_edit"] = _serialize_edit(saved)
-    graph["workspace"] = _workspace_payload(ws)
-    if conflicts:
-        graph["edit_conflicts"] = conflicts
-    return graph
-
-
-@app.post("/schema/custom-quantity")
-async def add_custom_quantity(
-    req: CustomQuantityRequest | None = None,
-    package: str | None = Query(None),
-    class_name: str | None = Query(None),
-    quantity_name: str | None = Query(None),
-    dtype: str | None = Query(None),
-    docstring: str | None = Query(None),
-    parent_name: str | None = Query(None),
-    parent_relation: str | None = Query(None),
-    root: str | None = Query(None),
-    include_subsections: bool = Query(True),
-    include_inheritance: bool = Query(True),
-    allow_cross_module: bool = Query(True),
-    base_namespace: str | None = Query(None),
-    empty: bool = Query(False),
-):
-    req = _resolve_custom_quantity_request(
-        req,
-        package=package,
-        class_name=class_name,
-        quantity_name=quantity_name,
-        dtype=dtype,
-        docstring=docstring,
-        parent_name=parent_name,
-        parent_relation=parent_relation,
-    )
-    _ = _schema_info_or_503(
-        package=req.package,
-        base_namespace=base_namespace or _root_namespace(req.package),
-    )
-    branch = _expected_light_branch(
-        package=req.package,
-        base_namespace=base_namespace or _root_namespace(req.package),
-    )
-    ws = store.update_workspace(
-        branch=branch,
-        package=req.package,
-        base_namespace=base_namespace or _root_namespace(req.package),
-    )
-    if empty:
-        graph = {"package": req.package, "root": root, "nodes": [], "edges": []}
-    else:
-        graph = await run_in_threadpool(
-            build_graph,
-            package=req.package,
-            root=root,
-            include_quantities=True,
-            include_subsections=include_subsections,
-            include_inheritance=include_inheritance,
-            allow_cross_module=allow_cross_module,
-            base_namespace=ws.base_namespace,
-        )
-    edits_before = store.list_edits(user_id=LIGHT_MODE_USER, branch=ws.branch, package=req.package)
-    graph, conflicts = _apply_custom_edits(graph, edits_before)
-    graph = _attach_custom_quantity(
-        graph,
-        type(
-            "Obj",
-            (),
-            {
-                "package": req.package,
-                "class_name": req.class_name,
-                "quantity_name": req.quantity_name,
-                "dtype": req.dtype,
-                "docstring": req.docstring,
-                "parent_name": req.parent_name,
-                "parent_relation": req.parent_relation,
-            },
-        )(),
-    )
-    saved = store.save_edit(
-        edit=PersistedEdit(
-            edit_id=None,
-            user_id=LIGHT_MODE_USER,
-            branch=ws.branch,
-            package=req.package,
-            class_name=req.class_name,
-            quantity_name=req.quantity_name,
-            dtype=req.dtype,
-            docstring=req.docstring,
-            parent_name=req.parent_name,
-            parent_relation=req.parent_relation,
-            edit_type="quantity",
-        ),
-        current_sha=None,
-    )
-    graph["persisted_edit"] = _serialize_edit(saved)
-    graph["workspace"] = _workspace_payload(ws)
-    if conflicts:
-        graph["edit_conflicts"] = conflicts
-    return graph
-
-
-@app.delete("/schema/custom-edits")
-async def clear_custom_edits(
-    package: str | None = Query(None),
-    branch: str | None = Query(None),
-    all_packages: bool = Query(False),
-):
+    """Check and store edits (all or none), then return the module's graph with them."""
     ws = _workspace()
-    expected_branch = _enforce_light_branch(
-        branch,
-        package=package or ws.package,
-        base_namespace=ws.base_namespace,
+    pkg = req.package or ws.package
+    ns = base_namespace or (ws.base_namespace if pkg == ws.package else None) or _root_namespace(pkg)
+    _ = _schema_info_or_503(package=pkg, base_namespace=ns)
+    ws = _set_workspace(package=pkg, base_namespace=ns)
+    stored = _stored_edits(pkg, ns)
+    try:
+        prepared = await run_in_threadpool(
+            editing.prepare, pkg, stored, [edit.model_dump() for edit in req.edits], base_namespace=ns,
+        )
+        # A root the edits rename follows its class; one they remove leaves the whole module.
+        root = await run_in_threadpool(editing.root_after, pkg, stored, prepared, root, base_namespace=ns)
+    except (editing.EditError, editing.EditsUnavailable) as exc:
+        raise edit_error(exc)
+    # The graph is built before anything is stored, so a failure stores nothing.
+    graph = await _graph_response(
+        pkg, ws, root=root, include_quantities=include_quantities, include_subsections=include_subsections,
+        include_inheritance=include_inheritance, allow_cross_module=allow_cross_module, base_namespace=ns, empty=empty,
+        stored=[*stored, *prepared],
     )
-    target_package = None if all_packages else (package or ws.package)
-    deleted = store.delete_edits(user_id=LIGHT_MODE_USER, branch=expected_branch, package=target_package)
+    saved = store.add_edits(user_id=LIGHT_MODE_USER, profile=ws.profile, package=pkg, edits=prepared)
+    return editing.with_stored(graph, prepared, saved)
+
+
+@app.delete("/schema/edits/{edit_id}")
+async def delete_schema_edit(edit_id: int):
+    """Delete one stored edit; later edits that depended on it show up as conflicts."""
+    ws = _workspace()
+    deleted = store.delete_edits(user_id=LIGHT_MODE_USER, ids=[edit_id])
     return {"deleted": deleted, "workspace": _workspace_payload(ws)}
 
 
-@app.delete("/schema/custom-edit")
-async def delete_custom_edit(
-    package: str | None = Query(None),
-    class_name: str = Query(...),
-    quantity_name: str | None = Query(None),
-    branch: str | None = Query(None),
+@app.delete("/schema/edits")
+async def clear_schema_edits(
+    req: EditIds | None = None,
+    package: str | None = Query(None, description="Delete the edits stored under this module"),
+    all_packages: bool = Query(False, description="Every module of the package's profile"),
 ):
+    """Delete the edits listed by id and, if a module is named, the module's edits; all or none."""
     ws = _workspace()
-    target_package = package or ws.package
-    expected_branch = _enforce_light_branch(
-        branch,
-        package=target_package,
-        base_namespace=ws.base_namespace,
-    )
-    deleted = store.delete_edit(
-        user_id=LIGHT_MODE_USER,
-        branch=expected_branch,
-        package=target_package,
-        class_name=class_name,
-        quantity_name=quantity_name,
+    ids = req.ids if req is not None else []
+    profile = schema_profile_for_package(package or ws.package, ws.base_namespace)
+    deleted = store.delete_edits(
+        user_id=LIGHT_MODE_USER, ids=ids, profile=profile.key if (package or all_packages) else None,
+        package=package, all_packages=all_packages,
     )
     return {"deleted": deleted, "workspace": _workspace_payload(ws)}
 
@@ -864,7 +570,9 @@ async def overview(branch: str | None = Query(None), base: str | None = Query(No
 @app.get("/usage")
 async def usage(section_id: str = Query(..., description="Fully qualified section class name")):
     ws = _workspace()
-    entries = await run_in_threadpool(get_usage_for_section, section_id, ws.package)
+    entries = await run_in_threadpool(
+        editing.usage_for_section, section_id, ws.package, _stored_edits(ws.package, ws.base_namespace),
+    )
     payload = [
         {
             "kind": e.kind,

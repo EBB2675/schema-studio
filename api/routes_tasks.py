@@ -8,6 +8,8 @@ from pydantic import BaseModel
 
 from .auth import db_dep, get_user_and_workspace, update_workspace, workspace_payload
 from .celery_app import celery_app
+from .edit_store import list_edits
+from .light_mode.schema_source import schema_profile_for_package
 from .routes_git import DiffRequest, GraphRequest
 from .tasks import build_graph_task, diff_graph_task
 
@@ -89,6 +91,8 @@ async def enqueue_graph_task(
         include_inheritance=include_inheritance,
         allow_cross_module=allow_cross_module,
         owner_id=user["id"],
+        # The user's stored edits, replayed onto the branch's schema like on the installed one.
+        edits=await list_edits(db, str(user["id"]), schema_profile_for_package(pkg, namespace).key),
     )
     return {"task_id": task.id, "status": task.status, "workspace": workspace_payload(workspace)}
 

@@ -21,7 +21,7 @@ from pathlib import Path
 
 from ..light_mode.schema_source import SchemaProfile, schema_profile_for_package
 from . import graph, legacy
-from .legacy import ExtractionFailed, UsageEntry
+from .legacy import ExtractionFailed, UnknownRoot, UsageEntry
 from .snapshots import get_snapshot, supports_linkml
 
 logger = logging.getLogger(__name__)
@@ -90,7 +90,7 @@ def build_graph(
         return graph.build_graph(snapshot["linkml"], snapshot["extraction"], package, **flags)
     except graph.RootNotFound as exc:
         # The same error the legacy path reports.
-        raise ExtractionFailed(f"ValueError: {exc}") from exc
+        raise UnknownRoot(f"ValueError: {exc}") from exc
 
 
 def list_sections(package: str) -> list[str]:

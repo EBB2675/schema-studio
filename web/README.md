@@ -27,7 +27,7 @@ These Vite env vars (see `App.tsx`) control the initial workspace:
 - Diagram builder for the working tree or a selected branch (`/schema` vs `/graph`).
 - Branch comparison banner using `/graph/diff`.
 - Overview mode listing packages/classes by branch.
-- Editable mode to add classes (inheritance or subsection links) and add/rename/remove quantities (uses `/schema/custom-class` and `/schema/custom-quantity`; the backend materializes synthetic sections for new classes so quantities can be attached immediately).
+- Editable mode to add classes (inheritance or subsection links), add/rename/remove quantities and, for bam-masterdata, properties and vocabulary terms. Every change is stored on the server through `/schema/edits` as an edit of the LinkML schema; the server returns the graph rebuilt from the edited schema.
 - Doc panel + under-the-hood panel for docstrings and normalization helpers.
 - Export buttons for JSON and PDF (PNG-backed via `GraphView` `toPng`).
 - Theme toggle (dark/light) and namespace / cross-module filters.

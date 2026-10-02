@@ -60,7 +60,7 @@ def _reset_dbs_sync():
     db = client[os.getenv("SCHEMA_UML_MONGO_DB", "schema_uml_test")]
     db.drop_collection(auth.USERS_COLLECTION)
     db.drop_collection(auth.WORKSPACES_COLLECTION)
-    db.drop_collection(edit_store.CUSTOM_EDITS_COLLECTION)
+    db.drop_collection(edit_store.EDITS_COLLECTION)
     client.close()
 
 
@@ -75,14 +75,15 @@ def clean_state():
 def in_process_extraction(monkeypatch):
     """
     The app reads schemas by running the extractor in a schema environment.
-    These tests use small dummy packages on their own import path instead, so
-    the same extractor code runs in-process here.
+    These tests use a small converted snapshot instead (`fake_snapshot`), so
+    edits are replayed onto LinkML data without any environment.
     """
-    import api.main as main
-    from extractor import graph_builder
+    from api.sources import editing
+    from api.sources.tests import fake_snapshot
 
-    monkeypatch.setattr(main, "build_graph", graph_builder.build_graph)
-    monkeypatch.setattr(main, "list_sections", graph_builder.list_sections)
+    fake_snapshot.reset()
+    monkeypatch.setattr(editing, "get_snapshot", fake_snapshot.fake_snapshot)
+    monkeypatch.setattr(editing, "extracted_sections", lambda _package: ["RootSection"])
 
 
 @pytest.fixture()

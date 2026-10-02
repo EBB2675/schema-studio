@@ -59,5 +59,7 @@ export type AuditTrailEntry = {
   description: string;
   package?: string;
   replayable?: boolean;
+  // Ids of the stored schema edits this change made; the server's graph already holds them.
+  editIds?: string[];
   change: AuditChange;
 };
