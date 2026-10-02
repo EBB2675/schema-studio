@@ -90,6 +90,10 @@ class EditsRequest(BaseModel):
     edits: list[EditRequest]
 
 
+class EditIds(BaseModel):
+    ids: list[int] = Field(default_factory=list)
+
+
 # Prepare persistence
 store = LocalStore(
     db_path=config_db_path(),
@@ -160,8 +164,9 @@ def _set_workspace(*, package: str, base_namespace: str) -> Workspace:
 
 
 def _stored_edits(package: str, base_namespace: str | None = None) -> list[dict]:
+    """Every edit of the module's profile: each module's graph replays them all (see `editing`)."""
     profile = schema_profile_for_package(package, base_namespace)
-    return store.list_edits(user_id=LIGHT_MODE_USER, profile=profile.key, package=package)
+    return store.list_edits(user_id=LIGHT_MODE_USER, profile=profile.key)
 
 
 def _schema_info(*, package: str | None = None, base_namespace: str | None = None):
@@ -370,9 +375,11 @@ async def _graph_response(
     allow_cross_module: bool,
     base_namespace: str,
     empty: bool,
+    stored: list[dict] | None = None,
 ) -> dict:
-    """The module's graph from its edited schema, with the workspace."""
-    stored = _stored_edits(package, base_namespace)
+    """The module's graph from its edited schema (the stored edits, unless given), with the workspace."""
+    if stored is None:
+        stored = _stored_edits(package, base_namespace)
     try:
         graph = await run_in_threadpool(
             editing.build_graph,
@@ -428,7 +435,7 @@ async def list_schema_edits(package: str | None = Query(None)):
     return {
         "package": pkg,
         "profile": profile.key,
-        "edits": _stored_edits(pkg, ws.base_namespace),
+        "edits": store.list_edits(user_id=LIGHT_MODE_USER, profile=profile.key, package=pkg),
         "rules": editing.rules_summary(profile),
         "workspace": _workspace_payload(ws),
     }
@@ -456,34 +463,42 @@ async def add_schema_edits(
         prepared = await run_in_threadpool(
             editing.prepare, pkg, stored, [edit.model_dump() for edit in req.edits], base_namespace=ns,
         )
+        # A root the edits rename follows its class; one they remove leaves the whole module.
+        root = await run_in_threadpool(editing.root_after, pkg, stored, prepared, root, base_namespace=ns)
     except (editing.EditError, editing.EditsUnavailable) as exc:
         raise edit_error(exc)
-    saved = store.add_edits(user_id=LIGHT_MODE_USER, profile=ws.profile, package=pkg, edits=prepared)
+    # The graph is built before anything is stored, so a failure stores nothing.
     graph = await _graph_response(
         pkg, ws, root=root, include_quantities=include_quantities, include_subsections=include_subsections,
         include_inheritance=include_inheritance, allow_cross_module=allow_cross_module, base_namespace=ns, empty=empty,
+        stored=[*stored, *prepared],
     )
-    graph["persisted_edits"] = saved
-    return graph
+    saved = store.add_edits(user_id=LIGHT_MODE_USER, profile=ws.profile, package=pkg, edits=prepared)
+    return editing.with_stored(graph, prepared, saved)
 
 
 @app.delete("/schema/edits/{edit_id}")
 async def delete_schema_edit(edit_id: int):
     """Delete one stored edit; later edits that depended on it show up as conflicts."""
     ws = _workspace()
-    deleted = store.delete_edit(user_id=LIGHT_MODE_USER, edit_id=edit_id)
+    deleted = store.delete_edits(user_id=LIGHT_MODE_USER, ids=[edit_id])
     return {"deleted": deleted, "workspace": _workspace_payload(ws)}
 
 
 @app.delete("/schema/edits")
 async def clear_schema_edits(
-    package: str | None = Query(None),
-    all_packages: bool = Query(False, description="Every module of the current profile"),
+    req: EditIds | None = None,
+    package: str | None = Query(None, description="Delete the edits stored under this module"),
+    all_packages: bool = Query(False, description="Every module of the package's profile"),
 ):
+    """Delete the edits listed by id and, if a module is named, the module's edits; all or none."""
     ws = _workspace()
-    pkg = package or ws.package
-    profile = schema_profile_for_package(pkg, ws.base_namespace)
-    deleted = store.delete_edits(user_id=LIGHT_MODE_USER, profile=profile.key, package=None if all_packages else pkg)
+    ids = req.ids if req is not None else []
+    profile = schema_profile_for_package(package or ws.package, ws.base_namespace)
+    deleted = store.delete_edits(
+        user_id=LIGHT_MODE_USER, ids=ids, profile=profile.key if (package or all_packages) else None,
+        package=package, all_packages=all_packages,
+    )
     return {"deleted": deleted, "workspace": _workspace_payload(ws)}
 
 

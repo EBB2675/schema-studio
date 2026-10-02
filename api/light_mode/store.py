@@ -131,17 +131,19 @@ class LocalStore:
         return next_ws
 
     # --- edits ---
-    def list_edits(self, *, user_id: str, profile: str, package: str) -> List[dict[str, Any]]:
-        """The module's edits in the order they were made."""
+    def list_edits(self, *, user_id: str, profile: str, package: str | None = None) -> List[dict[str, Any]]:
+        """The profile's edits (or one module's) in the order they were made."""
+        query, values = "SELECT * FROM edits WHERE user_id = ? AND profile = ?", [user_id, profile]
+        if package is not None:
+            query += " AND package = ?"
+            values.append(package)
         with self._conn() as conn:
-            rows = conn.execute(
-                "SELECT * FROM edits WHERE user_id = ? AND profile = ? AND package = ? ORDER BY id ASC",
-                (user_id, profile, package),
-            ).fetchall()
+            rows = conn.execute(query + " ORDER BY id ASC", values).fetchall()
         return [self._row_to_edit(row) for row in rows]
 
     def add_edits(self, *, user_id: str, profile: str, package: str, edits: Iterable[dict[str, Any]]) -> List[dict[str, Any]]:
-        """Append edits (plain dicts with op, target, payload, commit); all of them or none."""
+        """Append edits (plain dicts with op, target, payload, commit), each under its own `package`
+        (default: `package`); all of them or none."""
         now = _now_iso()
         with self._conn() as conn:
             ids = []
@@ -151,7 +153,7 @@ class LocalStore:
                     INSERT INTO edits (user_id, profile, package, commit_sha, op, target, payload, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (user_id, profile, package, edit.get("commit"), edit["op"], edit["target"],
+                    (user_id, profile, edit.get("package") or package, edit.get("commit"), edit["op"], edit["target"],
                      json.dumps(edit.get("payload") or {}, sort_keys=True, ensure_ascii=False), now),
                 )
                 ids.append(cur.lastrowid)
@@ -159,25 +161,29 @@ class LocalStore:
             rows = [conn.execute("SELECT * FROM edits WHERE id = ?", (edit_id,)).fetchone() for edit_id in ids]
         return [self._row_to_edit(row) for row in rows]
 
-    def delete_edit(self, *, user_id: str, edit_id: int) -> int:
+    def delete_edits(
+        self,
+        *,
+        user_id: str,
+        ids: Iterable[int] = (),
+        profile: str | None = None,
+        package: str | None = None,
+        all_packages: bool = False,
+    ) -> int:
+        """Delete the edits with the given ids and, with a profile, the module's edits (or the
+        profile's, with `all_packages`); in one transaction."""
+        deleted = 0
         with self._conn() as conn:
-            cur = conn.execute("DELETE FROM edits WHERE user_id = ? AND id = ?", (user_id, edit_id))
+            for edit_id in ids:
+                deleted += conn.execute("DELETE FROM edits WHERE user_id = ? AND id = ?", (user_id, edit_id)).rowcount
+            if profile is not None and (package is not None or all_packages):
+                clauses, values = ["user_id = ?", "profile = ?"], [user_id, profile]
+                if not all_packages:
+                    clauses.append("package = ?")
+                    values.append(package)
+                deleted += conn.execute(f"DELETE FROM edits WHERE {' AND '.join(clauses)}", values).rowcount
             conn.commit()
-            return int(cur.rowcount or 0)
-
-    def delete_edits(self, *, user_id: str, profile: str | None = None, package: str | None = None) -> int:
-        """Delete the module's edits, the profile's (no package) or all of them (neither)."""
-        clauses, values = ["user_id = ?"], [user_id]
-        if profile is not None:
-            clauses.append("profile = ?")
-            values.append(profile)
-        if package is not None:
-            clauses.append("package = ?")
-            values.append(package)
-        with self._conn() as conn:
-            cur = conn.execute(f"DELETE FROM edits WHERE {' AND '.join(clauses)}", values)
-            conn.commit()
-            return int(cur.rowcount or 0)
+        return deleted
 
     # --- internal helpers ---
     def _row_to_edit(self, row: sqlite3.Row) -> dict[str, Any]:

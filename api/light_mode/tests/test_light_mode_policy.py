@@ -365,6 +365,7 @@ async def test_clear_edits_of_all_packages(client: httpx.AsyncClient):
     cleared = await client.delete("/schema/edits", params={"all_packages": "true"})
     assert cleared.status_code == 200
     assert cleared.json()["deleted"] == 2
+    assert (await client.get("/schema/edits", params={"package": "pkg.beta"})).json()["edits"] == []
 
 
 @pytest.mark.anyio
@@ -404,6 +405,81 @@ async def test_renamed_class_keeps_its_usage_and_added_class_has_none(
     await client.get("/usage", params={"section_id": "pkg.default.Renamed"})
     await client.get("/usage", params={"section_id": "pkg.default.Fresh"})
     assert asked == ["pkg.default.RootSection"]
+
+
+ALPHA = "nomad_simulations.schema_packages.alpha"
+BETA = "nomad_simulations.schema_packages.beta"
+SHARED = f"{BETA}.Shared"
+
+
+@pytest.mark.anyio
+async def test_an_edit_is_stored_under_the_module_of_its_class(client: httpx.AsyncClient):
+    # Made while module alpha is shown, on a class of module beta.
+    edited = await client.post("/schema/edits", json=_edits(
+        ("set_description", SHARED, {"description": "Changed from alpha."}),
+        ("add_attribute", SHARED, {"name": "extra", "kind": "quantity", "dtype": "str"}),
+        ("add_class", "", {"name": "AlphaOnly"}),
+        package=ALPHA,
+    ))
+    assert edited.status_code == 200, edited.text
+    assert [edit["package"] for edit in edited.json()["persisted_edits"]] == [BETA, BETA, ALPHA]
+    # Beta's own graph shows them, and so does every module that reaches the class.
+    for package in (BETA, ALPHA, "nomad_simulations.schema_packages.gamma"):
+        shown = (await client.get("/schema", params={"package": package})).json()
+        assert _sections(shown)[SHARED]["doc"] == "Changed from alpha.", package
+        assert f"{SHARED}.extra" in _quantities(shown), package
+        assert "edit_conflicts" not in shown, package
+    listed = await client.get("/schema/edits", params={"package": BETA})
+    assert [edit["op"] for edit in listed.json()["edits"]] == ["set_description", "add_attribute"]
+
+
+@pytest.mark.anyio
+async def test_clear_of_one_module_leaves_the_others(client: httpx.AsyncClient):
+    await client.post("/schema/edits", json=_edits(("add_class", "", {"name": "InAlpha"}), package=ALPHA))
+    await client.post("/schema/edits", json=_edits(("add_class", "", {"name": "InBeta"}), package=BETA))
+    cleared = await client.request("DELETE", "/schema/edits", params={"package": ALPHA}, json={"ids": []})
+    assert cleared.json()["deleted"] == 1
+    assert (await client.get("/schema/edits", params={"package": ALPHA})).json()["edits"] == []
+    assert len((await client.get("/schema/edits", params={"package": BETA})).json()["edits"]) == 1
+
+
+@pytest.mark.anyio
+async def test_batch_delete_by_ids(client: httpx.AsyncClient):
+    added = (await client.post("/schema/edits", json=_edits(
+        ("add_class", "", {"name": "One"}), ("add_class", "", {"name": "Two"}), ("add_class", "", {"name": "Three"}),
+    ))).json()["persisted_edits"]
+    deleted = await client.request("DELETE", "/schema/edits", json={"ids": [added[0]["id"], added[2]["id"]]})
+    assert deleted.json()["deleted"] == 2
+    left = (await client.get("/schema/edits", params={"package": "pkg.default"})).json()["edits"]
+    assert [edit["id"] for edit in left] == [added[1]["id"]]
+
+
+@pytest.mark.anyio
+async def test_renaming_the_shown_root_follows_it(client: httpx.AsyncClient):
+    renamed = await client.post("/schema/edits", params={"root": "RootSection"}, json=_edits(
+        ("rename_class", "pkg.default.RootSection", {"new_name": "Renamed"}),
+    ))
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["root"] == "Renamed"
+    assert "pkg.default.Renamed" in _sections(renamed.json())
+    removed = await client.post("/schema/edits", params={"root": "Renamed"}, json=_edits(
+        ("add_class", "", {"name": "Spare"}),
+        ("remove_class", "pkg.default.Spare", {}),
+    ))
+    assert removed.status_code == 200 and removed.json()["root"] == "Renamed"
+
+
+@pytest.mark.anyio
+async def test_nothing_is_stored_when_the_graph_cannot_be_built(
+    client: httpx.AsyncClient, light_mode_module, monkeypatch: pytest.MonkeyPatch
+):
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("graph failed")
+
+    monkeypatch.setattr(light_mode_module.editing.graph, "build_graph", broken)
+    with pytest.raises(RuntimeError):
+        await client.post("/schema/edits", json=_edits(("add_class", "", {"name": "Lost"})))
+    assert (await client.get("/schema/edits", params={"package": "pkg.default"})).json()["edits"] == []
 
 
 @pytest.mark.anyio

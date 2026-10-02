@@ -92,12 +92,14 @@ export SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA=0
 
 **Edit model (important for agents):**
 - An edit is an operation on the LinkML schema (`api/sources/edits.py`): add, rename or remove a class or attribute, set range, description or required, add or remove enum values. Each stored edit records profile, module, the schema commit it was made on, target and payload.
-- Edits are stored per mode, per profile and module:
+- Edits are stored per mode and profile, each under the module of the class it changes (a new class: the module it is added to):
   - Dev Mode: Mongo (per user).
   - Light Mode: local SQLite (single user). An older database format is recreated, not migrated.
-- The backend replays stored edits onto the freshly converted LinkML schema of the snapshot, then builds the graph from that (`api/sources/editing.py`). Edits that no longer apply, or that applied over a change in the schema source, are reported in `edit_conflicts`.
+- The backend replays all of the profile's stored edits, in order, onto the freshly converted LinkML schema of the module's snapshot, then builds the graph from that (`api/sources/editing.py`); a class shows the same edits in every module that draws it. The module's own edits that no longer apply, or that applied over a change in the schema source, are reported in `edit_conflicts`.
+- In Dev Mode a branch (`/graph`, `/tasks/graph`, and `branch` on `/roots`, `/schema/linkml` and `POST /schema/edits`) is read from its git worktree, and the stored edits are replayed onto it the same way.
+- `POST /schema/edits` builds the resulting graph before it stores anything, so an error stores nothing; `DELETE /schema/edits` deletes a list of edit ids and, if a module is named, that module's edits, all or none.
 - Which edits a profile allows comes from the profile (`edit_rules`): NOMAD dtypes for both NOMAD profiles, openBIS data types and codes for bam-masterdata. Inherited members are edited on the class that declares them.
-- Frontend audit trail is UI history; each entry keeps the ids of the edits it stored, and undo deletes them. Hard reset uses `DELETE /schema/edits`.
+- Frontend audit trail is UI history; each entry keeps the ids of the edits it stored, and undo deletes them (the entry stays if that fails). Clear deletes the current module's edits and those its entries made.
 
 **API compatibility headers:**
 - Frontend sends `X-Schema-UML-Version` and `X-Schema-UML-Features` so backends can gate behavior across different schema repos.

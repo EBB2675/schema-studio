@@ -898,7 +898,8 @@ export default function App() {
     }
     setErr(null);
     try {
-      const r = await api.get("/roots", { params: { package: pkg } });
+      // Dev Mode reads the branch it draws; Light Mode has a single, fixed one.
+      const r = await api.get("/roots", { params: { package: pkg, branch: isLightMode ? undefined : workspaceBranch || undefined } });
       const list = r.data.sections || [];
       setRoots(list);
       if (list.length > 0 && !list.includes(root)) setRoot(list[0]);
@@ -907,7 +908,7 @@ export default function App() {
       setErr(formatApiError(e));
       setRoots([]);
     }
-  }, [api, pkg, root, startEmpty, syncWorkspaceFromResponse, token]);
+  }, [api, isLightMode, pkg, root, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
 
   // build single-branch graph (resets diff view)
   const loadGraph = useCallback(async (
@@ -1490,11 +1491,15 @@ export default function App() {
           allow_cross_module: crossModules,
           base_namespace: normalizedNamespace || undefined,
           empty: startEmpty ? true : undefined,
+          // Dev Mode checks and draws the edits on the branch it shows.
+          branch: isLightMode ? undefined : workspaceBranch || undefined,
         },
       }
     );
     const updated = ensureGraphResponse(res.data);
     syncWorkspaceFromResponse(res.data);
+    // A root the edits renamed follows its class; a removed one leaves the whole module.
+    if ((updated.root ?? "") !== (root ?? "")) setRoot(updated.root ?? "");
     const merged = replayGraphWithAudit(updated);
     setBaseGraph(updated);
     setGraph(merged);
@@ -1814,12 +1819,10 @@ export default function App() {
     [applyForwardChange, baseGraph, buildUmlState, filterActiveAuditForPackage, graph, normalizePackageName, pkg]
   );
 
-  const deletePersistedEntryForAudit = useCallback(
-    async (entry: AuditTrailEntry) => {
-      // Newest first, so nothing left behind refers to an edit already gone.
-      for (const editId of [...(entry.editIds ?? [])].reverse()) {
-        await api.delete(`/schema/edits/${encodeURIComponent(editId)}`);
-      }
+  // Deletes the stored edits of audit entries (and a module's own edits) in one request: all or none.
+  const deleteStoredEdits = useCallback(
+    async (ids: string[], packageName?: string) => {
+      await api.delete("/schema/edits", { params: { package: packageName }, data: { ids } });
     },
     [api]
   );
@@ -1828,45 +1831,40 @@ export default function App() {
     const entry = auditTrail.find((a) => a.id === id);
     if (!entry || !entry.change) return;
     const remaining = auditTrail.filter((a) => a.id !== id && a.change);
-
-    setAuditTrail(remaining as AuditTrailEntry[]);
     setQuantityActionErr(null);
 
     if (entry.editIds?.length) {
       try {
-        await deletePersistedEntryForAudit(entry);
+        await deleteStoredEdits(entry.editIds);
       } catch (e: unknown) {
+        // Nothing was deleted; the entry stays so the undo can be tried again.
         setQuantityActionErr(`Undo failed: ${formatApiError(e)}`);
+        return;
       }
+      setAuditTrail(remaining as AuditTrailEntry[]);
       await loadGraph();
       return;
     }
 
+    setAuditTrail(remaining as AuditTrailEntry[]);
     rebuildGraphWithAudit(remaining as AuditTrailEntry[]);
   };
 
+  // Clears what the audit panel shows: this module's stored edits and the edits its entries made.
   const clearAuditTrail = async () => {
-    const hasLocalAudit = auditTrail.length > 0;
+    const targetPackage = currentPackageForAudit || pkg;
+    const hasLocalAudit = auditEntriesForCurrentPackage.length > 0;
     const hasPersistedEdits = (graph?.applied_edits?.length ?? 0) > 0 || (graph?.edit_conflicts?.length ?? 0) > 0;
     if (!hasLocalAudit && !hasPersistedEdits) return;
-    const baseline = baseGraph ?? graph;
-    if (baseline) {
-      setGraph(baseline);
-      setUmlState(buildUmlState(baseline));
-    }
-    setAuditTrail([]);
+    const ids = auditEntriesForCurrentPackage.flatMap((entry) => entry.editIds ?? []);
     setQuantityActionErr(null);
     try {
-      await api.delete("/schema/edits", {
-        params: {
-          package: isLightMode ? undefined : pkg,
-          all_packages: isLightMode ? true : undefined,
-        },
-      });
-    } catch (e) {
-      console.warn("Failed to clear persisted edits", e);
+      await deleteStoredEdits(ids, targetPackage);
+    } catch (e: unknown) {
+      setQuantityActionErr(`Clear failed: ${formatApiError(e)}`);
       return;
     }
+    setAuditTrail((prev) => prev.filter((entry) => !auditEntriesForCurrentPackage.includes(entry)));
     await loadGraph();
   };
 
@@ -2316,7 +2314,7 @@ export default function App() {
     setLinkmlStatus("Preparing LinkML export...");
     try {
       const res = await api.get("/schema/linkml", {
-        params: { package: currentGraph.package },
+        params: { package: currentGraph.package, branch: isLightMode ? undefined : workspaceBranch || undefined },
         responseType: "blob",
       });
       const url = URL.createObjectURL(res.data as Blob);

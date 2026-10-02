@@ -30,9 +30,9 @@ from .auth import (
     workspace_payload,
     init_db as auth_init,
 )
+from .graph_runner import branch_source
 from .edit_store import (
     add_edits,
-    delete_edit,
     delete_edits,
     init_db as edit_init,
     list_edits,
@@ -129,12 +129,19 @@ async def root(user_ws=Depends(get_user_and_workspace)):
     return {"message": "Schema UML API is running", "workspace": workspace_payload(workspace)}
 
 @app.get("/roots")
-async def roots(package: str | None = Query(None), user_ws=Depends(get_user_and_workspace), db=Depends(db_dep)):
+async def roots(
+    package: str | None = Query(None),
+    branch: str | None = Query(None, description="Read the module from this branch's worktree"),
+    user_ws=Depends(get_user_and_workspace),
+    db=Depends(db_dep),
+):
     """List available section classes for a given package."""
     user, workspace = user_ws
     pkg = package or workspace.get("package") or DEFAULT_BASE_PACKAGE
     try:
-        sections = await run_in_threadpool(editing.list_sections, pkg, await _stored_edits(db, user, pkg))
+        source = await _branch_source(branch, pkg, workspace.get("base_namespace"))
+        stored = await _stored_edits(db, user, pkg)
+        sections = await run_in_threadpool(lambda: editing.list_sections(pkg, stored, source=source))
         return {"package": pkg, "sections": sorted(sections), "workspace": workspace_payload(workspace)}
     except SchemaUnavailable:
         raise
@@ -145,13 +152,15 @@ async def roots(package: str | None = Query(None), user_ws=Depends(get_user_and_
 async def schema_linkml(
     package: str | None = Query(None),
     edits: bool = Query(True, description="Include the module's edits"),
+    branch: str | None = Query(None, description="Read the module from this branch's worktree"),
     user_ws=Depends(get_user_and_workspace),
     db=Depends(db_dep),
 ):
-    """Download the module's schema as LinkML YAML (installed profile environment, not a worktree)."""
+    """Download the module's schema as LinkML YAML, from the installed environment or a branch."""
     user, workspace = user_ws
     pkg = package or workspace.get("package") or DEFAULT_BASE_PACKAGE
-    return await linkml_download(pkg, await _stored_edits(db, user, pkg) if edits else ())
+    source = await _branch_source(branch, pkg, workspace.get("base_namespace"))
+    return await linkml_download(pkg, await _stored_edits(db, user, pkg) if edits else (), source)
 
 
 @app.get("/schema/linkml/report")
@@ -161,13 +170,27 @@ async def schema_linkml_report(package: str | None = Query(None), user_ws=Depend
 
 
 async def _stored_edits(db, user: dict, package: str) -> list[dict]:
+    """Every edit of the module's profile: each module's graph replays them all (see `editing`)."""
     profile = schema_profile_for_package(package)
-    return await list_edits(db, str(user["id"]), profile.key, package)
+    return await list_edits(db, str(user["id"]), profile.key)
 
 
-async def _graph_response(db, user: dict, workspace: dict, package: str, **flags) -> dict:
-    """The module's graph from its edited schema, with the workspace."""
-    stored = await _stored_edits(db, user, package)
+async def _branch_source(branch: str | None, package: str, base_namespace: str | None) -> editing.Source | None:
+    """The branch's worktree to read the schema from; None for the installed environment."""
+    if not branch:
+        return None
+    try:
+        return await run_in_threadpool(branch_source, branch, package, base_namespace)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Cannot read branch {branch!r}: {exc}") from exc
+
+
+async def _graph_response(
+    db, user: dict, workspace: dict, package: str, *, stored: list[dict] | None = None, **flags,
+) -> dict:
+    """The module's graph from its edited schema (the stored edits, unless given), with the workspace."""
+    if stored is None:
+        stored = await _stored_edits(db, user, package)
     data = await run_in_threadpool(lambda: editing.build_graph(package, stored, **flags))
     data["workspace"] = workspace_payload(workspace)
     return data
@@ -211,6 +234,10 @@ class EditsRequest(BaseModel):
     edits: list[EditRequest]
 
 
+class EditIds(BaseModel):
+    ids: list[str] = Field(default_factory=list)
+
+
 @app.get("/schema/edits")
 async def list_schema_edits(
     package: str | None = Query(None), user_ws=Depends(get_user_and_workspace), db=Depends(db_dep),
@@ -222,7 +249,7 @@ async def list_schema_edits(
     return {
         "package": pkg,
         "profile": profile.key,
-        "edits": await _stored_edits(db, user, pkg),
+        "edits": await list_edits(db, str(user["id"]), profile.key, pkg),
         "rules": editing.rules_summary(profile),
         "workspace": workspace_payload(workspace),
     }
@@ -238,6 +265,7 @@ async def add_schema_edits(
     allow_cross_module: bool = Query(True),
     base_namespace: str | None = Query(None),
     empty: bool = Query(False),
+    branch: str | None = Query(None, description="Check the edits against, and draw, this branch's worktree"),
     user_ws=Depends(get_user_and_workspace),
     db=Depends(db_dep),
 ):
@@ -247,45 +275,56 @@ async def add_schema_edits(
     ns = base_namespace or (workspace.get("base_namespace") if workspace.get("package") == pkg else None)
     ns = ns or _root_namespace(pkg)
     workspace = await update_workspace(db, user["id"], package=pkg, base_namespace=ns)
+    source = await _branch_source(branch, pkg, ns)
     stored = await _stored_edits(db, user, pkg)
     try:
         prepared = await run_in_threadpool(
-            editing.prepare, pkg, stored, [edit.model_dump() for edit in req.edits], base_namespace=ns,
+            lambda: editing.prepare(pkg, stored, [edit.model_dump() for edit in req.edits], base_namespace=ns, source=source)
+        )
+        # A root the edits rename follows its class; one they remove leaves the whole module.
+        root = await run_in_threadpool(
+            lambda: editing.root_after(pkg, stored, prepared, root, base_namespace=ns, source=source)
         )
     except (editing.EditError, editing.EditsUnavailable) as exc:
         raise edit_error(exc)
+    # The graph is built before anything is stored, so a failure stores nothing.
+    data = await _graph_response(
+        db, user, workspace, pkg, stored=[*stored, *prepared], root=root, include_quantities=include_quantities,
+        include_subsections=include_subsections, include_inheritance=include_inheritance,
+        allow_cross_module=allow_cross_module, base_namespace=ns, empty=empty, source=source,
+    )
     saved = await add_edits(
-        db, str(user["id"]), profile=schema_profile_for_package(pkg, ns).key, branch=workspace.get("branch"),
+        db, str(user["id"]), profile=schema_profile_for_package(pkg, ns).key, branch=branch or workspace.get("branch"),
         package=pkg, edits=prepared,
     )
-    data = await _graph_response(
-        db, user, workspace, pkg, root=root, include_quantities=include_quantities,
-        include_subsections=include_subsections, include_inheritance=include_inheritance,
-        allow_cross_module=allow_cross_module, base_namespace=ns, empty=empty,
-    )
-    data["persisted_edits"] = saved
-    return data
+    if source is not None:
+        data["branch"], data["sha"] = branch, source.sha
+    return editing.with_stored(data, prepared, saved)
 
 
 @app.delete("/schema/edits/{edit_id}")
 async def delete_schema_edit(edit_id: str, user_ws=Depends(get_user_and_workspace), db=Depends(db_dep)):
     """Delete one stored edit; later edits that depended on it show up as conflicts."""
     user, workspace = user_ws
-    deleted = await delete_edit(db, str(user["id"]), edit_id)
+    deleted = await delete_edits(db, str(user["id"]), ids=[edit_id])
     return {"deleted": deleted, "workspace": workspace_payload(workspace)}
 
 
 @app.delete("/schema/edits")
 async def clear_schema_edits(
-    package: str | None = Query(None),
+    req: EditIds | None = None,
+    package: str | None = Query(None, description="Delete the edits stored under this module"),
     all_packages: bool = Query(False, description="Every module of the package's profile"),
     user_ws=Depends(get_user_and_workspace),
     db=Depends(db_dep),
 ):
+    """Delete the edits listed by id and, if a module is named, the module's edits; in one request."""
     user, workspace = user_ws
-    pkg = package or workspace.get("package") or DEFAULT_BASE_PACKAGE
-    profile = schema_profile_for_package(pkg)
-    deleted = await delete_edits(db, str(user["id"]), profile=profile.key, package=None if all_packages else pkg)
+    profile = schema_profile_for_package(package or workspace.get("package") or DEFAULT_BASE_PACKAGE)
+    deleted = await delete_edits(
+        db, str(user["id"]), ids=req.ids if req is not None else [],
+        profile=profile.key if (package or all_packages) else None, package=package, all_packages=all_packages,
+    )
     return {"deleted": deleted, "workspace": workspace_payload(workspace)}
 
 

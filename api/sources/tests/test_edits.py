@@ -426,3 +426,20 @@ def test_export_round_trip(converted, profile):
     if profile == "bam-masterdata":
         assert induced[attribute].required is True
     assert ("CHAIN_LIKE" if profile == "bam-masterdata" else "added_value") in view.get_enum(enum).permissible_values
+
+
+def test_remove_class_sees_uses_by_a_class_with_the_same_title():
+    """Two classes called Foo: a use by the other one is a use, not the class's own attribute."""
+    schema = {"default_prefix": "nomadsim", "classes": {
+        "a.Foo": {"name": "a.Foo", "title": "Foo", "attributes": {
+            "me": {"name": "me", "range": "a.Foo", "annotations": {"source_kind": "subsection"}}}},
+        "b.Foo": {"name": "b.Foo", "title": "Foo", "attributes": {
+            "bar": {"name": "bar", "range": "a.Foo", "annotations": {"source_kind": "subsection"}}}},
+    }}
+    with pytest.raises(EditError) as raised:
+        edits.apply_edit(copy.deepcopy(schema), {"op": "remove_class", "target": "a.Foo", "payload": {}}, rules="nomad")
+    assert raised.value.reason == "in_use" and "Foo.bar refers to it" in raised.value.detail
+    # Its own attribute pointing at itself does not hold it back.
+    del schema["classes"]["b.Foo"]["attributes"]
+    edits.apply_edit(schema, {"op": "remove_class", "target": "a.Foo", "payload": {}}, rules="nomad")
+    assert "a.Foo" not in schema["classes"]

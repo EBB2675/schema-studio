@@ -51,7 +51,7 @@ import copy
 import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any
+from typing import Any, NamedTuple
 
 OPS = (
     "add_class", "rename_class", "remove_class",
@@ -276,18 +276,33 @@ def _declared(schema: Mapping[str, Any], name: str, attribute: str) -> dict[str,
     raise EditError("not_found", f"{_title(name, cls)} has no attribute {attribute!r}")
 
 
-def _references(schema: Mapping[str, Any], target: str) -> list[str]:
-    """Where a class or enum is used: bases and attribute ranges of every class."""
+class Reference(NamedTuple):
+    """A use of a class or enum: as a base of `owner`, as the range of `owner.attribute`, or as an enum's base."""
+
+    owner: str
+    kind: str  # "base", "range" or "enum_base"
+    attribute: str | None = None
+
+    def describe(self, schema: Mapping[str, Any]) -> str:
+        if self.kind == "enum_base":
+            return f"enum {self.owner} inherits from it"
+        cls = (schema.get("classes") or {}).get(self.owner) or {}
+        title = _title(self.owner, cls)
+        return f"{title} inherits from it" if self.kind == "base" else f"{title}.{self.attribute} refers to it"
+
+
+def _references(schema: Mapping[str, Any], target: str) -> list[Reference]:
+    """Where a class or enum is used: bases and attribute ranges of every class, and enum bases."""
     found = []
     for name, cls in (schema.get("classes") or {}).items():
         if cls.get("is_a") == target or target in (cls.get("mixins") or []):
-            found.append(f"{_title(name, cls)} inherits from it")
+            found.append(Reference(name, "base"))
         for attribute, slot in (cls.get("attributes") or {}).items():
             if slot.get("range") == target:
-                found.append(f"{_title(name, cls)}.{attribute} refers to it")
+                found.append(Reference(name, "range", attribute))
     for name, enum in (schema.get("enums") or {}).items():
         if target in (enum.get("inherits") or []):
-            found.append(f"enum {name} inherits from it")
+            found.append(Reference(name, "enum_base"))
     return found
 
 
@@ -640,13 +655,14 @@ def _rename_class(schema: dict[str, Any], target: str, payload: Mapping[str, Any
 
 def _remove_class(schema: dict[str, Any], target: str, payload: Mapping[str, Any], rules: str) -> None:
     cls = _class(schema, target)
-    used = [reference for reference in _references(schema, target)
-            if not reference.startswith(f"{_title(target, cls)}.")]
+    # The class's own attributes going with it do not count; uses by other classes do.
+    used = [reference for reference in _references(schema, target) if reference.owner != target]
     enum_name = annotation(cls, "source_vocabulary_enum")
     if enum_name:
-        used += _references(schema, enum_name)
+        used += [reference for reference in _references(schema, enum_name) if reference.owner != target]
     if used:
-        raise EditError("in_use", f"{_title(target, cls)} is still used: {'; '.join(used[:5])}")
+        details = "; ".join(reference.describe(schema) for reference in used[:5])
+        raise EditError("in_use", f"{_title(target, cls)} is still used: {details}")
     del schema["classes"][target]
     if enum_name:
         (schema.get("enums") or {}).pop(enum_name, None)

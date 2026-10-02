@@ -31,9 +31,11 @@ def build_graph_task(
     include_inheritance: bool = True,
     allow_cross_module: bool = True,
     owner_id: str | None = None,
+    edits: list[dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     """
-    Build a graph for a branch/package. Runs in a subprocess to keep importer state isolated.
+    Build a graph for a branch/package, with the user's stored `edits` replayed onto it.
+    Runs in a subprocess to keep importer state isolated.
     """
     owner_str = _coerce_owner(owner_id)
     self.update_state(state="STARTED", meta={"owner_id": owner_str, "step": "materialize"})
@@ -55,6 +57,7 @@ def build_graph_task(
         pkg,
         extractor,
         sha=sha,
+        edits=edits or [],
         base_namespace=namespace,
         root=root,
         include_quantities=include_quantities,

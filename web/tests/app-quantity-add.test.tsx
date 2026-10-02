@@ -224,10 +224,7 @@ describe('App editable quantity add flow', () => {
     expect(await screen.findByText(/boom fail/i)).toBeInTheDocument();
   });
 
-  it('undo deletes the stored edits of a change', async () => {
-    const user = userEvent.setup();
-    mockDelete.mockResolvedValue({ data: { deleted: 1 } });
-
+  const addOneQuantity = async (user: ReturnType<typeof userEvent.setup>) => {
     render(<App />);
     await user.click(await screen.findByRole('button', { name: /\+ Start from empty canvas/i }));
     const editToggle =
@@ -238,9 +235,42 @@ describe('App editable quantity add flow', () => {
       ).find((btn) => btn.getAttribute('title')?.includes('Toggle editing')) ?? (await screen.findByRole('button', { name: /^Edit$/i }));
     await user.click(editToggle);
     await user.click(await screen.findByRole('button', { name: /^Trigger quantity add$/i }));
+  };
 
-    const undo = await screen.findByRole('button', { name: '🗑' });
-    await user.click(undo);
-    await waitFor(() => expect(mockDelete).toHaveBeenCalledWith('/schema/edits/7'));
+  it('undo deletes the stored edits of a change in one request', async () => {
+    const user = userEvent.setup();
+    mockDelete.mockResolvedValue({ data: { deleted: 1 } });
+    await addOneQuantity(user);
+
+    await user.click(await screen.findByRole('button', { name: '🗑' }));
+    await waitFor(() =>
+      expect(mockDelete).toHaveBeenCalledWith('/schema/edits', { params: { package: undefined }, data: { ids: ['7'] } })
+    );
+    await waitFor(() => expect(screen.queryByRole('button', { name: '🗑' })).not.toBeInTheDocument());
+  });
+
+  it('a failed undo keeps the change so it can be tried again', async () => {
+    const user = userEvent.setup();
+    mockDelete.mockRejectedValue({ response: { data: { detail: 'offline' } } });
+    await addOneQuantity(user);
+
+    await user.click(await screen.findByRole('button', { name: '🗑' }));
+    expect(await screen.findByText(/Undo failed: offline/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '🗑' })).toBeInTheDocument();
+  });
+
+  it('clear deletes this module\'s edits and the edits its entries made', async () => {
+    const user = userEvent.setup();
+    mockDelete.mockResolvedValue({ data: { deleted: 1 } });
+    await addOneQuantity(user);
+    await screen.findByRole('button', { name: '🗑' });
+
+    await user.click(screen.getByRole('button', { name: /^Clear$/ }));
+    await waitFor(() =>
+      expect(mockDelete).toHaveBeenCalledWith('/schema/edits', {
+        params: { package: 'pkg.custom_schema' },
+        data: { ids: ['7'] },
+      })
+    );
   });
 });
