@@ -108,6 +108,11 @@ def test_bam_snapshot_uses_the_bam_converter(snapshots):
     snapshot = snapshots.get_snapshot(profile("bam-masterdata"), "bam_masterdata.datamodel.object_types")
     assert snapshot["linkml"]["default_prefix"] == "bammd"
     assert snapshot["source"]["commit"] == load_fixture("bam-masterdata")["source"]["commit"]
+    # The schema is named after the module it holds, not after the whole datamodel.
+    schema = snapshot["linkml"]
+    assert schema["name"] == "bam_masterdata.datamodel.object_types"
+    assert schema["id"].endswith("/bam-masterdata/bam_masterdata.datamodel.object_types")
+    assert schema["annotations"]["source_module"] == "bam_masterdata.datamodel.object_types"
 
 
 @pytest.fixture()
@@ -158,7 +163,12 @@ async def test_linkml_download_for_bam(client):
     response = await client.get("/schema/linkml", params={"package": "bam_masterdata.datamodel.object_types"})
     assert response.status_code == 200
     assert response.text.startswith("# LinkML schema exported by schema-studio\n# profile: bam-masterdata\n")
-    assert yaml.safe_load(response.text)["default_prefix"] == "bammd"
+    schema = yaml.safe_load(response.text)
+    assert schema["default_prefix"] == "bammd"
+    assert schema["name"] == "bam_masterdata.datamodel.object_types"
+    assert schema["title"] == "bam-masterdata bam_masterdata.datamodel.object_types"
+    assert schema["id"].endswith("/bam-masterdata/bam_masterdata.datamodel.object_types")
+    assert schema["annotations"]["source_module"] == "bam_masterdata.datamodel.object_types"
 
 
 @pytest.mark.anyio
