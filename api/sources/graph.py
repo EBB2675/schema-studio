@@ -38,8 +38,10 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-# Framework base classes (NOMAD metainfo, openBIS entity types) are not part of a schema.
-EXCLUDE_PREFIXES = ("nomad.metainfo.", "bam_masterdata.metadata.")
+# Framework base classes of NOMAD metainfo are not part of a schema. The
+# bam-masterdata extractor leaves out the framework's roots itself and keeps
+# its entity types (ObjectType, VocabularyType, ...) as base sections.
+EXCLUDE_PREFIXES = ("nomad.metainfo.",)
 # Attribute kinds shown as quantity nodes: NOMAD quantities and bam-masterdata properties.
 QUANTITY_KINDS = ("quantity", "property")
 VOCABULARY_TERM_DTYPE = "VOCAB_TERM"
