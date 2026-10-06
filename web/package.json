@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:pages": "tsc -b && vite build --mode pages && node scripts/copy-pyodide.mjs dist",
     "lint": "eslint .",
     "preview": "vite preview",
     "tauri": "tauri",
@@ -49,6 +50,7 @@
     "globals": "^16.4.0",
     "happy-dom": "^20.0.11",
     "jsdom": "^27.0.1",
+    "pyodide": "314.0.7",
     "tsx": "^4.19.2",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.45.0",

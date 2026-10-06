@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { DEFAULT_OVERVIEW_NAMESPACE } from "../constants/defaults";
+import { apiFetch } from "../client";
 
 type OverviewItem = { package: string; classes: string[] };
 type OverviewResp = { branch: string; base: string; items: OverviewItem[] };
@@ -23,15 +24,12 @@ export default function OverviewGrid({
   const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
-    const url =
-      `${apiBase.replace(/\/$/, "")}` +
-      `/overview?branch=${encodeURIComponent(branch)}&base=${encodeURIComponent(base)}`;
+    const path = `/overview?branch=${encodeURIComponent(branch)}&base=${encodeURIComponent(base)}`;
 
     let cancelled = false;
     setLoading(true);
     setErr(null);
-    const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-    fetch(url, { headers })
+    apiFetch(path, {}, { baseURL: apiBase, token: token ?? "" })
       .then(async (r) => {
         if (!r.ok) throw new Error((await r.text()) || `HTTP ${r.status}`);
         return r.json();

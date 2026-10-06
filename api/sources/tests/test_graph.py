@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -373,7 +374,7 @@ def test_graph_matches_the_legacy_graph_on_a_fake_package(fake_nomad, flags):
 # -------- design rule: plain data, standard library only --------
 
 def test_graph_adapter_and_edits_use_the_standard_library_only():
-    """They run in the browser later (Pyodide), so they may import nothing but the standard library."""
+    """They run in the browser (Pyodide), so they may import nothing but the standard library."""
     sources = PROJECT_ROOT / "api" / "sources"
     code = (
         "import importlib.util, json, sys\n"
@@ -398,7 +399,33 @@ def test_graph_adapter_and_edits_use_the_standard_library_only():
     out = subprocess.run([sys.executable, "-I", "-S", "-c", code], capture_output=True, text=True, check=True)
     # A, its two quantities, V and its term, and B with A's two quantities.
     assert out.stdout.split("\n")[:2] == ["8 2 0", "[]"]
-    for name in ("graph.py", "edits.py"):
+    for name in ("graph.py", "edits.py", "core.py"):
         source = (sources / name).read_text(encoding="utf-8")
         for forbidden in ("fastapi", "sqlite3", "linkml_runtime", "extractor", "yaml", "pydantic"):
             assert f"import {forbidden}" not in source and f"from {forbidden}" not in source
+
+
+def test_core_runs_as_a_package_without_site_packages(tmp_path):
+    """The static site loads graph, edits and core as one package; graphs and edits need no PyYAML."""
+    package = tmp_path / "schema_core"
+    package.mkdir()
+    (package / "__init__.py").write_text("")
+    for name in ("graph.py", "edits.py", "core.py", "linkml_yaml.py"):
+        shutil.copy(PROJECT_ROOT / "api" / "sources" / name, package / name)
+    code = (
+        "import json, sys\n"
+        f"sys.path.insert(0, {str(tmp_path)!r})\n"
+        "from schema_core import core\n"
+        "profile = core.Profile(key='nomad-simulations', default_base_namespace='m')\n"
+        "snapshot = {'source': {'commit': 'c1'}, 'extraction': {'modules': [{'name': 'm.a', 'classes': ['m.a.A']}]},\n"
+        "            'linkml': {'default_prefix': 'nomadsim', 'classes': {'m.a.A': {'name': 'm.a.A', 'title': 'A'}}}}\n"
+        "state = core.edited(profile, snapshot, 'm.a')\n"
+        "prepared = core.prepare(state, 'm.a', [{'op': 'rename_class', 'target': 'm.a.A', 'payload': {'new_name': 'B'}}])\n"
+        "before = core.edited(profile, snapshot, 'm.a')\n"
+        "print(core.root_after(before, 'm.a', prepared, 'A'), prepared[0]['package'], prepared[0]['commit'])\n"
+        "state = core.edited(profile, snapshot, 'm.a', prepared)\n"
+        "print(core.section_names(state, 'm.a'), [n['id'] for n in core.build_graph(state, 'm.a')['nodes']])\n"
+        "print(sorted({n.split('.')[0] for n in sys.modules} - set(sys.stdlib_module_names) - {'schema_core', '__main__'}))\n"
+    )
+    out = subprocess.run([sys.executable, "-I", "-S", "-c", code], capture_output=True, text=True, check=True)
+    assert out.stdout.split("\n")[:3] == ["B m.a c1", "['B'] ['m.a.B']", "[]"]

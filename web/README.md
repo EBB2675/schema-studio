@@ -21,6 +21,7 @@ These Vite env vars (see `App.tsx`) control the initial workspace:
 - `VITE_DEFAULT_NAMESPACE` — comma-separated base namespaces for package discovery (`nomad_simulations.schema_packages` by default).
 - `VITE_DEFAULT_ROOT` — default root section (`ModelMethod`).
 - `VITE_DEFAULT_BRANCH` — default branch for overview/package discovery (`develop`).
+- `VITE_STATIC_MODE` — `true` builds the static site (no server; see the root README); `VITE_BASE_PATH` sets the path it is served under. `npm run build:pages` sets both from `.env.pages` and copies Pyodide into `dist/pyodide/` (`scripts/copy-pyodide.mjs`).
 
 ## Notable UI features
 
@@ -35,6 +36,8 @@ These Vite env vars (see `App.tsx`) control the initial workspace:
 ## Key files
 
 - `src/App.tsx` — sidebar controls, API calls, diff handling, overview toggle, export + editable mode wiring.
+- `src/client.ts` — the only module that talks to the backend: over HTTP, or in a static build to `src/static/backend.ts`.
+- `src/static/` — the static site's backend in the browser, edit store and the web worker running the Python core with Pyodide.
 - `src/GraphView.tsx` — Cytoscape renderer with ELK layout, diff overlays, export handle.
 - `src/components/DocPanel.tsx` — class/quantity docs with inline edit/remove when editable.
 - `src/components/OverviewGrid.tsx` — bird’s-eye packages/classes table.
@@ -48,3 +51,4 @@ These Vite env vars (see `App.tsx`) control the initial workspace:
 - `npm run test` (watch) or `npm run test:run` (CI-friendly) to run the suite.
 - `npm run test:contracts` runs the API contract/identifier checks under Vitest.
 - `npm run build` validates TypeScript + Vite configuration.
+- `tests/static-parity.test.ts` compares the static backend with the Light Mode server; it is run by `api/sources/tests/test_browser.py` and skipped on its own.

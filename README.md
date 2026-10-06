@@ -218,6 +218,25 @@ For desktop-specific setup, testing, packaging, and maintenance notes, use the d
 - [Desktop Roadmap](docs/desktop-roadmap.md)
 - [BAM Schema Selection Plan](docs/bam-schema-selection-plan.md)
 
+## Static Site (GitHub Pages)
+
+Schema Studio also builds as a static site that runs entirely in the browser, without a server. It behaves like Light Mode, with these differences:
+
+- the schemas are snapshot files built into the site, one per schema module, for the commits shown in the sidebar ("Schemas as of");
+- graphs, edits, usage info and the LinkML download are computed in the browser by the same Python code the server runs, with [Pyodide](https://pyodide.org) in a web worker; the first graph of each module comes ready-made, so it shows before Pyodide has loaded;
+- edits are stored only in that browser; "Download edits" and "Load edits" move them between browsers;
+- updating schemas, Send design, branches and login need a server and are not offered.
+
+The workflow `.github/workflows/pages.yml` builds and publishes it when a release is published, or when started by hand. To build it locally (the three schema environments must be set up):
+
+```bash
+npm --prefix web ci
+npm --prefix web run build:pages          # static frontend + Pyodide into web/dist
+.venv/bin/python scripts/build_snapshots.py --out web/dist/data --graphs
+```
+
+The site expects to be served under `/schema-studio/` (set by `web/.env.pages`), for example by copying `web/dist` to a `schema-studio/` folder and running `python -m http.server` in its parent.
+
 ## API (Light Mode)
 
 Core endpoints:

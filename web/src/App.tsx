@@ -1,5 +1,5 @@
 import type { ChangeEvent, FormEvent, SyntheticEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import GraphView, { type GraphExportHandle } from "./GraphView";
 import DocPanel from "./components/DocPanel";
@@ -27,12 +27,15 @@ import {
   type DiffResponse
 } from "./types/api";
 import type { WorkspaceState } from "./types/workspace";
-import { API_FEATURE_HEADER, API_VERSION, API_VERSION_HEADER, DEFAULT_FEATURE_FLAGS } from "./constants/api";
-import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_ROOT, DEFAULT_PACKAGE, LIGHT_MODE, WORKSPACE_PRESETS } from "./constants/defaults";
+import { createApiClient } from "./client";
+import { DEFAULT_API, DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_ROOT, DEFAULT_PACKAGE, LIGHT_MODE, STATIC_MODE, WORKSPACE_PRESETS } from "./constants/defaults";
 import { useWorkspaceStore } from "./store/workspace";
 import { fqidFromParts, normalizeId, normalizeLabel, normalizeModule } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
 import { buildUmlStateFromGraph } from "./utils/umlState";
+
+// Only static builds show it; loaded on demand so other builds do not carry it.
+const StaticSitePanel = STATIC_MODE ? lazy(() => import("./components/StaticSitePanel")) : () => null;
 
 type WorkspaceEnvelope = { workspace?: WorkspaceState };
 
@@ -284,14 +287,8 @@ export default function App() {
   }, [auditTrail]);
 
   const api = useMemo(() => {
-    const instance = axios.create({ baseURL: apiBase });
+    const instance = createApiClient(apiBase, token);
     instance.interceptors.request.use((config) => {
-      config.headers = config.headers ?? {};
-      config.headers[API_VERSION_HEADER] = API_VERSION;
-      config.headers[API_FEATURE_HEADER] = DEFAULT_FEATURE_FLAGS.join(",");
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
       (config as EpochConfig).workspaceEpoch = workspaceEpochRef.current;
       return config;
     });
@@ -783,7 +780,7 @@ export default function App() {
     setAuthError(null);
     try {
       const endpoint = authMode === "register" ? "/auth/register" : "/auth/login";
-      const res = await axios.post(`${apiBase}${endpoint}`, {
+      const res = await createApiClient(apiBase).post(endpoint, {
         username: loginUsername,
         password: loginPassword,
       });
@@ -2565,7 +2562,9 @@ export default function App() {
             SchemaStudio
           </h3>
           <p className="subdued">
-            {isLightMode
+            {STATIC_MODE
+              ? "Static site: runs in your browser, without a server."
+              : isLightMode
               ? "Running in Light Mode (local, single-user, non-production)."
               : "Craft diagrams, compare branches, and edit schemas across compatible repositories."}
           </p>
@@ -2599,7 +2598,11 @@ export default function App() {
               </button>
             </div>
           </div>
-          {isLightMode ? (
+          {STATIC_MODE ? (
+            <Suspense fallback={null}>
+              <StaticSitePanel profiles={schemaProfiles} onEditsChanged={() => void loadGraph()} />
+            </Suspense>
+          ) : isLightMode ? (
             <div className="row" style={{ marginTop: 12, gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <button
                 className="btn secondary"

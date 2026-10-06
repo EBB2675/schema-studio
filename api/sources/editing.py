@@ -1,22 +1,11 @@
-"""Edits on the server: stored edits replayed onto a snapshot's LinkML schema, then the graph adapter.
+"""Edits on the server: the snapshot of a module, with the stored edits replayed by `core`.
 
-Shared by Light Mode and Dev Mode, which store edits differently (SQLite,
+Shared by Light and Dev Mode, which store edits differently (SQLite,
 MongoDB); here an edit is the plain dict of `edits.py` plus the module it is
 stored under (`package`). The edited LinkML schema is the truth: graphs, roots,
-usage and the LinkML download all read it.
-
-An edit is stored under the module that owns its target: the module of the
-class it changes (a new class: the module it is added to). Every module's
-graph replays all of the profile's edits in the order they were made, so a
-class shows the same edits wherever it appears; an edit stored under another
-module that does not apply to this module's snapshot (its target is not
-there) is skipped silently, and only the module's own edits are reported as
-conflicts.
-
-The empty canvas uses a module that does not exist
-(`<base namespace>.custom_schema`); it starts from the whole profile's schema,
-so new classes can build on existing ones, and its graph shows only the
-classes the edits added there.
+usage and the LinkML download all read it. How edits replay, which module
+owns an edit and the empty canvas are described in `core.py`; this module
+finds the snapshots and keeps the legacy extraction path working.
 
 Dev Mode reads a branch from a git worktree (`Source`); the graph, roots, the
 LinkML download and new edits then all use that branch's snapshot.
@@ -24,11 +13,12 @@ LinkML download and new edits then all use that branch's snapshot.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ..light_mode.schema_source import SchemaProfile, schema_profile_for_package
+from . import core
 from . import edits as edit_ops
 from . import graph
 from .extraction import DEFAULT_EXTRACTOR
@@ -36,10 +26,13 @@ from .extraction import build_graph as extracted_graph
 from .extraction import extraction_mode, get_usage_for_section
 from .extraction import list_sections as extracted_sections
 from .legacy import UnknownRoot, UsageEntry
-from .linkml_yaml import dump_yaml
 from .snapshots import get_snapshot, snapshot_yaml
 
-SCRATCH_SUFFIX = ".custom_schema"
+SCRATCH_SUFFIX = core.SCRATCH_SUFFIX
+Edited = core.Edited
+is_scratch = core.is_scratch
+snapshot_commit = core.snapshot_commit
+with_stored = core.with_stored
 
 EditError = edit_ops.EditError
 
@@ -54,28 +47,6 @@ class Source:
 
     root: Path
     sha: str | None = None
-
-
-@dataclass
-class Edited:
-    """A snapshot's schema with edits replayed onto it."""
-
-    profile: SchemaProfile
-    snapshot: dict[str, Any]
-    schema: dict[str, Any]
-    applied: list[Mapping[str, Any]] = field(default_factory=list)
-    conflicts: list[dict[str, Any]] = field(default_factory=list)
-    commit: str | None = None
-
-
-def is_scratch(package: str) -> bool:
-    return package.endswith(SCRATCH_SUFFIX)
-
-
-def snapshot_commit(snapshot: Mapping[str, Any]) -> str | None:
-    """The schema commit a snapshot was read from (its package version if not installed from git)."""
-    source = snapshot.get("source") or {}
-    return source.get("commit") or source.get("version")
 
 
 def rules_summary(profile: SchemaProfile) -> dict[str, Any]:
@@ -94,14 +65,10 @@ def _require_editable(profile: SchemaProfile) -> None:
 
 
 def _snapshot(profile: SchemaProfile, package: str, source: Source | None) -> dict[str, Any]:
-    scope = profile.default_base_namespace if is_scratch(package) else package
+    scope = core.snapshot_scope(profile, package)
     if source is None:
         return get_snapshot(profile, scope)
     return get_snapshot(profile, scope, source_root=source.root, source_version=source.sha)
-
-
-def _own(edit: Mapping[str, Any], package: str) -> bool:
-    return edit.get("package") in (None, package)
 
 
 def edited(
@@ -119,24 +86,13 @@ def edited(
     profile = schema_profile_for_package(package, base_namespace)
     _require_editable(profile)
     snapshot = _snapshot(profile, package, source)
-    commit = source.sha if source is not None and source.sha else snapshot_commit(snapshot)
-    schema, applied, conflicts = edit_ops.apply_edits(snapshot["linkml"], stored, rules=profile.edit_rules, commit=commit)
-    conflicts = [conflict for conflict in conflicts if _own(conflict["edit"], package)]
-    return Edited(profile=profile, snapshot=snapshot, schema=schema, applied=applied, conflicts=conflicts, commit=commit)
+    return core.edited(profile, snapshot, package, stored, commit=source.sha if source is not None else None)
 
 
 def _unsupported(stored: Sequence[Mapping[str, Any]], profile: SchemaProfile, package: str) -> list[dict[str, Any]]:
     detail = f"edits need the LinkML extraction, which SCHEMA_STUDIO_EXTRACTION turns off for {profile.label}"
     return [{"edit": edit, "reason": "unsupported", "detail": detail, "applied": False}
-            for edit in stored if _own(edit, package)]
-
-
-def _module_view(state: Edited, package: str, empty: bool) -> dict[str, Any]:
-    extraction = state.snapshot["extraction"]
-    if empty or is_scratch(package):
-        # Only what the edits added to this module; nothing the source module binds.
-        extraction = {**extraction, "modules": []}
-    return extraction
+            for edit in stored if edit.get("package") in (None, package)]
 
 
 def build_graph(
@@ -180,11 +136,9 @@ def build_graph(
     else:
         state = edited(package, stored, base_namespace=base_namespace, source=source)
         try:
-            result = graph.build_graph(state.schema, _module_view(state, package, empty), package, **flags)
+            return core.build_graph(state, package, empty=empty, **{**flags, "root": root})
         except graph.RootNotFound as exc:
             raise UnknownRoot(f"ValueError: {exc}") from exc
-        result["root"] = root
-        applied, conflicts = state.applied, state.conflicts
     if applied:
         result["applied_edits"] = list(applied)
     if conflicts:
@@ -200,7 +154,7 @@ def list_sections(
     if not editable(profile) or (not stored and not is_scratch(package) and source is None):
         return extracted_sections(package)
     state = edited(package, stored, source=source)
-    return graph.section_names(state.schema, _module_view(state, package, False), package)
+    return core.section_names(state, package)
 
 
 def usage_for_section(
@@ -216,42 +170,14 @@ def usage_for_section(
         profile = schema_profile_for_package(package)
         if editable(profile):
             state = edited(package, stored, source=source)
-            cls = (state.schema.get("classes") or {}).get(section_id)
-            if cls is not None and graph.annotation(cls, edit_ops.ADDED) == "true":
-                return ()  # no code acts on a class that only the edits have
-            if cls is not None:
-                section_id = graph.source_class_id(section_id, cls)
+            source_id = core.usage_source(state, section_id)
+            if source_id is None:
+                return ()
+            section_id = source_id
     if source is None or state is None:
         return get_usage_for_section(section_id, package)
-    for snapshot in (state.snapshot, _snapshot(state.profile, state.profile.default_base_namespace, source)):
-        entries = graph.usage_entries(snapshot["extraction"], section_id)
-        if entries is not None:
-            return tuple(UsageEntry(**entry) for entry in entries)
-    return ()
-
-
-def _owner(state: Edited, edit: Mapping[str, Any], package: str) -> str:
-    """The module an edit is stored under: the module of the class it changes, else the module shown.
-
-    Classes outside the profile's namespace (NOMAD base sections from
-    nomad-lab) belong to no module of the profile; their edits stay with the
-    module they were made in.
-    """
-    if edit["op"] == "add_class":
-        return package
-    classes = state.schema.get("classes") or {}
-    name = edit["target"]
-    if name not in classes:
-        enum = (state.schema.get("enums") or {}).get(name) or {}
-        vocabulary = graph.annotation(enum, "source_vocabulary_class")
-        # A NOMAD enum is named after its quantity: `<class>.<attribute>`.
-        name = vocabulary if vocabulary in classes else name.rpartition(".")[0]
-    cls = classes.get(name)
-    if cls is None:
-        return package
-    module = graph.class_module(name, cls)
-    namespace = state.profile.default_base_namespace
-    return module if module == namespace or module.startswith(f"{namespace}.") else package
+    snapshots = (state.snapshot, _snapshot(state.profile, state.profile.default_base_namespace, source))
+    return tuple(UsageEntry(**entry) for entry in core.usage_entries(snapshots, section_id))
 
 
 def prepare(
@@ -268,17 +194,7 @@ def prepare(
     edit gets the module it is to be stored under (`package`).
     """
     state = edited(package, stored, base_namespace=base_namespace, source=source)
-    schema = state.schema
-    prepared = []
-    for request in requests:
-        edit = edit_ops.prepare_edit(
-            schema, str(request.get("op") or ""), str(request.get("target") or ""), request.get("payload") or {},
-            rules=state.profile.edit_rules, package=package, profile=state.profile.key, commit=state.commit,
-        )
-        edit["package"] = _owner(state, edit, package)
-        edit_ops.apply_edit(schema, edit, rules=state.profile.edit_rules)
-        prepared.append(edit)
-    return prepared
+    return core.prepare(state, package, requests)
 
 
 def root_after(
@@ -294,30 +210,7 @@ def root_after(
     if not root:
         return root
     state = edited(package, stored, base_namespace=base_namespace, source=source)
-    view = _module_view(state, package, False)
-    _, before = graph.entry_points(state.schema, view, package)
-    after_schema, _, _ = edit_ops.apply_edits(state.schema, prepared, rules=state.profile.edit_rules)
-    _, after = graph.entry_points(after_schema, view, package)
-    if root in after:
-        return root
-    target = before.get(root)
-    for edit in prepared:
-        if edit["op"] == "rename_class" and edit["target"] == target:
-            target = f"{target.rpartition('.')[0]}.{edit['payload']['new_name']}"
-    return next((name for name, cls in after.items() if cls == target), None)
-
-
-def with_stored(
-    result: dict[str, Any], prepared: Sequence[Mapping[str, Any]], saved: Sequence[Mapping[str, Any]],
-) -> dict[str, Any]:
-    """A graph built with edits before they were stored, showing them as stored (with their ids)."""
-    stored_as = {id(edit): stored for edit, stored in zip(prepared, saved)}
-    if "applied_edits" in result:
-        result["applied_edits"] = [stored_as.get(id(edit), edit) for edit in result["applied_edits"]]
-    for conflict in result.get("edit_conflicts") or ():
-        conflict["edit"] = stored_as.get(id(conflict["edit"]), conflict["edit"])
-    result["persisted_edits"] = list(saved)
-    return result
+    return core.root_after(state, package, prepared, root)
 
 
 def linkml_yaml(package: str, stored: Sequence[Mapping[str, Any]] = (), *, source: Source | None = None) -> str:
@@ -329,12 +222,7 @@ def linkml_yaml(package: str, stored: Sequence[Mapping[str, Any]] = (), *, sourc
     profile = schema_profile_for_package(package)
     if not stored or not editable(profile):
         return snapshot_yaml(_snapshot(profile, package, source))
-    state = edited(package, stored, source=source)
-    snapshot = state.snapshot
-    return dump_yaml(
-        state.schema, profile=snapshot["profile"], source=snapshot["source"], tools=snapshot["tools"],
-        edited=bool(state.applied), report=snapshot["report"],
-    )
+    return core.edited_yaml(edited(package, stored, source=source))
 
 
 __all__ = [
