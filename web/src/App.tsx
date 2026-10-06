@@ -33,6 +33,7 @@ import { useWorkspaceStore } from "./store/workspace";
 import { fqidFromParts, normalizeId, normalizeLabel, normalizeModule } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
 import { buildUmlStateFromGraph } from "./utils/umlState";
+import { initialTheme } from "./utils/theme";
 
 // Only static builds show it; loaded on demand so other builds do not carry it.
 const StaticSitePanel = STATIC_MODE ? lazy(() => import("./components/StaticSitePanel")) : () => null;
@@ -150,8 +151,7 @@ export default function App() {
   // appearance
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     if (typeof window === "undefined") return "dark";
-    const stored = window.localStorage.getItem("schema-uml-theme");
-    const initial = stored === "light" ? "light" : (LIGHT_MODE ? "light" : "dark");
+    const initial = initialTheme(window.localStorage.getItem("schema-uml-theme"), LIGHT_MODE);
     document.documentElement.setAttribute("data-theme", initial);
     return initial;
   });
