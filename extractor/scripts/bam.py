@@ -12,6 +12,11 @@ are kept as annotations. Changes from that file:
   `ObjectType` or `VocabularyType` of `bam_masterdata.metadata.entities` among
   its bases, so a class without its own `defs` is not lost; the `defs` it has
   still give its annotations;
+- the openBIS entity types themselves (`ObjectType`, `VocabularyType`,
+  `CollectionType`, `DatasetType`) are kept as the base classes of the schema,
+  like NOMAD's `ArchiveSection`; only their roots (`BaseEntity`, pydantic's
+  `BaseModel`) are left out. They are reached as bases only: no module
+  exposes them and they hold no vocabulary terms of their own;
 - several modules in one run (`--base` walks `bam_masterdata.datamodel`), each
   listed under `modules` with the entities it exposes at module level, in
   module order, and every module-level name bound to one of them (`names`);
@@ -61,7 +66,8 @@ from typing import Any
 SCRIPTS_DIR = Path(__file__).resolve().parent
 CONTRACT_VERSION = "1.0"
 DATAMODEL = "bam_masterdata.datamodel"
-# Classes of the openBIS framework itself are not part of a schema.
+# Classes of the openBIS framework itself are not part of a schema, apart from
+# the entity types of ENTITIES_MODULE that schema classes derive from.
 FRAMEWORK_PREFIX = "bam_masterdata.metadata."
 ENTITIES_MODULE = "bam_masterdata.metadata.entities"
 DEFINITIONS_MODULE = "bam_masterdata.metadata.definitions"
@@ -105,17 +111,27 @@ def _has_entity_base(obj: Any, names: frozenset[str]) -> bool:
     )
 
 
+def is_framework(cls: type) -> bool:
+    return identifier(cls).startswith(FRAMEWORK_PREFIX)
+
+
 def is_entity(obj: Any) -> bool:
-    """An object type or vocabulary class of a schema (not of the framework)."""
+    """An object type or vocabulary class: of a schema, or one of the framework's entity types."""
     return (
         inspect.isclass(obj)
         and _has_entity_base(obj, frozenset({"ObjectType", "VocabularyType"}))
-        and not identifier(obj).startswith(FRAMEWORK_PREFIX)
+        and (not is_framework(obj) or obj.__module__ == ENTITIES_MODULE)
     )
 
 
+def is_schema_entity(obj: Any) -> bool:
+    """An object type or vocabulary class of a schema (not of the framework)."""
+    return is_entity(obj) and not is_framework(obj)
+
+
 def is_vocabulary(cls: type) -> bool:
-    return _has_entity_base(cls, frozenset({"VocabularyType"}))
+    """A vocabulary of a schema; `VocabularyType` itself has no terms."""
+    return not is_framework(cls) and _has_entity_base(cls, frozenset({"VocabularyType"}))
 
 
 def _is_definition(value: Any, name: str) -> bool:
@@ -269,7 +285,7 @@ def build_catalog(modules: list[ModuleType]) -> dict[tuple[str, str], list[type]
     catalog: dict[tuple[str, str], list[type]] = {}
     for module in modules:
         for value in vars(module).values():
-            if not is_entity(value) or value.__module__ != module.__name__:
+            if not is_schema_entity(value) or value.__module__ != module.__name__:
                 continue
             definition = definition_of(value)
             code = getattr(definition, "code", None)
@@ -281,16 +297,19 @@ def build_catalog(modules: list[ModuleType]) -> dict[tuple[str, str], list[type]
 
 
 def module_entities(module: ModuleType, roots: tuple[str, ...] = ()) -> list[type]:
-    """Entity classes a module exposes, in module order (or the requested roots)."""
+    """Schema entity classes a module exposes, in module order (or the requested roots).
+
+    The framework's entity types, which every module imports, are bases only.
+    """
     if roots:
         found = []
         for root in roots:
             value = getattr(module, root, None)
-            if not is_entity(value):
+            if not is_schema_entity(value):
                 raise ValueError(f"Root section '{root}' not found in {module.__name__}")
             found.append(value)
         return found
-    return list(dict.fromkeys(value for value in vars(module).values() if is_entity(value)))
+    return list(dict.fromkeys(value for value in vars(module).values() if is_schema_entity(value)))
 
 
 def extract(
@@ -387,13 +406,13 @@ def extract(
         objects[path] = cls
 
         for base in cls.__bases__:
-            if base is object or identifier(base).startswith(FRAMEWORK_PREFIX):
-                # The framework roots (ObjectType, VocabularyType, ...) are every
-                # entity's bases; leaving them out loses nothing.
-                continue
             if is_entity(base):
                 record["bases"].append(identifier(base))
                 pending.append(base)
+            elif base is object or is_framework(base):
+                # The root of the entity types (BaseEntity, and pydantic's
+                # BaseModel above it) holds no properties; leaving it out loses nothing.
+                continue
             else:
                 warn(f"{path}.__bases__.{base.__name__}", "base is not a masterdata entity")
 

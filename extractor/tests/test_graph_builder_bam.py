@@ -150,8 +150,15 @@ def test_build_graph_extracts_bam_object_types_and_controlled_vocab(monkeypatch,
         "inherits",
     ) in edge_types
 
-    # The openBIS framework base classes are not part of the schema, also with cross-modules on.
-    assert not any(node_id.startswith("bam_masterdata.metadata.") for node_id in nodes_by_id)
+    # The openBIS entity types are base sections; their root BaseEntity is not part of the schema.
+    assert (
+        "bam_masterdata.datamodel.object_types.BaseEntity",
+        "bam_masterdata.metadata.entities.ObjectType",
+        "inherits",
+    ) in edge_types
+    assert {node_id for node_id in nodes_by_id if node_id.startswith("bam_masterdata.metadata.")} == {
+        "bam_masterdata.metadata.entities.ObjectType"
+    }
 
 
 def test_build_graph_extracts_bam_vocabulary_terms(monkeypatch, tmp_path: Path):
