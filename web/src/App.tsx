@@ -2582,7 +2582,7 @@ export default function App() {
             </div>
           )}
           <div style={{ marginTop: 12 }}>
-            <div className="toggle-group" aria-label="Appearance">
+            <div className="toggle-group" role="group" aria-label="Appearance">
               <button
                 className={`toggle-chip ${theme === "dark" ? "active" : ""}`}
                 onClick={() => setTheme("dark")}
