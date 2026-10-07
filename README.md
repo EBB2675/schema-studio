@@ -222,7 +222,7 @@ For desktop-specific setup, testing, packaging, and maintenance notes, use the d
 
 Schema Studio also builds as a static site that runs entirely in the browser, without a server. It behaves like Light Mode, with these differences:
 
-- the schemas are snapshot files built into the site, one per schema module, for the commits shown in the sidebar ("Schemas as of");
+- the schemas are snapshot files built into the site, one per schema module, for the commits shown when hovering over each schema family button;
 - graphs, edits, usage info and the LinkML download are computed in the browser by the same Python code the server runs, with [Pyodide](https://pyodide.org) in a web worker; the first graph of each module comes ready-made, so it shows before Pyodide has loaded;
 - edits are stored only in that browser; "Download edits" and "Load edits" move them between browsers;
 - updating schemas, Send design, branches and login need a server and are not offered.
