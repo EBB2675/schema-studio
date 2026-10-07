@@ -23,6 +23,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 NS = "bam_masterdata.datamodel"
 OBJECTS = f"{NS}.object_types"
 VOCABULARIES = f"{NS}.vocabulary_types"
+ENTITIES = "bam_masterdata.metadata.entities"
 # What the new path adds to nodes; the legacy graph has none of it.
 ADDED_FIELDS = ("unit", "code", "title", "title_de", "doc_de", "mandatory", "section", "iri")
 
@@ -33,16 +34,31 @@ FILES = {
     "bam_masterdata/datamodel/__init__.py": "",
     "bam_masterdata/datamodel/lab/__init__.py": "",
     "bam_masterdata/metadata/entities.py": '''
-class ObjectType:
-    pass
+from bam_masterdata.metadata.definitions import DataType, PropertyTypeAssignment
+
+
+class BaseEntity:
+    """Root of the entity types."""
+
+
+class ObjectType(BaseEntity):
+    """Base class used to define object types."""
 
 
 class CollectionType(ObjectType):
+    # The real one has no properties; this one checks that a framework type's own ones are read.
+    default_view = PropertyTypeAssignment(
+        code="DEFAULT_VIEW", data_type=DataType.VARCHAR, property_label="Default view",
+        description="Default view", mandatory=False,
+    )
+
+
+class DatasetType(ObjectType):
     pass
 
 
-class VocabularyType:
-    pass
+class VocabularyType(BaseEntity):
+    """Base class used to define vocabulary types."""
 ''',
     "bam_masterdata/metadata/definitions.py": '''
 from dataclasses import dataclass
@@ -194,6 +210,14 @@ class Colour(VocabularyType):
 
     red = VocabularyTerm(code="RED", label="Red")
 ''',
+    "bam_masterdata/datamodel/collection_types.py": '''
+from bam_masterdata.metadata.definitions import CollectionTypeDef
+from bam_masterdata.metadata.entities import CollectionType
+
+
+class Campaign(CollectionType):
+    defs = CollectionTypeDef(code="CAMPAIGN", description="Campaign")
+''',
     # A second vocabulary with the code COLOUR; `lab` classes use their own.
     "bam_masterdata/datamodel/lab/vocabularies.py": '''
 from bam_masterdata.metadata.definitions import VocabularyTerm, VocabularyTypeDef
@@ -327,6 +351,36 @@ def test_roots_limit_the_starting_points(fake_environment, package_root):
         extract(fake_environment, package_root, "--module", OBJECTS, "--root", "Missing")
 
 
+def test_entity_types_are_base_classes(fake_environment, package_root):
+    """ObjectType and the other entity types are kept as bases, like NOMAD's ArchiveSection; BaseEntity is not."""
+    from api.sources.to_linkml import convert_bam
+
+    document = extract(fake_environment, package_root, "--base", NS, "--discovery", "walk")
+    classes = {record["id"]: record for record in document["classes"]}
+    framework = sorted(name for name in classes if name.startswith("bam_masterdata.metadata."))
+    # DatasetType is not a base of any schema class here, so it is not reached.
+    assert framework == [f"{ENTITIES}.CollectionType", f"{ENTITIES}.ObjectType", f"{ENTITIES}.VocabularyType"]
+    assert classes[f"{ENTITIES}.ObjectType"]["bases"] == []
+    assert classes[f"{ENTITIES}.ObjectType"]["description"] == "Base class used to define object types."
+    assert "annotations" not in classes[f"{ENTITIES}.ObjectType"]
+    assert classes[f"{OBJECTS}.BaseEntity"]["bases"] == [f"{ENTITIES}.ObjectType"]
+    assert classes[f"{VOCABULARIES}.DeviceStatus"]["bases"] == [f"{ENTITIES}.VocabularyType"]
+    # A framework type's own properties are read and inherited; VocabularyType has no terms of its own.
+    collection = classes[f"{ENTITIES}.CollectionType"]
+    assert [item["name"] for item in collection["attributes"]] == ["default_view"]
+    assert classes[f"{NS}.collection_types.Campaign"]["effective_attributes"] == [
+        {"kind": "property", "name": "default_view", "declaring_class_id": f"{ENTITIES}.CollectionType"},
+    ]
+    assert all(not item["id"].startswith("bam_masterdata.metadata.") for item in document["enums"])
+    # No module offers them, though every module imports one.
+    assert all(not cid.startswith("bam_masterdata.metadata.") for module in document["modules"] for cid in module["classes"])
+    assert not [row for row in document["report"] if "metadata" in row["path"]]
+    conversion = convert_bam(document)
+    assert conversion.schema["classes"][f"{OBJECTS}.BaseEntity"]["is_a"] == f"{ENTITIES}.ObjectType"
+    assert "inherits" not in conversion.schema["enums"][f"{VOCABULARIES}.DeviceStatus.terms"]
+    assert not [row for row in conversion.report if row["status"] == "partial" and "metadata" in row["path"]]
+
+
 def test_only_the_datamodel_is_read(fake_environment, package_root):
     with pytest.raises(ExtractorError, match="only modules within"):
         extract(fake_environment, package_root, "--module", "bam_masterdata.metadata.entities")
@@ -371,8 +425,11 @@ def test_branch_expectations_hold_on_the_new_path(fake_environment, package_root
     assert nodes[f"{device}.status"]["dtype"] == "CONTROLLEDVOCABULARY[DEVICE_STATUS]"
     assert nodes[f"{device}.status"]["card"] == "0..1"
     assert nodes[f"{device}.base_value"]["dtype"] == "INTEGER"
-    assert (device, f"{OBJECTS}.BaseEntity", "inherits") in {(e["source"], e["target"], e["type"]) for e in result["edges"]}
-    assert not any(node_id.startswith("bam_masterdata.metadata.") for node_id in nodes)
+    edges = {(e["source"], e["target"], e["type"]) for e in result["edges"]}
+    assert (device, f"{OBJECTS}.BaseEntity", "inherits") in edges
+    # The framework's entity types are base sections; their root is left out.
+    assert (device, f"{ENTITIES}.ObjectType", "inherits") in edges
+    assert {node_id for node_id in nodes if node_id.startswith("bam_masterdata.metadata.")} == {f"{ENTITIES}.ObjectType"}
 
     terms = linkml_graph(document, VOCABULARIES, root="ExtendedStatus")
     nodes = {node["id"]: node for node in terms["nodes"]}

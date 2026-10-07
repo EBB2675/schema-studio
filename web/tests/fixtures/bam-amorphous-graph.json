@@ -104,6 +104,12 @@
    "type": "inherits"
   },
   {
+   "card": null,
+   "source": "bam_masterdata.datamodel.object_types.Amorphous",
+   "target": "bam_masterdata.metadata.entities.ObjectType",
+   "type": "inherits"
+  },
+  {
    "card": "0..1",
    "source": "bam_masterdata.datamodel.object_types.MatSimStructure",
    "target": "bam_masterdata.datamodel.object_types.MatSimStructure.annotations_state",
@@ -174,6 +180,12 @@
    "source": "bam_masterdata.datamodel.object_types.MatSimStructure",
    "target": "bam_masterdata.datamodel.object_types.MatSimStructure.xmlcomments",
    "type": "hasQuantity"
+  },
+  {
+   "card": null,
+   "source": "bam_masterdata.datamodel.object_types.MatSimStructure",
+   "target": "bam_masterdata.metadata.entities.ObjectType",
+   "type": "inherits"
   }
  ],
  "nodes": [
@@ -698,6 +710,18 @@
    "label": "MatSimStructure",
    "methods": null,
    "module": "bam_masterdata.datamodel.object_types",
+   "owner": null,
+   "shape": null
+  },
+  {
+   "card": null,
+   "doc": "Base class used to define object types. All object types must inherit from this class. The\n    object types are defined in the module `bam_masterdata/object_types.py`.\n\n    The `ObjectType` class contains a list of all `properties` defined for a `ObjectType`, for\n    internally represent the model in other formats (e.g., JSON or Excel).\n\n    Note this is also used for `CollectionType` and `DatasetType`, as they also contain a list of\n    properties.",
+   "dtype": null,
+   "id": "bam_masterdata.metadata.entities.ObjectType",
+   "kind": "section",
+   "label": "ObjectType",
+   "methods": null,
+   "module": "bam_masterdata.metadata.entities",
    "owner": null,
    "shape": null
   }
