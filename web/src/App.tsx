@@ -2563,27 +2563,26 @@ export default function App() {
           </h3>
           <p className="subdued">
             {STATIC_MODE
-              ? "Static site: runs in your browser, without a server."
+              ? "Explore and shape materials science schemas."
               : isLightMode
               ? "Running in Light Mode (local, single-user, non-production)."
               : "Craft diagrams, compare branches, and edit schemas across compatible repositories."}
           </p>
-          <div className="row" style={{ marginTop: 10, flexWrap: "wrap", gap: 8 }}>
-            <span className="tag">{loading || diffLoading ? "Working…" : "Ready"}</span>
-            {isLightMode ? <span className="tag muted">Single-user</span> : null}
-            {schemaVersion ? (
-              <span className="tag">Schema {schemaVersion.slice(0, 9)}{schemaSource ? ` (${schemaSource})` : ""}</span>
-            ) : (
-              <span className="tag muted">Schema version…</span>
-            )}
-            {schemaProfileKey ? <span className="tag muted">Profile: {schemaProfileKey}</span> : null}
-            {selectedClassName ? <span className="tag">Selected: {selectedClassName}</span> : null}
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <div className="label" style={{ marginBottom: 6 }}>
-              Appearance
+          {STATIC_MODE ? null : (
+            <div className="row" style={{ marginTop: 10, flexWrap: "wrap", gap: 8 }}>
+              <span className="tag">{loading || diffLoading ? "Working…" : "Ready"}</span>
+              {isLightMode ? <span className="tag muted">Single-user</span> : null}
+              {schemaVersion ? (
+                <span className="tag">Schema {schemaVersion.slice(0, 9)}{schemaSource ? ` (${schemaSource})` : ""}</span>
+              ) : (
+                <span className="tag muted">Schema version…</span>
+              )}
+              {schemaProfileKey ? <span className="tag muted">Profile: {schemaProfileKey}</span> : null}
+              {selectedClassName ? <span className="tag">Selected: {selectedClassName}</span> : null}
             </div>
-            <div className="toggle-group">
+          )}
+          <div style={{ marginTop: 12 }}>
+            <div className="toggle-group" aria-label="Appearance">
               <button
                 className={`toggle-chip ${theme === "dark" ? "active" : ""}`}
                 onClick={() => setTheme("dark")}
@@ -2598,11 +2597,7 @@ export default function App() {
               </button>
             </div>
           </div>
-          {STATIC_MODE ? (
-            <Suspense fallback={null}>
-              <StaticSitePanel profiles={schemaProfiles} onEditsChanged={() => void loadGraph()} />
-            </Suspense>
-          ) : isLightMode ? (
+          {isLightMode && !STATIC_MODE ? (
             <div className="row" style={{ marginTop: 12, gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <button
                 className="btn secondary"
@@ -2657,14 +2652,13 @@ export default function App() {
                 {mode === "overview" ? "Back to diagram" : "Bird's-eye view"}
               </button>
             </div>
+            {STATIC_MODE ? (
+              <Suspense fallback={null}>
+                <StaticSitePanel onEditsChanged={() => void loadGraph()} />
+              </Suspense>
+            ) : null}
             {isLightMode ? (
               <div className="card" style={{ padding: 12, border: "1px solid var(--border)", borderRadius: 8, display: "grid", gap: 10 }}>
-                <div>
-                  <div className="label">Select schema family</div>
-                  <div className="small" style={{ color: "var(--muted)", marginTop: 4 }}>
-                    Pick the schema source before loading packages or editing the graph.
-                  </div>
-                </div>
                 <div style={{ display: "grid", gap: 8 }}>
                   {schemaProfiles.map((profile) => {
                     const isSelected = schemaProfileKey === profile.key;
@@ -2675,15 +2669,18 @@ export default function App() {
                         className={`btn ${isSelected ? "" : "secondary"}`}
                         onClick={() => applySchemaProfile(profile.key)}
                         style={{ justifyContent: "space-between", textAlign: "left" }}
+                        title={STATIC_MODE && profile.version ? `Schema as of commit ${profile.version.slice(0, 9)}` : undefined}
                       >
                         <span>{profile.label}</span>
-                        <span className="small" style={{ color: isSelected ? "inherit" : "var(--muted)" }}>
-                          {profile.available
-                            ? profile.source === "bundled"
-                              ? "bundled"
-                              : profile.version?.slice(0, 9) || "ready"
-                            : "not loaded"}
-                        </span>
+                        {STATIC_MODE ? null : (
+                          <span className="small" style={{ color: isSelected ? "inherit" : "var(--muted)" }}>
+                            {profile.available
+                              ? profile.source === "bundled"
+                                ? "bundled"
+                                : profile.version?.slice(0, 9) || "ready"
+                              : "not loaded"}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
@@ -2703,34 +2700,31 @@ export default function App() {
                 ) : null}
               </div>
             ) : null}
-            <div className="row" style={{ gap: 10, alignItems: "flex-end" }}>
-              <div style={{ flex: 1 }}>
-                {isLightMode ? (
-                  <>
-                    <label className="label">Schema branch</label>
-                    <div className="small">{currentSchemaProfile?.default_branch || DEFAULT_BRANCH} (fixed per schema family in Light Mode)</div>
-                  </>
-                ) : (
-                  <>
-                    <label className="label">Choose from branch</label>
-                    <select
-                      className="select"
-                      value={packageBranch}
-                      onChange={(e) => handleBranchSelect(e.target.value)}
-                    >
-                      {[packageBranch || DEFAULT_BRANCH, ...branches.filter((b) => b !== packageBranch)].map((b) => (
-                        <option key={b} value={b}>
-                          {b}
-                        </option>
-                      ))}
-                    </select>
-                  </>
-                )}
+            {STATIC_MODE ? null : (
+              <div className="row" style={{ gap: 10, alignItems: "flex-end" }}>
+                <div style={{ flex: 1 }}>
+                  {isLightMode ? null : (
+                    <>
+                      <label className="label">Choose from branch</label>
+                      <select
+                        className="select"
+                        value={packageBranch}
+                        onChange={(e) => handleBranchSelect(e.target.value)}
+                      >
+                        {[packageBranch || DEFAULT_BRANCH, ...branches.filter((b) => b !== packageBranch)].map((b) => (
+                          <option key={b} value={b}>
+                            {b}
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  )}
+                </div>
+                <button className="btn secondary" onClick={loadPackages} style={{ whiteSpace: "nowrap" }}>
+                  Refresh packages
+                </button>
               </div>
-              <button className="btn secondary" onClick={loadPackages} style={{ whiteSpace: "nowrap" }}>
-                Refresh packages
-              </button>
-            </div>
+            )}
 
             <div>
               <label className="label">{isLightMode ? "Choose package" : `Choose from ${packageBranch || DEFAULT_BRANCH}`}</label>

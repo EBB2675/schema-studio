@@ -3,26 +3,17 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { getStaticBackend } from "../client";
 import { coreStatus, onCoreStatus, warmUpWorker, type CoreStatus } from "../static/workerCore";
 
-type ProfileVersion = { key: string; label: string; version?: string | null };
-
-const ENGINE_TEXT: Record<CoreStatus, string> = {
-  idle: "Schema engine: starts on first use",
+// Only states the user has to wait for or act on get a line; idle and ready show nothing.
+const ENGINE_TEXT: Partial<Record<CoreStatus, string>> = {
   loading: "Schema engine: loading (slow on the first visit only)…",
-  ready: "Schema engine: ready",
   failed: "Schema engine: failed to load; reload the page to try again",
 };
 
 /**
- * What the static site shows instead of the server controls: which commit each schema is from,
- * whether the in-browser engine is ready, and the edit log kept in this browser.
+ * What the static site shows instead of the server controls: the edit log kept in this browser,
+ * and the in-browser engine status while it loads or if it fails.
  */
-export default function StaticSitePanel({
-  profiles,
-  onEditsChanged,
-}: {
-  profiles: ProfileVersion[];
-  onEditsChanged: () => void;
-}) {
+export default function StaticSitePanel({ onEditsChanged }: { onEditsChanged: () => void }) {
   const [engine, setEngine] = useState<CoreStatus>(coreStatus());
   const [message, setMessage] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -61,30 +52,26 @@ export default function StaticSitePanel({
   };
 
   return (
-    <div style={{ marginTop: 12 }} data-testid="static-site-panel">
-      <div className="small" style={{ color: "var(--muted)" }}>
-        Schemas as of:
-        {profiles.map(profile => (
-          <div key={profile.key}>
-            {profile.label}: <code>{profile.version ? profile.version.slice(0, 9) : "unknown"}</code>
-          </div>
-        ))}
-      </div>
-      <div className="small" role="status" style={{ marginTop: 6, color: engine === "failed" ? "#fca5a5" : "var(--muted)" }}>
-        {ENGINE_TEXT[engine]}
-      </div>
-      <div className="small" style={{ marginTop: 6, color: "var(--muted)" }}>
-        Your edits are stored only in this browser. Download them to keep them or to move them to another browser.
-      </div>
-      <div className="row" style={{ marginTop: 8, gap: 8, flexWrap: "wrap" }}>
-        <button className="btn secondary" type="button" onClick={downloadLog}>
+    <div data-testid="static-site-panel">
+      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+        <button
+          className="btn secondary"
+          type="button"
+          onClick={downloadLog}
+          title="Edits are stored only in this browser. Download them to keep them or move them to another browser."
+        >
           Download edits
         </button>
-        <button className="btn secondary" type="button" onClick={() => fileRef.current?.click()}>
+        <button className="btn secondary" type="button" onClick={() => fileRef.current?.click()} title="Load edits downloaded earlier">
           Load edits
         </button>
         <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: "none" }} onChange={loadLog} aria-label="Edit log file" />
       </div>
+      {ENGINE_TEXT[engine] ? (
+        <div className="small" role="status" style={{ marginTop: 6, color: engine === "failed" ? "#fca5a5" : "var(--muted)" }}>
+          {ENGINE_TEXT[engine]}
+        </div>
+      ) : null}
       {message ? <div className="small" style={{ marginTop: 6, color: "var(--muted)" }}>{message}</div> : null}
     </div>
   );
