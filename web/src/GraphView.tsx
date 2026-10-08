@@ -8,6 +8,7 @@ import { NOMAD_EDIT_RULES, VOCAB_TERM, type EditRules, type QuantityFormData } f
 import type { ApiEdge, ApiNode } from "./types/api";
 import type { QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
 import { fqidFromParts } from "./utils/identifier";
+import { canvasEdges } from "./utils/canvasEdges";
 
 type QtyDiffState = "added" | "removed" | "changed" | undefined;
 
@@ -531,18 +532,25 @@ export default function GraphView({
       qByOwner.set(owner, metaList);
     }
 
-    const baseEdges = [...resolvedEdges];
+    const baseEdges = canvasEdges(resolvedEdges);
     if (diff?.edges?.removed?.length) {
+      const removedEdges: RawEdge[] = [];
       diff.edges.removed.forEach((e) => {
         if (!e?.source || !e?.target) return;
         const type = (e.type as RawEdge["type"]) ?? "hasSubSection";
-        baseEdges.push({
+        removedEdges.push({
           source: e.source,
           target: e.target,
           type,
           card: e.card ?? undefined
         });
       });
+      // Removed edges are thinned out against the graph as it was before the change.
+      const edgeKey = (e: RawEdge) => `${e.source}|${e.target}|${e.type}`;
+      const added = new Set((diff.edges.added ?? []).map(edgeKey));
+      const before = [...resolvedEdges.filter((e) => !added.has(edgeKey(e))), ...removedEdges];
+      const keptBefore = new Set(canvasEdges(before).map(edgeKey));
+      baseEdges.push(...removedEdges.filter((e) => keptBefore.has(edgeKey(e))));
     }
 
     const umlEdges = baseEdges.filter((e) => {
