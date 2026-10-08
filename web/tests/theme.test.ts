@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { initialTheme } from "../src/utils/theme";
 
 describe("initialTheme", () => {
-  it("keeps a stored dark theme when light mode is on", () => {
+  it("keeps a stored dark theme on the static site", () => {
     expect(initialTheme("dark", true)).toBe("dark");
   });
 

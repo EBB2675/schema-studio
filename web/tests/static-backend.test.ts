@@ -106,7 +106,7 @@ describe("static backend", () => {
 
   it("refuses what needs a server", async () => {
     const { backend } = setup();
-    for (const [method, path] of [["POST", "/schema/update"], ["POST", "/send-design"], ["GET", "/git/branches"], ["POST", "/auth/login"]]) {
+    for (const [method, path] of [["GET", "/git/branches"], ["POST", "/auth/login"], ["POST", "/graph"]]) {
       await expect(backend.request(method, path)).rejects.toBeInstanceOf(StaticHttpError);
     }
     await expect(backend.request("PUT", "/workspace", {}, { package: "ns.pkg.a", branch: "main" })).rejects.toMatchObject({ status: 400 });

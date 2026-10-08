@@ -1,11 +1,10 @@
 /**
- * The backend of the static site, inside the browser: it answers the requests the web app sends
- * to a Light Mode server, from the site's snapshot files, the Python core and the edits stored
- * in this browser.
+ * The backend of the static site, inside the browser: it answers the web app's requests from the
+ * site's snapshot files, the Python core and the edits stored in this browser.
  *
  * Graphs for a module without edits come ready-made from the site when the build made them;
  * everything else goes to the Python core (see `pythonRunner.ts`). Requests that need a server
- * (schema updates, Send design, branches, login) are answered with an error.
+ * (branches, login, background tasks) are answered with an error.
  */
 import type { CoreAnswer, CoreRequest } from "./pythonRunner";
 import { createEditStore, type EditStore, type StoredEdit } from "./editStore";
@@ -218,13 +217,13 @@ export function createStaticBackend(options: StaticBackendOptions) {
     const ok = (value: unknown, contentType?: string): StaticAnswer => ({ status: 200, data: value, contentType });
     const route = `${method.toUpperCase()} ${path}`;
 
-    if (["POST /schema/update", "POST /send-design", "GET /git/branches", "POST /auth/login", "POST /auth/register"].includes(route)
+    if (["GET /git/branches", "POST /auth/login", "POST /auth/register"].includes(route)
       || path.startsWith("/tasks") || path.startsWith("/graph")) {
       throw new StaticHttpError(route === "GET /git/branches" ? 410 : 503, UNAVAILABLE);
     }
 
     if (route === "GET /health") {
-      return ok({ ok: true, mode: "light", static: true, workspace: workspacePayload(ws), ...statusPayload(data, ws), send_design_enabled: false });
+      return ok({ ok: true, static: true, workspace: workspacePayload(ws), ...statusPayload(data, ws) });
     }
     if (route === "GET /workspace") {
       return ok({ workspace: workspacePayload(ws), user: { username: STATIC_USER }, ...statusPayload(data, ws) });
@@ -235,7 +234,7 @@ export function createStaticBackend(options: StaticBackendOptions) {
       const branch = text(query.branch) ?? text(payload.branch);
       const profile = profileFor(data, pkg, namespace);
       if (branch && branch !== profile.default_branch) {
-        throw new StaticHttpError(400, `Branch switching is disabled in Light Mode; only '${profile.default_branch}' is allowed for the selected schema profile.`);
+        throw new StaticHttpError(400, `Branch switching needs the Dev Mode server; only '${profile.default_branch}' is allowed for the selected schema profile.`);
       }
       ws = setWorkspace(data, pkg, namespace);
       return ok({ workspace: workspacePayload(ws), user: { username: STATIC_USER } });
@@ -269,16 +268,12 @@ export function createStaticBackend(options: StaticBackendOptions) {
         generated_at: data.generated_at,
       });
     }
-    if (route === "GET /schema/version") {
-      const profile = profileFor(data, ws.package, ws.base_namespace);
-      return ok({ version: profile.version, source: "static", schema_profile: profile.key, send_design_enabled: false });
-    }
     if (route === "GET /git/packages") {
       const base = text(query.base_package) ?? ws.base_namespace;
       const profile = profileFor(data, ws.package, base);
       const branch = text(query.branch);
       if (branch && branch !== profile.default_branch) {
-        throw new StaticHttpError(400, `Branch switching is disabled in Light Mode; only '${profile.default_branch}' is allowed for the selected schema profile.`);
+        throw new StaticHttpError(400, `Branch switching needs the Dev Mode server; only '${profile.default_branch}' is allowed for the selected schema profile.`);
       }
       const packages = base === profile.default_base_namespace
         ? profile.overview.map(m => m.package).sort()

@@ -1,7 +1,7 @@
 /**
  * Schema edits of the static site, kept in this browser (localStorage).
  *
- * The same rows the Light Mode server stores: `id`, `profile`, `package`,
+ * The same rows the Dev Mode server stores: `id`, `profile`, `package`,
  * `commit`, `op`, `target`, `payload`, `created_at`. They can be downloaded as
  * a JSON file and loaded again, so work is not tied to one browser.
  */
