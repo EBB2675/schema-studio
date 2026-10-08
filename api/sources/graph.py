@@ -21,6 +21,8 @@ browser. The graph follows the conventions of `extractor/graph_builder.py`:
   `doc_de` (the German half of the description), `mandatory`, `section`, `iri`;
 - each class gets an `inherits` edge to every ancestor (from `is_a` and
   `mixins`, in Python's method resolution order), not only to its direct bases;
+- each class node counts its direct subclasses (`subclasses`), and the classes
+  named in `expand` bring their direct subclasses into the graph;
 - the query flags of the graph endpoints are applied here, with the same
   traversal, depth and size limits as the graph builder.
 
@@ -35,7 +37,7 @@ class an edit added (`edit_added`) is a starting point of its own module.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import Any
 
 # Framework base classes (NOMAD metainfo, openBIS entity types) are not part of a schema.
@@ -280,6 +282,7 @@ def build_graph(
     allow_cross_module: bool = True,
     base_namespace: str | None = None,
     empty: bool = False,
+    expand: Collection[str] = (),
     *,
     exclude_prefixes: tuple[str, ...] = EXCLUDE_PREFIXES,
     max_nodes: int = MAX_NODES,
@@ -293,6 +296,11 @@ def build_graph(
     classes: Mapping[str, Mapping[str, Any]] = schema.get("classes") or {}
     records = {record["id"]: record for record in extraction.get("classes") or ()}
     memo: dict[str, list[str]] = {}
+    subclasses: dict[str, list[str]] = {}
+    for name, cls in classes.items():
+        for base in [cls.get("is_a"), *(cls.get("mixins") or [])]:
+            if base in classes:
+                subclasses.setdefault(base, []).append(name)
 
     nodes: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []
@@ -322,6 +330,7 @@ def build_graph(
             "id": name, "kind": "section", "label": _title(name, cls),
             "doc": cls.get("description"), "module": module, "dtype": None, "shape": None, "card": None,
             "owner": None, "methods": _methods(records.get(source_class_id(name, cls)), base_namespace),
+            "subclasses": sum(allowed(class_module(sub, classes[sub])) for sub in subclasses.get(name, ())),
             **_class_details(cls),
         }
         if len(nodes) > max_nodes:
@@ -375,6 +384,12 @@ def build_graph(
                     continue
                 add_section(target, depth + 1)
                 add_edge(name, target, "hasSubSection", annotation(slot, "display_card"))
+                if len(nodes) > max_nodes:
+                    return
+
+        if name in expand:
+            for sub in subclasses.get(name, ()):
+                add_section(sub, depth + 1)
                 if len(nodes) > max_nodes:
                     return
 
