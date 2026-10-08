@@ -62,6 +62,7 @@ type GraphRequestParams = {
   include_inheritance?: boolean;
   allow_cross_module?: boolean;
   base_namespace?: string;
+  expand?: string;
 };
 
 type GraphTaskBody = {
