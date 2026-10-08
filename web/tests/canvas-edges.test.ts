@@ -37,4 +37,28 @@ describe("canvasEdges", () => {
     ];
     expect(pairs(canvasEdges(edges))).toEqual(["A->S:hasSubSection", "X->Y:inherits", "Y->X:inherits"]);
   });
+
+  it("draws a subsection arrow only from the class that declares it", () => {
+    // Child(Parent), GrandChild(Child); Parent declares a subsection of type Sub.
+    const sub = (source: string) => ({ source, target: "Sub", type: "hasSubSection", card: "0..*" });
+    const edges = [
+      inherits("Child", "Parent"), inherits("GrandChild", "Child"), inherits("GrandChild", "Parent"),
+      sub("Parent"), sub("Child"), sub("GrandChild"),
+    ];
+    expect(pairs(canvasEdges(edges).filter((e) => e.type === "hasSubSection"))).toEqual(["Parent->Sub:hasSubSection"]);
+  });
+
+  it("keeps a subsection arrow when the declaring class is not drawn or the cardinality differs", () => {
+    const edges = [
+      // Hidden declares a subsection of type Sub; it is not drawn, so its edges are not in the list.
+      { source: "Child", target: "Sub", type: "hasSubSection", card: "0..*" },
+      // Other redeclares its parent's subsection with another cardinality.
+      inherits("Other", "Base"),
+      { source: "Base", target: "Part", type: "hasSubSection", card: "0..*" },
+      { source: "Other", target: "Part", type: "hasSubSection", card: "1" },
+    ];
+    expect(pairs(canvasEdges(edges).filter((e) => e.type === "hasSubSection"))).toEqual([
+      "Child->Sub:hasSubSection", "Base->Part:hasSubSection", "Other->Part:hasSubSection",
+    ]);
+  });
 });
