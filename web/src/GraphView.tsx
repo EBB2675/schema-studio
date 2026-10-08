@@ -489,9 +489,10 @@ export default function GraphView({
         );
         methods.set(cls.id, sourceMethods.get(cls.id) ?? []);
 
+        // Cards show only the quantities a class declares; inherited ones stay in the docs panel.
         attrs.set(
           cls.id,
-          cls.quantities.map((q) => ({
+          cls.quantities.filter((q) => !q.inherited).map((q) => ({
             name: q.name,
             dtype: q.dtype,
             shape: q.shape ?? undefined,
@@ -1235,7 +1236,7 @@ export default function GraphView({
                     ) : null}
                   </div>
                   <div className="uml-qty-list">
-                    {cls.quantities.map((q) => {
+                    {cls.quantities.filter((q) => !q.inherited).map((q) => {
                       const metaParts = [
                         q.dtype,
                         q.shape && q.shape !== "[]" ? q.shape : null,
