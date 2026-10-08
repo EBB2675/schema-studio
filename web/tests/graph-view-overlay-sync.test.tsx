@@ -268,3 +268,133 @@ describe('GraphView overlay geometry vs. viewport synchronization', () => {
     expect(line().getAttribute('x1')).not.toEqual(before);
   });
 });
+
+describe('GraphView card contents', () => {
+  beforeEach(() => {
+    fakeCy = makeFakeCy([CLASS_A, CLASS_B]);
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('shows only declared quantities on a card and leaves inherited ones to the docs panel', async () => {
+    const cytoscape = (await import('cytoscape')).default as unknown as ReturnType<typeof vi.fn>;
+    cytoscape.mockClear();
+    const onSelectClass = vi.fn();
+    const withQuantities: UmlGraphState = {
+      ...umlState,
+      classes: [
+        {
+          id: CLASS_A,
+          name: 'Alpha',
+          module: 'pkg.custom_schema',
+          quantities: [
+            { id: `${CLASS_A}.own_value`, name: 'own_value', ownerId: CLASS_A },
+            {
+              id: `${CLASS_A}::inherited::${CLASS_B}.base_value`,
+              name: 'base_value',
+              ownerId: CLASS_A,
+              inherited: true,
+              inheritedFromId: CLASS_B,
+              inheritedFromName: 'Beta',
+            },
+          ],
+        },
+        {
+          id: CLASS_B,
+          name: 'Beta',
+          module: 'pkg.custom_schema',
+          quantities: [{ id: `${CLASS_B}.base_value`, name: 'base_value', ownerId: CLASS_B }],
+        },
+      ],
+    };
+    render(
+      <GraphView
+        nodes={[]}
+        edges={[]}
+        umlState={withQuantities}
+        editableMode
+        onSelectClass={onSelectClass}
+        onCreateQuantity={vi.fn().mockResolvedValue(undefined)}
+        onCreateClass={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    // Edit-mode overlay card.
+    const alphaCard = screen.getByText('Alpha').closest('.uml-card') as HTMLElement;
+    expect(alphaCard.textContent).toContain('own_value');
+    expect(alphaCard.textContent).not.toContain('base_value');
+
+    // Cytoscape label of the card.
+    const elements = cytoscape.mock.calls.at(-1)?.[0]?.elements as { data: { id: string; label?: string } }[];
+    const alphaLabel = elements.find((el) => el.data.id === CLASS_A)?.data.label ?? '';
+    expect(alphaLabel).toContain('own_value');
+    expect(alphaLabel).not.toContain('base_value');
+
+    // The docs panel still receives the inherited quantity.
+    fireEvent.click(alphaCard);
+    const selected = onSelectClass.mock.calls.at(-1)?.[0];
+    expect(selected?.quantities.map((q: { name: string }) => q.name)).toEqual(['own_value', 'base_value']);
+  });
+});
+
+describe('GraphView subclass toggle', () => {
+  beforeEach(() => {
+    fakeCy = makeFakeCy([CLASS_A, CLASS_B]);
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  const withSubclasses: UmlGraphState = {
+    ...umlState,
+    classes: [
+      { id: CLASS_A, name: 'Alpha', module: 'pkg.custom_schema', quantities: [], subclasses: 0 },
+      { id: CLASS_B, name: 'Beta', module: 'pkg.custom_schema', quantities: [], subclasses: 3 },
+    ],
+  };
+
+  it.each([false, true])('shows a + only on classes with subclasses (edit mode: %s) and reports clicks', (editableMode) => {
+    const onToggleSubclasses = vi.fn();
+    render(
+      <GraphView
+        nodes={[]}
+        edges={[]}
+        umlState={withSubclasses}
+        editableMode={editableMode}
+        onToggleSubclasses={onToggleSubclasses}
+        onCreateQuantity={vi.fn().mockResolvedValue(undefined)}
+        onCreateClass={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+    expect(screen.queryByRole('button', { name: 'Show subclasses of Alpha' })).toBeNull();
+    const toggle = screen.getByRole('button', { name: 'Show subclasses of Beta' });
+    expect(toggle.textContent).toBe('+');
+    expect(toggle.getAttribute('title')).toBe('Show 3 subclasses');
+    fireEvent.click(toggle);
+    expect(onToggleSubclasses).toHaveBeenCalledWith(CLASS_B);
+  });
+
+  it('shows a − on an expanded class and no toggle while inheritance is hidden', () => {
+    const props = {
+      nodes: [], edges: [], umlState: withSubclasses, expandedClassIds: [CLASS_B], onToggleSubclasses: vi.fn(),
+    };
+    const { unmount } = render(<GraphView {...props} />);
+    const toggle = screen.getByRole('button', { name: 'Hide subclasses of Beta' });
+    expect(toggle.textContent).toBe('−');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    unmount();
+
+    render(<GraphView {...props} showInheritance={false} />);
+    expect(screen.queryByRole('button', { name: /subclasses of Beta/ })).toBeNull();
+  });
+});
+

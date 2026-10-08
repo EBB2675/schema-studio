@@ -11,6 +11,7 @@ from .diff import diff_graphs
 from .auth import get_user_and_workspace, update_workspace, workspace_payload, db_dep
 from .edit_store import list_edits
 from .light_mode.schema_source import schema_profile_for_package
+from .sources.graph import expand_names
 from .repo_utils import (
     bases_by_repo,
     parse_base_packages,
@@ -132,6 +133,7 @@ async def api_graph(
     include_subsections: bool = Query(True),
     include_inheritance: bool = Query(True),
     allow_cross_module: bool = Query(True),
+    expand: str | None = Query(None, description="Comma-separated classes whose subclasses are drawn"),
     empty: bool = Query(False, description="Return an empty graph shell instead of extracting schema"),
     user_ws=Depends(get_user_and_workspace),
     db=Depends(db_dep),
@@ -161,6 +163,7 @@ async def api_graph(
                 include_subsections=include_subsections,
                 include_inheritance=include_inheritance,
                 allow_cross_module=allow_cross_module,
+                expand=expand_names(expand),
             )
         return {"branch": branch, "sha": sha, "graph": graph, "workspace": workspace_payload(workspace)}
     except Exception as e:

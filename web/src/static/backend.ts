@@ -183,6 +183,7 @@ export function createStaticBackend(options: StaticBackendOptions) {
     include_inheritance: flag(params.include_inheritance, true),
     allow_cross_module: flag(params.allow_cross_module, true),
     base_namespace: namespace,
+    expand: (text(params.expand) ?? "").split(",").map(name => name.trim()).filter(Boolean),
   });
 
   const emptyGraph = (pkg: string, root: string | undefined) => ({ package: pkg, root: root ?? null, nodes: [], edges: [] });
@@ -196,7 +197,8 @@ export function createStaticBackend(options: StaticBackendOptions) {
     const snapshot = snapshotOf(profile, pkg);
     if (!snapshot) return emptyGraph(pkg, root); // not a module of the site, like a module the server cannot import
     const flags = graphFlags(params, root, namespace);
-    const plain = FLAG_NAMES.every(name => flags[name]) && namespace === profile.default_base_namespace;
+    const plain = FLAG_NAMES.every(name => flags[name]) && flags.expand.length === 0
+      && namespace === profile.default_base_namespace;
     const ready = moduleOf(profile, pkg)?.graphs?.[root ?? ""];
     if (ready && plain && !empty && stored.length === 0) {
       return { ...(await options.readJson(ready) as Record<string, unknown>), root: root ?? null };

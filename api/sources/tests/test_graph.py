@@ -108,7 +108,7 @@ def test_classes_become_sections_and_quantities_follow_display_annotations():
     shown = nodes(result)
     assert shown[CHILD] == {
         "id": CHILD, "kind": "section", "label": "Child", "doc": None, "module": "pkg.app.main",
-        "dtype": None, "shape": None, "card": None, "owner": None, "methods": ["plot"],
+        "dtype": None, "shape": None, "card": None, "owner": None, "methods": ["plot"], "subclasses": 1,
     }
     assert shown[BASE]["doc"] == "The base." and shown[BASE]["module"] == "pkg.app.base"
     # Inherited quantities belong to each class that has them; the redeclared one wins.
@@ -127,6 +127,34 @@ def test_classes_become_sections_and_quantities_follow_display_annotations():
 def test_inheritance_edges_go_to_every_ancestor():
     found = {(source, target) for source, target, kind in edges(build()) if kind == "inherits"}
     assert found == {(CHILD, BASE), (CHILD, MIXIN), (GRANDCHILD, CHILD), (GRANDCHILD, BASE), (GRANDCHILD, MIXIN)}
+
+
+def test_class_nodes_count_their_direct_subclasses():
+    shown = nodes(build())
+    assert {name: shown[name]["subclasses"] for name in (BASE, MIXIN, CHILD, GRANDCHILD, PART)} == {
+        BASE: 1, MIXIN: 1, CHILD: 1, GRANDCHILD: 0, PART: 0,
+    }
+
+
+def test_expand_brings_in_the_direct_subclasses():
+    assert GRANDCHILD not in nodes(build(root="Child"))
+    expanded = build(root="Child", expand=[CHILD])
+    assert GRANDCHILD in nodes(expanded)
+    assert (GRANDCHILD, CHILD, "inherits") in edges(expanded)
+    # Only direct subclasses: expanding Base brings Child, not GrandChild.
+    shown = nodes(build(root="Part", expand=[BASE], include_subsections=False))
+    assert BASE not in shown  # Base is not on the canvas, so nothing expands
+    shown = nodes(build(root="Child", expand=[BASE], include_subsections=False))
+    assert CHILD in shown and GRANDCHILD not in shown
+
+
+def test_subclasses_outside_the_allowed_modules_are_neither_counted_nor_expanded():
+    schema = {"classes": {**SCHEMA["classes"], FAR: cls(FAR, is_a=CHILD, effective=[])}}
+    extraction = EXTRACTION
+    result = graph.build_graph(schema, extraction, "pkg.app.main", root="Child", expand=[CHILD],
+                               allow_cross_module=False)
+    assert nodes(result)[CHILD]["subclasses"] == 1  # GrandChild; Far is outside the namespace
+    assert FAR not in nodes(result)
 
 
 def test_subsections_become_edges_and_the_first_declared_one_sets_the_card():
@@ -362,6 +390,7 @@ def test_graph_matches_the_legacy_graph_on_a_fake_package(fake_nomad, flags):
             node["doc"] = None
     for node in result["nodes"]:
         node.pop("unit", None)
+        node.pop("subclasses", None)
     assert result == expected
 
     if not flags.get("root"):

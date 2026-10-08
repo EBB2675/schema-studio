@@ -107,6 +107,7 @@ def explained(legacy_graph, linkml_graph, document):
     linkml_graph["edges"] = [edge for edge in linkml_graph["edges"] if edge["target"] not in misread]
     for node in linkml_graph["nodes"]:
         node.pop("unit", None)
+        node.pop("subclasses", None)
     return legacy_graph, linkml_graph
 
 

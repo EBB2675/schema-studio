@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Collection
 from pathlib import Path
 
 from ..light_mode.schema_source import SchemaProfile, schema_profile_for_package
@@ -66,12 +67,16 @@ def build_graph(
     include_inheritance: bool = True,
     allow_cross_module: bool = True,
     base_namespace: str | None = None,
+    expand: Collection[str] = (),
     *,
     extractor: str | None = None,
     source_root: Path | None = None,
     source_version: str | None = None,
 ) -> dict:
-    """The graph JSON for a module, starting at `root` if given, from the profile's extraction path."""
+    """The graph JSON for a module, starting at `root` if given, from the profile's extraction path.
+
+    `expand` (classes whose subclasses are drawn) is not available on the legacy path.
+    """
     profile = schema_profile_for_package(package, base_namespace)
     flags = {
         "root": root,
@@ -87,7 +92,7 @@ def build_graph(
         )
     snapshot = get_snapshot(profile, package, source_root=source_root, source_version=source_version)
     try:
-        return graph.build_graph(snapshot["linkml"], snapshot["extraction"], package, **flags)
+        return graph.build_graph(snapshot["linkml"], snapshot["extraction"], package, **flags, expand=expand)
     except graph.RootNotFound as exc:
         # The same error the legacy path reports.
         raise UnknownRoot(f"ValueError: {exc}") from exc

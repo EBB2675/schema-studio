@@ -8,6 +8,7 @@ import { NOMAD_EDIT_RULES, VOCAB_TERM, type EditRules, type QuantityFormData } f
 import type { ApiEdge, ApiNode } from "./types/api";
 import type { QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
 import { fqidFromParts } from "./utils/identifier";
+import { canvasEdges } from "./utils/canvasEdges";
 
 type QtyDiffState = "added" | "removed" | "changed" | undefined;
 
@@ -56,6 +57,9 @@ type Props = {
   editableMode?: boolean;
   // What the schema lets the user add (types; bam-masterdata codes).
   editRules?: EditRules;
+  // Classes whose subclasses are shown, and the +/- on a card that shows or hides them.
+  expandedClassIds?: string[];
+  onToggleSubclasses?: (classId: string) => void | Promise<void>;
 };
 
 const cleanType = (t?: string | null) => {
@@ -155,6 +159,8 @@ export default function GraphView({
   onClearSelection,
   editableMode = false,
   editRules = NOMAD_EDIT_RULES,
+  expandedClassIds,
+  onToggleSubclasses,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
@@ -165,6 +171,7 @@ export default function GraphView({
     zoom: 1,
   });
   const [activeQuantityTarget, setActiveQuantityTarget] = useState<string | null>(null);
+  const [togglingClassId, setTogglingClassId] = useState<string | null>(null);
   const dragRef = useRef<{ id: string; startX: number; startY: number; nodeX: number; nodeY: number } | null>(null);
   const emptyQuantityDraft = useMemo<Required<QuantityFormData>>(
     () => ({ quantityName: "", dtype: editRules.dtypes[0]?.name ?? "", docstring: "", code: "", label: "", range: "", mandatory: false }),
@@ -489,9 +496,10 @@ export default function GraphView({
         );
         methods.set(cls.id, sourceMethods.get(cls.id) ?? []);
 
+        // Cards show only the quantities a class declares; inherited ones stay in the docs panel.
         attrs.set(
           cls.id,
-          cls.quantities.map((q) => ({
+          cls.quantities.filter((q) => !q.inherited).map((q) => ({
             name: q.name,
             dtype: q.dtype,
             shape: q.shape ?? undefined,
@@ -530,18 +538,25 @@ export default function GraphView({
       qByOwner.set(owner, metaList);
     }
 
-    const baseEdges = [...resolvedEdges];
+    const baseEdges = canvasEdges(resolvedEdges);
     if (diff?.edges?.removed?.length) {
+      const removedEdges: RawEdge[] = [];
       diff.edges.removed.forEach((e) => {
         if (!e?.source || !e?.target) return;
         const type = (e.type as RawEdge["type"]) ?? "hasSubSection";
-        baseEdges.push({
+        removedEdges.push({
           source: e.source,
           target: e.target,
           type,
           card: e.card ?? undefined
         });
       });
+      // Removed edges are thinned out against the graph as it was before the change.
+      const edgeKey = (e: RawEdge) => `${e.source}|${e.target}|${e.type}`;
+      const added = new Set((diff.edges.added ?? []).map(edgeKey));
+      const before = [...resolvedEdges.filter((e) => !added.has(edgeKey(e))), ...removedEdges];
+      const keptBefore = new Set(canvasEdges(before).map(edgeKey));
+      baseEdges.push(...removedEdges.filter((e) => keptBefore.has(edgeKey(e))));
     }
 
     const umlEdges = baseEdges.filter((e) => {
@@ -988,9 +1003,58 @@ export default function GraphView({
     return { cls: targetCard.cls, pos: { top, left } };
   }, [activeQuantityTarget, cardViews, viewport]);
 
+  const expandedClassIdSet = useMemo(() => new Set(expandedClassIds ?? []), [expandedClassIds]);
+  // Subclasses hang below a card, linked by inheritance arrows, so the toggle needs those arrows shown.
+  const subclassToggle = (cls: UmlClassNode) => {
+    if (!onToggleSubclasses || !showInheritance) return null;
+    const expanded = expandedClassIdSet.has(cls.id);
+    const count = cls.subclasses ?? 0;
+    if (!expanded && count === 0) return null;
+    return (
+      <button
+        type="button"
+        className={`uml-subclass-toggle${expanded ? " is-expanded" : ""}`}
+        title={expanded ? "Hide subclasses" : `Show ${count} ${count === 1 ? "subclass" : "subclasses"}`}
+        aria-label={expanded ? `Hide subclasses of ${cls.name}` : `Show subclasses of ${cls.name}`}
+        aria-expanded={expanded}
+        disabled={togglingClassId !== null}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={async (e) => {
+          e.stopPropagation();
+          setTogglingClassId(cls.id);
+          try {
+            await onToggleSubclasses(cls.id);
+          } finally {
+            setTogglingClassId(null);
+          }
+        }}
+      >
+        {expanded ? "−" : "+"}
+      </button>
+    );
+  };
+
   return (
     <div className="graph" style={{ position: "relative" }}>
       <div className={`cy-canvas${showEditingUi ? " is-hidden" : ""}`} ref={containerRef} />
+      {!showEditingUi && onToggleSubclasses ? (
+        <div
+          className="uml-toggle-layer"
+          style={{
+            transform: `translate(${viewport.pan.x}px, ${viewport.pan.y}px) scale(${viewport.zoom})`,
+          }}
+        >
+          {cardViews.map(({ cls, box }) => {
+            const toggle = box ? subclassToggle(cls) : null;
+            if (!toggle || !box) return null;
+            return (
+              <div key={cls.id} className="uml-toggle-anchor" style={{ left: box.x + box.w / 2, top: box.y + box.h }}>
+                {toggle}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       {showEditingUi && (
         <div
           className="uml-overlay"
@@ -1195,6 +1259,7 @@ export default function GraphView({
               const hasInline = activeQuantityTarget === cls.id;
               const zIndex = hasInline ? 1200 : isSelected ? 900 : 200;
               const moduleLabel = cls.module ? (cls.module.split(".").pop() || cls.module) : null;
+              const toggle = subclassToggle(cls);
               return (
                 <div
                   key={cls.id}
@@ -1235,7 +1300,7 @@ export default function GraphView({
                     ) : null}
                   </div>
                   <div className="uml-qty-list">
-                    {cls.quantities.map((q) => {
+                    {cls.quantities.filter((q) => !q.inherited).map((q) => {
                       const metaParts = [
                         q.dtype,
                         q.shape && q.shape !== "[]" ? q.shape : null,
@@ -1251,6 +1316,7 @@ export default function GraphView({
                       );
                     })}
                   </div>
+                  {toggle ? <div className="uml-toggle-anchor">{toggle}</div> : null}
 
                 </div>
               );

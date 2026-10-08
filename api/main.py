@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from .light_mode.schema_source import SchemaUnavailable, schema_profile_for_package
 from .sources import editing
+from .sources.graph import expand_names
 from .sources.legacy import ExtractionFailed, UnknownRoot
 from .sources.legacy import root_namespace as _root_namespace
 from .sources.linkml_routes import edit_error, linkml_download, linkml_report
@@ -215,6 +216,7 @@ async def schema(
     include_subsections: bool = Query(True),
     include_inheritance: bool = Query(True),
     allow_cross_module: bool = Query(True),
+    expand: str | None = Query(None, description="Comma-separated classes whose subclasses are drawn"),
     base_namespace: str | None = Query(None),
     empty: bool = Query(False, description="Start only from classes the module's edits added"),
     user_ws=Depends(get_user_and_workspace),
@@ -230,7 +232,7 @@ async def schema(
     return await _graph_response(
         db, user, workspace, pkg, root=root, include_quantities=include_quantities,
         include_subsections=include_subsections, include_inheritance=include_inheritance,
-        allow_cross_module=allow_cross_module, base_namespace=ns, empty=empty,
+        allow_cross_module=allow_cross_module, base_namespace=ns, empty=empty, expand=expand_names(expand),
     )
 
 
@@ -274,6 +276,7 @@ async def add_schema_edits(
     include_subsections: bool = Query(True),
     include_inheritance: bool = Query(True),
     allow_cross_module: bool = Query(True),
+    expand: str | None = Query(None, description="Comma-separated classes whose subclasses are drawn"),
     base_namespace: str | None = Query(None),
     empty: bool = Query(False),
     branch: str | None = Query(None, description="Check the edits against, and draw, this branch's worktree"),
@@ -303,6 +306,7 @@ async def add_schema_edits(
         db, user, workspace, pkg, stored=[*stored, *prepared], root=root, include_quantities=include_quantities,
         include_subsections=include_subsections, include_inheritance=include_inheritance,
         allow_cross_module=allow_cross_module, base_namespace=ns, empty=empty, source=source,
+        expand=expand_names(expand),
     )
     saved = await add_edits(
         db, str(user["id"]), profile=schema_profile_for_package(pkg, ns).key, branch=branch or workspace.get("branch"),

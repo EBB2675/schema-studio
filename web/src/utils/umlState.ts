@@ -239,6 +239,7 @@ export const buildUmlStateFromGraph = (g: ApiGraph | null): UmlGraphState | null
       parentId: parentInfo?.id ?? null,
       parentRelation: parentInfo?.relation ?? null,
       parentCard: parentInfo?.card ?? null,
+      subclasses: sec.subclasses ?? null,
       details: sec.details ?? null,
     };
   });
