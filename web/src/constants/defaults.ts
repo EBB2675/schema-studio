@@ -3,16 +3,39 @@ export const DEFAULT_PACKAGE = import.meta.env.VITE_DEFAULT_PACKAGE ?? "nomad_si
 export const DEFAULT_NAMESPACE =
   import.meta.env.VITE_DEFAULT_NAMESPACE ??
   "nomad_simulations.schema_packages";
+export const DEFAULT_OVERVIEW_NAMESPACE =
+  import.meta.env.VITE_DEFAULT_OVERVIEW_NAMESPACE ??
+  "nomad_simulations.schema_packages,nomad_measurements,bam_masterdata.datamodel";
 export const DEFAULT_ROOT = import.meta.env.VITE_DEFAULT_ROOT ?? "ModelMethod";
-export const LIGHT_MODE = (import.meta.env.VITE_LIGHT_MODE ?? "false").toLowerCase() === "true";
-export const DEFAULT_BRANCH = LIGHT_MODE ? "develop" : (import.meta.env.VITE_DEFAULT_BRANCH ?? "develop");
+// The static site (GitHub Pages): no server; it behaves like Light Mode.
+// A plain comparison, so other builds can drop the static site's code entirely.
+export const STATIC_MODE = import.meta.env.VITE_STATIC_MODE === "true";
+export const LIGHT_MODE = STATIC_MODE || (import.meta.env.VITE_LIGHT_MODE ?? "false").toLowerCase() === "true";
+export const DEFAULT_BRANCH = import.meta.env.VITE_DEFAULT_BRANCH ?? "develop";
 
 export const WORKSPACE_PRESETS = [
   {
+    key: "nomad-simulations",
     label: "nomad-simulations",
     namespace: "nomad_simulations.schema_packages",
     branch: "develop",
     pkg: "nomad_simulations.schema_packages.model_method",
     root: "ModelMethod",
+  },
+  {
+    key: "nomad-measurements",
+    label: "nomad-measurements",
+    namespace: "nomad_measurements",
+    branch: "main",
+    pkg: "nomad_measurements.xrd.schema",
+    root: "ELNXRayDiffraction",
+  },
+  {
+    key: "bam-masterdata",
+    label: "bam-masterdata",
+    namespace: "bam_masterdata.datamodel",
+    branch: "main",
+    pkg: "bam_masterdata.datamodel.object_types",
+    root: "SearchQuery",
   },
 ];

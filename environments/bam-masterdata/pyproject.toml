@@ -1,0 +1,13 @@
+# Profile environment for bam-masterdata. It only holds the schema package, from the
+# tip of its tracked branch; the app never imports from it and only runs
+# scripts from extractor/scripts/ with this environment's interpreter.
+[project]
+name = "schema-studio-env-bam-masterdata"
+version = "0.0.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "bam-masterdata @ git+https://github.com/BAMresearch/bam-masterdata.git@main",
+]
+
+[tool.uv]
+package = false

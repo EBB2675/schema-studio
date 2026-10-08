@@ -1,0 +1,16 @@
+# Profile environment for nomad-measurements. It only holds the schema package, from the
+# tip of its tracked branch; the app never imports from it and only runs
+# scripts from extractor/scripts/ with this environment's interpreter.
+[project]
+name = "schema-studio-env-nomad-measurements"
+version = "0.0.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "nomad-measurements @ git+https://github.com/FAIRmat-NFDI/nomad-measurements.git@main",
+    # nomad_measurements.quantumdesign.schema imports structlog without declaring it;
+    # it normally arrives with nomad-lab[infrastructure].
+    "structlog",
+]
+
+[tool.uv]
+package = false

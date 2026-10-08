@@ -50,7 +50,7 @@ jobs:
           SCHEMA_UML_MONGO_URI: mongodb://localhost:27017
           SCHEMA_UML_MONGO_DB: schema_uml_test
         run: |
-          pytest api/tests
+          pytest api/tests api/light_mode/tests api/sources/tests extractor/tests
 
   frontend:
     name: Frontend (build & tests)

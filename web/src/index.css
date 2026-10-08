@@ -33,6 +33,9 @@
   --brand-bg: linear-gradient(135deg, rgba(124, 58, 237, 0.18), rgba(34, 211, 238, 0.16));
   --brand-border: rgba(124, 58, 237, 0.25);
   --input-bg: rgba(255, 255, 255, 0.04);
+  --option-bg: #0c1020;
+  --option-fg: #e5e7eb;
+  --option-disabled-fg: #6b7280;
   --input-border: rgba(255, 255, 255, 0.08);
   --input-focus-border: rgba(124, 58, 237, 0.6);
   --input-focus-shadow: rgba(124, 58, 237, 0.12);
@@ -71,6 +74,9 @@
   --brand-bg: linear-gradient(135deg, rgba(124, 58, 237, 0.12), rgba(34, 211, 238, 0.12));
   --brand-border: rgba(124, 58, 237, 0.25);
   --input-bg: rgba(255, 255, 255, 0.94);
+  --option-bg: #ffffff;
+  --option-fg: #0f172a;
+  --option-disabled-fg: #64748b;
   --input-border: rgba(15, 23, 42, 0.08);
   --input-focus-border: rgba(124, 58, 237, 0.5);
   --input-focus-shadow: rgba(124, 58, 237, 0.18);
@@ -238,6 +244,18 @@ main {
   border-color: var(--input-focus-border);
   box-shadow: 0 0 0 3px var(--input-focus-shadow);
   background: var(--card);
+}
+
+/* The open option list is drawn by the browser. Chrome and Edge on Windows take the
+   text color from the select but fall back to white behind the translucent input
+   background, so every option gets an opaque background of its own. */
+select option, select optgroup {
+  background-color: var(--option-bg);
+  color: var(--option-fg);
+}
+
+select option:disabled {
+  color: var(--option-disabled-fg);
 }
 
 .btn {

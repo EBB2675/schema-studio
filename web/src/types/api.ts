@@ -1,5 +1,18 @@
 import type { WorkspaceState } from "./workspace";
 
+// Source facts about a node beyond the graph itself, shown in the doc panel.
+// bam-masterdata nodes carry them (openBIS code, label, German texts, ...).
+export type NodeDetails = {
+  code?: string;
+  title?: string;
+  titleDe?: string;
+  docDe?: string;
+  mandatory?: boolean;
+  section?: string;
+  iri?: string;
+  unit?: string;
+};
+
 export type ApiNode = {
   id: string;
   kind: "section" | "quantity";
@@ -15,6 +28,7 @@ export type ApiNode = {
   methods?: string[] | null;
   path?: string | null;
   line?: number | null;
+  details?: NodeDetails | null;
 };
 
 export type ApiEdge = {
@@ -31,6 +45,10 @@ export type ApiGraph = {
   edges: ApiEdge[];
   workspace?: WorkspaceState;
   applied_edits?: AppliedEdit[];
+  // Stored edits that did not apply cleanly to this schema (or applied over an upstream change).
+  edit_conflicts?: EditConflict[];
+  // The edits a POST /schema/edits just stored.
+  persisted_edits?: AppliedEdit[];
 };
 
 export type BranchGraphPayload = {
@@ -54,58 +72,59 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 
 const asString = (v: unknown) => (typeof v === "string" ? v : "");
 
+// A stored schema edit: an operation on the LinkML schema (see api/sources/edits.py).
 export type AppliedEdit = {
   id?: string;
-  user_id?: string;
-  branch?: string;
+  op: string;
+  target: string;
+  payload: Record<string, unknown>;
+  profile?: string;
   package?: string;
-  class_name: string;
-  quantity_name?: string | null;
-  dtype?: string | null;
-  docstring?: string | null;
-  parent_name?: string | null;
-  parent_relation?: string | null;
-  card?: string | null;
-  edit_type: "class" | "quantity";
-  base_sha?: string | null;
+  commit?: string | null;
   created_at?: string | null;
-  updated_at?: string | null;
+};
+
+export type EditConflict = {
+  edit: AppliedEdit;
+  reason: string;
+  detail: string;
+  // True when the edit was applied anyway (the source changed what it replaces).
+  applied: boolean;
 };
 
 const ensureAppliedEdit = (value: unknown): AppliedEdit => {
   if (!isRecord(value)) {
     throw new Error("Applied edit is not an object");
   }
-  const edit_type = value.edit_type;
-  if (edit_type !== "class" && edit_type !== "quantity") {
-    throw new Error(`Unexpected edit_type: ${String(edit_type)}`);
+  const op = asString(value.op);
+  if (!op) {
+    throw new Error("Applied edit missing op");
   }
-  const class_name = asString(value.class_name);
-  if (!class_name) {
-    throw new Error("Applied edit missing class_name");
-  }
-  const quantity_name_raw = value.quantity_name;
-  if (edit_type === "quantity" && (typeof quantity_name_raw !== "string" || !quantity_name_raw)) {
-    throw new Error("Applied quantity edit missing quantity_name");
-  }
-
+  const id = typeof value.id === "number" ? String(value.id) : asString(value.id);
   return {
-    id: asString(value.id) || undefined,
-    user_id: asString(value.user_id) || undefined,
-    branch: asString(value.branch) || undefined,
+    id: id || undefined,
+    op,
+    target: asString(value.target),
+    payload: isRecord(value.payload) ? value.payload : {},
+    profile: asString(value.profile) || undefined,
     package: asString(value.package) || undefined,
-    class_name,
-    quantity_name: typeof value.quantity_name === "string" ? value.quantity_name : null,
-    dtype: typeof value.dtype === "string" ? value.dtype : null,
-    docstring: typeof value.docstring === "string" ? value.docstring : null,
-    parent_name: typeof value.parent_name === "string" ? value.parent_name : null,
-    parent_relation: typeof value.parent_relation === "string" ? value.parent_relation : null,
-    card: typeof value.card === "string" ? value.card : null,
-    edit_type,
-    base_sha: typeof value.base_sha === "string" ? value.base_sha : null,
+    commit: typeof value.commit === "string" ? value.commit : null,
     created_at: typeof value.created_at === "string" ? value.created_at : null,
-    updated_at: typeof value.updated_at === "string" ? value.updated_at : null,
   };
+};
+
+const ensureEditConflict = (value: unknown): EditConflict | null => {
+  if (!isRecord(value)) return null;
+  try {
+    return {
+      edit: ensureAppliedEdit(value.edit),
+      reason: asString(value.reason),
+      detail: asString(value.detail),
+      applied: value.applied === true,
+    };
+  } catch {
+    return null;
+  }
 };
 
 const ensureWorkspace = (value: unknown): WorkspaceState | undefined => {
@@ -115,6 +134,25 @@ const ensureWorkspace = (value: unknown): WorkspaceState | undefined => {
   const base_namespace = asString(value.base_namespace);
   if (!branch && !pkg && !base_namespace) return undefined;
   return { branch, package: pkg, base_namespace };
+};
+
+const optionalString = (v: unknown) => (typeof v === "string" && v ? v : undefined);
+
+// Only nodes with an openBIS code have details; units alone (NOMAD quantities) are not shown yet.
+const ensureDetails = (node: Record<string, unknown>): NodeDetails | null => {
+  const code = optionalString(node.code);
+  if (!code) return null;
+  const details: NodeDetails = {
+    code,
+    title: optionalString(node.title),
+    titleDe: optionalString(node.title_de),
+    docDe: optionalString(node.doc_de),
+    mandatory: typeof node.mandatory === "boolean" ? node.mandatory : undefined,
+    section: optionalString(node.section),
+    iri: optionalString(node.iri),
+    unit: optionalString(node.unit),
+  };
+  return Object.fromEntries(Object.entries(details).filter(([, value]) => value !== undefined)) as NodeDetails;
 };
 
 const ensureNode = (node: unknown): ApiNode => {
@@ -151,6 +189,7 @@ const ensureNode = (node: unknown): ApiNode => {
     methods: Array.isArray(node.methods) ? node.methods.map(asString) : null,
     path,
     line,
+    details: ensureDetails(node),
   };
 };
 
@@ -190,6 +229,12 @@ export const ensureGraphResponse = (payload: unknown): ApiGraph => {
     workspace: ensureWorkspace(payload.workspace),
     applied_edits: Array.isArray(payload.applied_edits)
       ? payload.applied_edits.map(ensureAppliedEdit)
+      : undefined,
+    edit_conflicts: Array.isArray(payload.edit_conflicts)
+      ? payload.edit_conflicts.map(ensureEditConflict).filter((item): item is EditConflict => item !== null)
+      : undefined,
+    persisted_edits: Array.isArray(payload.persisted_edits)
+      ? payload.persisted_edits.map(ensureAppliedEdit)
       : undefined,
   };
 };

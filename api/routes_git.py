@@ -9,6 +9,8 @@ from .git_utils import list_branches, materialize_worktree
 from .graph_runner import build_graph_in_subprocess
 from .diff import diff_graphs
 from .auth import get_user_and_workspace, update_workspace, workspace_payload, db_dep
+from .edit_store import list_edits
+from .light_mode.schema_source import schema_profile_for_package
 from .repo_utils import (
     bases_by_repo,
     parse_base_packages,
@@ -142,6 +144,8 @@ async def api_graph(
     try:
         repo_src = primary_repo(pkg, namespace)
         wt, sha = materialize_worktree(branch, repo_src)
+        # The user's edits apply to the branch as to any other schema.
+        stored = await list_edits(db, str(user["id"]), schema_profile_for_package(pkg, namespace).key)
         if empty:
             graph = {"package": pkg, "root": root, "nodes": [], "edges": []}
         else:
@@ -149,6 +153,8 @@ async def api_graph(
                 wt,
                 pkg,
                 req.extractor,
+                sha=sha,
+                edits=stored,
                 base_namespace=namespace,
                 root=root,
                 include_quantities=include_quantities,
@@ -191,8 +197,8 @@ async def api_diff(
             "base_namespace": namespace,
         }
 
-        gA = build_graph_in_subprocess(wtb, pkg, req.extractor, **opts)
-        gB = build_graph_in_subprocess(wth, pkg, req.extractor, **opts)
+        gA = build_graph_in_subprocess(wtb, pkg, req.extractor, sha=shab, **opts)
+        gB = build_graph_in_subprocess(wth, pkg, req.extractor, sha=shah, **opts)
         diff = diff_graphs(gA, gB)
         return {
             "base": {"branch": req.base, "sha": shab, "graph": gA},

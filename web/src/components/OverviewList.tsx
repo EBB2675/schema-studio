@@ -1,16 +1,14 @@
 import { useEffect, useState } from "react";
+import { apiFetch } from "../client";
+import { DEFAULT_OVERVIEW_NAMESPACE } from "../constants/defaults";
 
 type OverviewItem = { package: string; classes: string[] };
 type OverviewResp = { branch: string; base: string; items: OverviewItem[] };
 
-const DEFAULT_OVERVIEW_BASE =
-  import.meta.env.VITE_DEFAULT_NAMESPACE ??
-  "nomad_simulations.schema_packages,nomad_measurements";
-
 export default function OverviewList({
   apiBase,
   branch,
-  base = DEFAULT_OVERVIEW_BASE,
+  base = DEFAULT_OVERVIEW_NAMESPACE,
 }: {
   apiBase: string;
   branch: string;
@@ -22,17 +20,14 @@ export default function OverviewList({
   const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
-    const url =
-      `${apiBase.replace(/\/$/, "")}` +
-      `/overview?branch=${encodeURIComponent(branch)}&base=${encodeURIComponent(base)}`;
+    const path = `/overview?branch=${encodeURIComponent(branch)}&base=${encodeURIComponent(base)}`;
 
     let cancelled = false;
     setLoading(true);
     setErr(null);
     setData(null);
 
-    // Use fetch with basic error handling
-    fetch(url, { method: "GET" })
+    apiFetch(path, { method: "GET" }, { baseURL: apiBase, token: "" })
       .then(async (r) => {
         if (!r.ok) {
           const text = await r.text().catch(() => "");

@@ -4,15 +4,13 @@ import type { Core, ElementDefinition, LayoutOptions } from 'cytoscape';
 import elk from 'cytoscape-elk';
 import { useSelection } from '../store/selection';
 import type { GraphPayload, GraphNodeData, GraphEdgeData } from '../types';
+import { apiFetch } from '../client';
 
 cytoscape.use(elk);
 
 async function fetchGraph(): Promise<GraphPayload> {
   // Adjust to backend route if different
-  const token = typeof window !== 'undefined' ? window.localStorage.getItem('schema-uml-token') : '';
-  const res = await fetch('/api/graph', {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
+  const res = await apiFetch('/api/graph', {}, { baseURL: '' });
   if (!res.ok) throw new Error(`Graph fetch failed: ${res.status}`);
   const payload = (await res.json()) as GraphPayload;
 

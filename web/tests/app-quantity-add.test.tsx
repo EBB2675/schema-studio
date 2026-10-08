@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { useWorkspaceStore } from '../src/store/workspace';
 
@@ -20,6 +20,24 @@ const graphWithQuantity = {
     { id: `${classId}.new_qty`, kind: 'quantity', label: 'new_qty', owner: classId },
   ],
   edges: [{ source: `${classId}.new_qty`, target: classId, type: 'hasQuantity' }],
+  persisted_edits: [
+    {
+      id: '7',
+      op: 'add_attribute',
+      target: classId,
+      payload: { name: 'new_qty', kind: 'quantity', dtype: 'float' },
+      package: 'pkg.custom_schema',
+    },
+  ],
+  applied_edits: [
+    {
+      id: '7',
+      op: 'add_attribute',
+      target: classId,
+      payload: { name: 'new_qty', kind: 'quantity', dtype: 'float' },
+      package: 'pkg.custom_schema',
+    },
+  ],
 };
 
 // Stub axios to drive App's API interactions.
@@ -34,7 +52,7 @@ vi.mock('axios', () => {
     post: mockPost,
     put: mockPut,
     delete: mockDelete,
-    interceptors: { request: { use: vi.fn() } },
+    interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
   });
 
   const axios = Object.assign(create, {
@@ -85,6 +103,8 @@ vi.mock('../src/GraphView', () => {
 });
 
 describe('App editable quantity add flow', () => {
+  afterEach(cleanup);
+
   beforeEach(() => {
     mockGet.mockReset();
     mockPost.mockReset();
@@ -101,7 +121,8 @@ describe('App editable quantity add flow', () => {
     useWorkspaceStore.getState().setBaseNamespace('pkg');
     useWorkspaceStore.getState().setStartEmpty(true);
 
-    // Prime localStorage with a token so App skips login form.
+    // Prime localStorage with a token so App skips login form; no audit trail from earlier tests.
+    window.localStorage.removeItem('schema-uml-audit');
     window.localStorage.setItem('schema-uml-token', 't0k');
     window.localStorage.setItem('schema-uml-username', 'user');
 
@@ -141,16 +162,16 @@ describe('App editable quantity add flow', () => {
       return { data: {} };
     });
 
-    // First custom-quantity call succeeds, second fails.
+    // First edit call succeeds, second fails.
     mockPost
       .mockImplementationOnce(async (url: string) => {
-        if (url === '/schema/custom-quantity') {
+        if (url === '/schema/edits') {
           return { data: graphWithQuantity };
         }
         return { data: {} };
       })
       .mockImplementationOnce(async (url: string) => {
-        if (url === '/schema/custom-quantity') {
+        if (url === '/schema/edits') {
           throw { response: { data: { detail: 'boom fail' } } };
         }
         return { data: {} };
@@ -179,12 +200,17 @@ describe('App editable quantity add flow', () => {
 
     await waitFor(() =>
       expect(mockPost).toHaveBeenCalledWith(
-        '/schema/custom-quantity',
-        expect.objectContaining({
-          class_name: 'Class',
-          quantity_name: 'new_qty',
-          dtype: 'float',
-        }),
+        '/schema/edits',
+        {
+          package: 'pkg.custom_schema',
+          edits: [
+            {
+              op: 'add_attribute',
+              target: classId,
+              payload: { name: 'new_qty', kind: 'quantity', dtype: 'float', description: 'desc' },
+            },
+          ],
+        },
         expect.any(Object)
       )
     );
@@ -196,5 +222,55 @@ describe('App editable quantity add flow', () => {
     await user.click(screen.getByRole('button', { name: /Trigger quantity add failure/i }));
 
     expect(await screen.findByText(/boom fail/i)).toBeInTheDocument();
+  });
+
+  const addOneQuantity = async (user: ReturnType<typeof userEvent.setup>) => {
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /\+ Start from empty canvas/i }));
+    const editToggle =
+      (
+        await screen.findAllByRole('button', {
+          name: /^Edit$/i,
+        })
+      ).find((btn) => btn.getAttribute('title')?.includes('Toggle editing')) ?? (await screen.findByRole('button', { name: /^Edit$/i }));
+    await user.click(editToggle);
+    await user.click(await screen.findByRole('button', { name: /^Trigger quantity add$/i }));
+  };
+
+  it('undo deletes the stored edits of a change in one request', async () => {
+    const user = userEvent.setup();
+    mockDelete.mockResolvedValue({ data: { deleted: 1 } });
+    await addOneQuantity(user);
+
+    await user.click(await screen.findByRole('button', { name: '🗑' }));
+    await waitFor(() =>
+      expect(mockDelete).toHaveBeenCalledWith('/schema/edits', { params: { package: undefined }, data: { ids: ['7'] } })
+    );
+    await waitFor(() => expect(screen.queryByRole('button', { name: '🗑' })).not.toBeInTheDocument());
+  });
+
+  it('a failed undo keeps the change so it can be tried again', async () => {
+    const user = userEvent.setup();
+    mockDelete.mockRejectedValue({ response: { data: { detail: 'offline' } } });
+    await addOneQuantity(user);
+
+    await user.click(await screen.findByRole('button', { name: '🗑' }));
+    expect(await screen.findByText(/Undo failed: offline/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '🗑' })).toBeInTheDocument();
+  });
+
+  it('clear deletes this module\'s edits and the edits its entries made', async () => {
+    const user = userEvent.setup();
+    mockDelete.mockResolvedValue({ data: { deleted: 1 } });
+    await addOneQuantity(user);
+    await screen.findByRole('button', { name: '🗑' });
+
+    await user.click(screen.getByRole('button', { name: /^Clear$/ }));
+    await waitFor(() =>
+      expect(mockDelete).toHaveBeenCalledWith('/schema/edits', {
+        params: { package: 'pkg.custom_schema' },
+        data: { ids: ['7'] },
+      })
+    );
   });
 });
