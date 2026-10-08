@@ -57,6 +57,9 @@ type Props = {
   editableMode?: boolean;
   // What the schema lets the user add (types; bam-masterdata codes).
   editRules?: EditRules;
+  // Classes whose subclasses are shown, and the +/- on a card that shows or hides them.
+  expandedClassIds?: string[];
+  onToggleSubclasses?: (classId: string) => void | Promise<void>;
 };
 
 const cleanType = (t?: string | null) => {
@@ -156,6 +159,8 @@ export default function GraphView({
   onClearSelection,
   editableMode = false,
   editRules = NOMAD_EDIT_RULES,
+  expandedClassIds,
+  onToggleSubclasses,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
@@ -166,6 +171,7 @@ export default function GraphView({
     zoom: 1,
   });
   const [activeQuantityTarget, setActiveQuantityTarget] = useState<string | null>(null);
+  const [togglingClassId, setTogglingClassId] = useState<string | null>(null);
   const dragRef = useRef<{ id: string; startX: number; startY: number; nodeX: number; nodeY: number } | null>(null);
   const emptyQuantityDraft = useMemo<Required<QuantityFormData>>(
     () => ({ quantityName: "", dtype: editRules.dtypes[0]?.name ?? "", docstring: "", code: "", label: "", range: "", mandatory: false }),
@@ -997,9 +1003,58 @@ export default function GraphView({
     return { cls: targetCard.cls, pos: { top, left } };
   }, [activeQuantityTarget, cardViews, viewport]);
 
+  const expandedClassIdSet = useMemo(() => new Set(expandedClassIds ?? []), [expandedClassIds]);
+  // Subclasses hang below a card, linked by inheritance arrows, so the toggle needs those arrows shown.
+  const subclassToggle = (cls: UmlClassNode) => {
+    if (!onToggleSubclasses || !showInheritance) return null;
+    const expanded = expandedClassIdSet.has(cls.id);
+    const count = cls.subclasses ?? 0;
+    if (!expanded && count === 0) return null;
+    return (
+      <button
+        type="button"
+        className={`uml-subclass-toggle${expanded ? " is-expanded" : ""}`}
+        title={expanded ? "Hide subclasses" : `Show ${count} ${count === 1 ? "subclass" : "subclasses"}`}
+        aria-label={expanded ? `Hide subclasses of ${cls.name}` : `Show subclasses of ${cls.name}`}
+        aria-expanded={expanded}
+        disabled={togglingClassId !== null}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={async (e) => {
+          e.stopPropagation();
+          setTogglingClassId(cls.id);
+          try {
+            await onToggleSubclasses(cls.id);
+          } finally {
+            setTogglingClassId(null);
+          }
+        }}
+      >
+        {expanded ? "−" : "+"}
+      </button>
+    );
+  };
+
   return (
     <div className="graph" style={{ position: "relative" }}>
       <div className={`cy-canvas${showEditingUi ? " is-hidden" : ""}`} ref={containerRef} />
+      {!showEditingUi && onToggleSubclasses ? (
+        <div
+          className="uml-toggle-layer"
+          style={{
+            transform: `translate(${viewport.pan.x}px, ${viewport.pan.y}px) scale(${viewport.zoom})`,
+          }}
+        >
+          {cardViews.map(({ cls, box }) => {
+            const toggle = box ? subclassToggle(cls) : null;
+            if (!toggle || !box) return null;
+            return (
+              <div key={cls.id} className="uml-toggle-anchor" style={{ left: box.x + box.w / 2, top: box.y + box.h }}>
+                {toggle}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       {showEditingUi && (
         <div
           className="uml-overlay"
@@ -1204,6 +1259,7 @@ export default function GraphView({
               const hasInline = activeQuantityTarget === cls.id;
               const zIndex = hasInline ? 1200 : isSelected ? 900 : 200;
               const moduleLabel = cls.module ? (cls.module.split(".").pop() || cls.module) : null;
+              const toggle = subclassToggle(cls);
               return (
                 <div
                   key={cls.id}
@@ -1260,6 +1316,7 @@ export default function GraphView({
                       );
                     })}
                   </div>
+                  {toggle ? <div className="uml-toggle-anchor">{toggle}</div> : null}
 
                 </div>
               );

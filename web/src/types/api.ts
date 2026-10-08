@@ -26,6 +26,7 @@ export type ApiNode = {
   owner?: string | null;
   doc?: string | null;
   methods?: string[] | null;
+  subclasses?: number | null;
   path?: string | null;
   line?: number | null;
   details?: NodeDetails | null;
@@ -174,6 +175,7 @@ const ensureNode = (node: unknown): ApiNode => {
   const doc = typeof node.doc === "string" ? node.doc : null;
   const path = typeof node.path === "string" ? node.path : null;
   const line = typeof node.line === "number" ? node.line : null;
+  const subclasses = typeof node.subclasses === "number" ? node.subclasses : null;
   return {
     id,
     kind,
@@ -189,6 +191,7 @@ const ensureNode = (node: unknown): ApiNode => {
     methods: Array.isArray(node.methods) ? node.methods.map(asString) : null,
     path,
     line,
+    subclasses,
     details: ensureDetails(node),
   };
 };

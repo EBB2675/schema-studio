@@ -142,6 +142,8 @@ export default function App() {
 
   const [graph, setGraph] = useState<ApiGraph | null>(null);
   const [baseGraph, setBaseGraph] = useState<ApiGraph | null>(null);
+  // Classes whose subclasses the canvas shows; cleared when the module or root changes.
+  const [expandedClasses, setExpandedClasses] = useState<string[]>([]);
   const [umlState, setUmlState] = useState<UmlGraphState | null>(null);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedQuantityId, setSelectedQuantityId] = useState<string | null>(null);
@@ -907,9 +909,108 @@ export default function App() {
     }
   }, [api, isLightMode, pkg, root, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
 
+  // The module's graph as the server draws it; no state changes beyond the workspace sync.
+  const fetchGraph = useCallback(async (
+    opts: { pkg: string; root: string; namespace: string; branch: string; empty: boolean; expand: string[] }
+  ): Promise<ApiGraph> => {
+    const expand = opts.expand.length ? opts.expand.join(",") : undefined;
+    let parsed: ApiGraph | null = null;
+    if (opts.empty) {
+      const r = await api.get("/schema", {
+        params: {
+          package: opts.pkg,
+          root: opts.root,
+          include_quantities: includeQuantities,
+          include_subsections: includeSubsections,
+          include_inheritance: includeInheritance,
+          allow_cross_module: crossModules,
+          base_namespace: opts.namespace || undefined,
+          expand,
+          empty: true,
+        },
+      });
+      parsed = ensureGraphResponse(r.data);
+      syncWorkspaceFromResponse(r.data);
+      return parsed;
+    }
+    if (isLightMode) {
+      const r = await api.get("/schema", {
+        params: {
+          package: opts.pkg,
+          root: opts.root,
+          include_quantities: includeQuantities,
+          include_subsections: includeSubsections,
+          include_inheritance: includeInheritance,
+          allow_cross_module: crossModules,
+          base_namespace: opts.namespace || undefined,
+          expand,
+        },
+      });
+      parsed = ensureGraphResponse(r.data);
+      syncWorkspaceFromResponse(r.data);
+    } else if (opts.branch) {
+      const asyncResult = await enqueueGraphTask(
+        { branch: opts.branch, package: opts.pkg },
+        {
+          root: opts.root,
+          include_quantities: includeQuantities,
+          include_subsections: includeSubsections,
+          include_inheritance: includeInheritance,
+          allow_cross_module: crossModules,
+          base_namespace: opts.namespace || undefined,
+          expand,
+        }
+      );
+      if (asyncResult) {
+        const maybeGraph = (asyncResult as { graph?: unknown })?.graph ?? asyncResult;
+        parsed = ensureGraphResponse(maybeGraph);
+        syncWorkspaceFromResponse(asyncResult as WorkspaceEnvelope);
+      }
+      if (!parsed) {
+        const r = await api.post(
+          "/graph",
+          {
+            branch: opts.branch,
+            package: opts.pkg,
+          },
+          {
+            params: {
+              root: opts.root,
+              include_quantities: includeQuantities,
+              include_subsections: includeSubsections,
+              include_inheritance: includeInheritance,
+              allow_cross_module: crossModules,
+              base_namespace: opts.namespace || undefined,
+              expand,
+            },
+          }
+        );
+        parsed = ensureGraphResponse(r.data?.graph ?? r.data);
+        syncWorkspaceFromResponse(r.data);
+      }
+    } else {
+      const r = await api.get("/schema", {
+        params: {
+          package: opts.pkg,
+          root: opts.root,
+          include_quantities: includeQuantities,
+          include_subsections: includeSubsections,
+          include_inheritance: includeInheritance,
+          allow_cross_module: crossModules,
+          base_namespace: opts.namespace || undefined,
+          expand,
+        },
+      });
+      parsed = ensureGraphResponse(r.data);
+      syncWorkspaceFromResponse(r.data);
+    }
+    if (!parsed) throw new Error("Failed to load graph");
+    return parsed;
+  }, [api, crossModules, enqueueGraphTask, includeQuantities, includeSubsections, includeInheritance, isLightMode, syncWorkspaceFromResponse]);
+
   // build single-branch graph (resets diff view)
   const loadGraph = useCallback(async (
-    overrides?: { pkg?: string; root?: string; namespace?: string; branch?: string; forceEmpty?: boolean }
+    overrides?: { pkg?: string; root?: string; namespace?: string; branch?: string; forceEmpty?: boolean; expand?: string[] }
   ) => {
     if (!token) {
       setErr("Login required");
@@ -931,95 +1032,13 @@ export default function App() {
     setDiffData(null);
     setGraphHandle(null);
     try {
-      let parsed: ApiGraph | null = null;
-      if (useEmpty) {
-        const r = await api.get("/schema", {
-          params: {
-            package: pkgToUse,
-            root: rootToUse,
-            include_quantities: includeQuantities,
-            include_subsections: includeSubsections,
-            include_inheritance: includeInheritance,
-            allow_cross_module: crossModules,
-            base_namespace: namespaceToUse || undefined,
-            empty: true,
-          },
-        });
-        parsed = ensureGraphResponse(r.data);
-        syncWorkspaceFromResponse(r.data);
-        setGraph(parsed);
-        setBaseGraph(parsed);
-        return;
-      }
-      if (isLightMode) {
-        const r = await api.get("/schema", {
-          params: {
-            package: pkgToUse,
-            root: rootToUse,
-            include_quantities: includeQuantities,
-            include_subsections: includeSubsections,
-            include_inheritance: includeInheritance,
-            allow_cross_module: crossModules,
-            base_namespace: namespaceToUse || undefined,
-          },
-        });
-        parsed = ensureGraphResponse(r.data);
-        syncWorkspaceFromResponse(r.data);
-      } else if (branchToUse) {
-        const asyncResult = await enqueueGraphTask(
-          { branch: branchToUse, package: pkgToUse },
-          {
-            root: rootToUse,
-            include_quantities: includeQuantities,
-            include_subsections: includeSubsections,
-            include_inheritance: includeInheritance,
-            allow_cross_module: crossModules,
-            base_namespace: namespaceToUse || undefined,
-          }
-        );
-        if (asyncResult) {
-          const maybeGraph = (asyncResult as { graph?: unknown })?.graph ?? asyncResult;
-          parsed = ensureGraphResponse(maybeGraph);
-          syncWorkspaceFromResponse(asyncResult as WorkspaceEnvelope);
-        }
-        if (!parsed) {
-          const r = await api.post(
-            "/graph",
-            {
-              branch: branchToUse,
-              package: pkgToUse,
-            },
-            {
-              params: {
-                root: rootToUse,
-                include_quantities: includeQuantities,
-                include_subsections: includeSubsections,
-                include_inheritance: includeInheritance,
-                allow_cross_module: crossModules,
-                base_namespace: namespaceToUse || undefined,
-              },
-            }
-          );
-          parsed = ensureGraphResponse(r.data?.graph ?? r.data);
-          syncWorkspaceFromResponse(r.data);
-        }
-      } else {
-        const r = await api.get("/schema", {
-          params: {
-            package: pkgToUse,
-            root: rootToUse,
-            include_quantities: includeQuantities,
-            include_subsections: includeSubsections,
-            include_inheritance: includeInheritance,
-            allow_cross_module: crossModules,
-            base_namespace: namespaceToUse || undefined,
-          },
-        });
-        parsed = ensureGraphResponse(r.data);
-        syncWorkspaceFromResponse(r.data);
-      }
+      const parsed = await fetchGraph({
+        pkg: pkgToUse, root: rootToUse, namespace: namespaceToUse, branch: branchToUse, empty: useEmpty,
+        expand: overrides?.expand ?? expandedClasses,
+      });
       setGraph(parsed);
       setBaseGraph(parsed);
+      if (useEmpty) return;
       // If the server returned a clean graph without applied persisted edits, archive any local audit history
       // so “active edits” reflects only new work in this session.
       if (!parsed.applied_edits || parsed.applied_edits.length === 0) {
@@ -1033,7 +1052,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [api, archiveAllAuditEntries, crossModules, enqueueGraphTask, includeQuantities, includeSubsections, includeInheritance, isLightMode, normalizedNamespace, pkg, root, setStartEmpty, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
+  }, [archiveAllAuditEntries, expandedClasses, fetchGraph, normalizedNamespace, pkg, root, setStartEmpty, startEmpty, token, workspaceBranch]);
 
   const resetEmptyCanvas = useCallback(async () => {
     if (!token) {
@@ -1282,6 +1301,10 @@ export default function App() {
   }, [buildUmlState, graph]);
 
   useEffect(() => {
+    setExpandedClasses([]);
+  }, [pkg, root]);
+
+  useEffect(() => {
     seedAuditFromAppliedEdits(graph);
   }, [graph, seedAuditFromAppliedEdits]);
 
@@ -1488,6 +1511,7 @@ export default function App() {
           allow_cross_module: crossModules,
           base_namespace: normalizedNamespace || undefined,
           empty: startEmpty ? true : undefined,
+          expand: expandedClasses.length ? expandedClasses.join(",") : undefined,
           // Dev Mode checks and draws the edits on the branch it shows.
           branch: isLightMode ? undefined : workspaceBranch || undefined,
         },
@@ -1801,6 +1825,28 @@ export default function App() {
       return allChanges.reduce((acc, change) => applyForwardChange(acc, change), serverGraph);
     },
     [applyForwardChange, auditTrail, filterActiveAuditForPackage, normalizePackageName, pkg]
+  );
+
+  // Shows or hides a class's subclasses: the server redraws the graph with the new set of expanded classes.
+  const toggleSubclasses = useCallback(
+    async (classId: string) => {
+      const next = expandedClasses.includes(classId)
+        ? expandedClasses.filter((id) => id !== classId)
+        : [...expandedClasses, classId];
+      setErr(null);
+      try {
+        const parsed = await fetchGraph({
+          pkg: graph?.package || pkg, root: startEmpty ? "" : root, namespace: normalizedNamespace,
+          branch: workspaceBranch ?? "", empty: startEmpty, expand: next,
+        });
+        setExpandedClasses(next);
+        setBaseGraph(parsed);
+        setGraph(replayGraphWithAudit(parsed));
+      } catch (e: unknown) {
+        setErr(formatApiError(e) || "Failed to load graph");
+      }
+    },
+    [expandedClasses, fetchGraph, graph?.package, normalizedNamespace, pkg, replayGraphWithAudit, root, startEmpty, workspaceBranch]
   );
 
   const rebuildGraphWithAudit = useCallback(
@@ -3135,6 +3181,8 @@ export default function App() {
                   creatingClass={creatingClass}
                   onClearSelection={handleCanvasClear}
                   editableMode={editableMode}
+                  expandedClassIds={expandedClasses}
+                  onToggleSubclasses={toggleSubclasses}
                 />
               </div>
             </>

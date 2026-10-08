@@ -1006,6 +1006,43 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
 
 .uml-plus:hover { transform: translateY(-1px); box-shadow: 0 10px 26px rgba(79, 70, 229, 0.28); }
 
+/* Show or hide a class's subclasses: a small round button on the bottom edge of its card. */
+.uml-toggle-layer {
+  position: absolute;
+  inset: 0;
+  transform-origin: top left;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.uml-toggle-anchor {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translate(-50%, -50%);
+}
+
+.uml-subclass-toggle {
+  pointer-events: auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  background: var(--surface);
+  color: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.uml-subclass-toggle:hover { border-color: var(--accent); }
+.uml-subclass-toggle:disabled { cursor: progress; opacity: 0.6; }
+
 .inline-error {
   color: #dc2626;
   font-size: 12px;

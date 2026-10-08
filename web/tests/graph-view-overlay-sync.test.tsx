@@ -341,3 +341,60 @@ describe('GraphView card contents', () => {
     expect(selected?.quantities.map((q: { name: string }) => q.name)).toEqual(['own_value', 'base_value']);
   });
 });
+
+describe('GraphView subclass toggle', () => {
+  beforeEach(() => {
+    fakeCy = makeFakeCy([CLASS_A, CLASS_B]);
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  const withSubclasses: UmlGraphState = {
+    ...umlState,
+    classes: [
+      { id: CLASS_A, name: 'Alpha', module: 'pkg.custom_schema', quantities: [], subclasses: 0 },
+      { id: CLASS_B, name: 'Beta', module: 'pkg.custom_schema', quantities: [], subclasses: 3 },
+    ],
+  };
+
+  it.each([false, true])('shows a + only on classes with subclasses (edit mode: %s) and reports clicks', (editableMode) => {
+    const onToggleSubclasses = vi.fn();
+    render(
+      <GraphView
+        nodes={[]}
+        edges={[]}
+        umlState={withSubclasses}
+        editableMode={editableMode}
+        onToggleSubclasses={onToggleSubclasses}
+        onCreateQuantity={vi.fn().mockResolvedValue(undefined)}
+        onCreateClass={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+    expect(screen.queryByRole('button', { name: 'Show subclasses of Alpha' })).toBeNull();
+    const toggle = screen.getByRole('button', { name: 'Show subclasses of Beta' });
+    expect(toggle.textContent).toBe('+');
+    expect(toggle.getAttribute('title')).toBe('Show 3 subclasses');
+    fireEvent.click(toggle);
+    expect(onToggleSubclasses).toHaveBeenCalledWith(CLASS_B);
+  });
+
+  it('shows a − on an expanded class and no toggle while inheritance is hidden', () => {
+    const props = {
+      nodes: [], edges: [], umlState: withSubclasses, expandedClassIds: [CLASS_B], onToggleSubclasses: vi.fn(),
+    };
+    const { unmount } = render(<GraphView {...props} />);
+    const toggle = screen.getByRole('button', { name: 'Hide subclasses of Beta' });
+    expect(toggle.textContent).toBe('−');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    unmount();
+
+    render(<GraphView {...props} showInheritance={false} />);
+    expect(screen.queryByRole('button', { name: /subclasses of Beta/ })).toBeNull();
+  });
+});
+
