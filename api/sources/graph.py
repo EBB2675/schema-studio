@@ -53,6 +53,11 @@ class RootNotFound(ValueError):
     """The requested root is not a class the module exposes."""
 
 
+def expand_names(text: str | None) -> tuple[str, ...]:
+    """The classes to expand, from the comma-separated query value."""
+    return tuple(name.strip() for name in (text or "").split(",") if name.strip())
+
+
 def root_namespace(package: str) -> str:
     """The namespace a module's graph is limited to when cross-module links are off."""
     parts = package.split(".")

@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from ..sources import editing
 from ..sources.extraction import list_schema_modules
+from ..sources.graph import expand_names
 from ..sources.legacy import ExtractionFailed, UnknownRoot
 from ..sources.legacy import root_namespace as _root_namespace
 from ..sources.linkml_routes import edit_error, linkml_download, linkml_report
@@ -388,6 +389,7 @@ async def _graph_response(
     base_namespace: str,
     empty: bool,
     stored: list[dict] | None = None,
+    expand: str | None = None,
 ) -> dict:
     """The module's graph from its edited schema (the stored edits, unless given), with the workspace."""
     if stored is None:
@@ -404,6 +406,7 @@ async def _graph_response(
             allow_cross_module=allow_cross_module,
             base_namespace=base_namespace,
             empty=empty,
+            expand=expand_names(expand),
         )
     except ModuleNotFoundError as exc:
         if not _missing_requested_package(exc, package):
@@ -420,6 +423,7 @@ async def schema(
     include_subsections: bool = Query(True),
     include_inheritance: bool = Query(True),
     allow_cross_module: bool = Query(True),
+    expand: str | None = Query(None, description="Comma-separated classes whose subclasses are drawn"),
     base_namespace: str | None = Query(None),
     empty: bool = Query(False),
 ):
@@ -435,6 +439,7 @@ async def schema(
     return await _graph_response(
         pkg, ws, root=root, include_quantities=include_quantities, include_subsections=include_subsections,
         include_inheritance=include_inheritance, allow_cross_module=allow_cross_module, base_namespace=ns, empty=empty,
+        expand=expand,
     )
 
 
@@ -461,6 +466,7 @@ async def add_schema_edits(
     include_subsections: bool = Query(True),
     include_inheritance: bool = Query(True),
     allow_cross_module: bool = Query(True),
+    expand: str | None = Query(None, description="Comma-separated classes whose subclasses are drawn"),
     base_namespace: str | None = Query(None),
     empty: bool = Query(False),
 ):
@@ -483,7 +489,7 @@ async def add_schema_edits(
     graph = await _graph_response(
         pkg, ws, root=root, include_quantities=include_quantities, include_subsections=include_subsections,
         include_inheritance=include_inheritance, allow_cross_module=allow_cross_module, base_namespace=ns, empty=empty,
-        stored=[*stored, *prepared],
+        stored=[*stored, *prepared], expand=expand,
     )
     saved = store.add_edits(user_id=LIGHT_MODE_USER, profile=ws.profile, package=pkg, edits=prepared)
     return editing.with_stored(graph, prepared, saved)

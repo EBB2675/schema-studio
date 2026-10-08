@@ -552,3 +552,24 @@ async def test_an_unknown_root_is_a_clear_request_error(client: httpx.AsyncClien
     resp = await client.get("/schema", params={"package": "pkg.default", "root": "Outdoor"})
     assert resp.status_code == 400
     assert "Root section 'Outdoor' not found in pkg.default" in resp.json()["detail"]
+
+
+
+@pytest.mark.anyio
+async def test_expand_reaches_the_graph(client: httpx.AsyncClient, light_mode_module, monkeypatch):
+    calls = []
+    build_graph = light_mode_module.editing.build_graph
+
+    def spy(*args, **kwargs):
+        calls.append(kwargs.get("expand"))
+        return build_graph(*args, **kwargs)
+
+    monkeypatch.setattr(light_mode_module.editing, "build_graph", spy)
+    params = {"package": "pkg.default", "root": "RootSection"}
+    plain = await client.get("/schema", params=params)
+    assert {node["id"]: node for node in plain.json()["nodes"]}["pkg.default.RootSection"]["subclasses"] == 0
+    await client.get("/schema", params={**params, "expand": "pkg.default.RootSection, pkg.common.Shared"})
+    added = await client.post("/schema/edits", params={**params, "expand": "pkg.default.RootSection"},
+                              json=_edits(("add_class", "", {"name": "Special", "is_a": "pkg.default.RootSection"})))
+    assert added.status_code == 200, added.text
+    assert calls == [(), ("pkg.default.RootSection", "pkg.common.Shared"), ("pkg.default.RootSection",)]
