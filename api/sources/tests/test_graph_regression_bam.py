@@ -54,7 +54,7 @@ def studio_home(tmp_path_factory):
 
 
 def available():
-    from api.light_mode.schema_source import SCHEMA_PROFILES, schema_available
+    from api.schema_profiles import SCHEMA_PROFILES, schema_available
 
     profile = SCHEMA_PROFILES[KEY]
     if not schema_available(profile):

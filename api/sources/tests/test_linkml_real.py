@@ -21,7 +21,7 @@ MODULES = {
 
 @pytest.mark.parametrize("key,module", [(key, module) for key, modules in MODULES.items() for module in modules])
 def test_module_exports_and_loads(key, module, studio_home):
-    from api.light_mode.schema_source import SCHEMA_PROFILES, schema_available
+    from api.schema_profiles import SCHEMA_PROFILES, schema_available
     from api.sources.snapshots import get_snapshot, snapshot_yaml
 
     profile = SCHEMA_PROFILES[key]
@@ -40,7 +40,7 @@ def test_module_exports_and_loads(key, module, studio_home):
 
 @pytest.mark.parametrize("key", sorted(MODULES))
 def test_whole_profile_converts(key, studio_home):
-    from api.light_mode.schema_source import SCHEMA_PROFILES, schema_available
+    from api.schema_profiles import SCHEMA_PROFILES, schema_available
     from api.sources.snapshots import get_snapshot
 
     profile = SCHEMA_PROFILES[key]
@@ -51,7 +51,7 @@ def test_whole_profile_converts(key, studio_home):
 
 
 def test_whole_bam_datamodel_exports_and_loads(studio_home):
-    from api.light_mode.schema_source import SCHEMA_PROFILES, schema_available
+    from api.schema_profiles import SCHEMA_PROFILES, schema_available
     from api.sources.snapshots import get_snapshot, snapshot_yaml
 
     profile = SCHEMA_PROFILES["bam-masterdata"]

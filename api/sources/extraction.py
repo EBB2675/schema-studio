@@ -20,7 +20,7 @@ import os
 from collections.abc import Collection
 from pathlib import Path
 
-from ..light_mode.schema_source import SchemaProfile, schema_profile_for_package
+from ..schema_profiles import SchemaProfile, schema_profile_for_package
 from . import graph, legacy
 from .legacy import ExtractionFailed, UnknownRoot, UsageEntry
 from .snapshots import get_snapshot, supports_linkml

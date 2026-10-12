@@ -10,7 +10,7 @@ from .graph_runner import build_graph_in_subprocess
 from .diff import diff_graphs
 from .auth import get_user_and_workspace, update_workspace, workspace_payload, db_dep
 from .edit_store import list_edits
-from .light_mode.schema_source import schema_profile_for_package
+from .schema_profiles import schema_profile_for_package
 from .sources.graph import expand_names
 from .repo_utils import (
     bases_by_repo,

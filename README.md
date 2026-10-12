@@ -2,21 +2,23 @@
 
 Interactive schema explorer and editor for data models.
 
-`schema-studio` (the package entrypoint) launches **Light Mode** by default:
-- Local single-user app (no auth)
-- No MongoDB/Redis required
-- Custom edits persisted in local SQLite
-- Schema family selectable between `nomad-simulations`, `nomad-measurements` and `bam-masterdata`
+Schema Studio runs in two ways:
+- **Static site**: runs entirely in the browser, without a server. The Python
+  core runs in the browser with [Pyodide](https://pyodide.org); edits stay in
+  that browser. This is what GitHub Pages serves, and how you run it locally.
+- **Dev Mode**: a FastAPI server with MongoDB and Celery, for sign-in, branch
+  switching, branch comparison and edits stored on the server.
 
-Back end: **FastAPI**  
+Both show the same layout; Dev Mode only adds what needs its server.
+Schema families: `nomad-simulations`, `nomad-measurements` and `bam-masterdata`.
+
+Back end: **FastAPI** (Dev Mode) and **Pyodide** (static site)  
 Front end: **React + Cytoscape + ELK**  
 Python: **3.11+**
 
 ![Schema Studio homepage](assets/UMLdiagram-10-02.png)
 
-## Quick Start (Current: from source)
-
-> PyPI release is not live yet.
+## Quick Start (from source)
 
 ### 1) Install
 
@@ -27,20 +29,12 @@ git clone https://github.com/EBB2675/schema-studio.git
 cd schema-studio
 ```
 
-Create a virtual environment using Python 3.11 (either with `venv` or with `conda`) and activate it:
-```bash
-python3.11 -m venv .venv
-source .venv/bin/activate  # In Linux-based OS
-```
+Install the Python dependencies with [`uv`](https://docs.astral.sh/uv/), and the
+frontend dependencies with npm:
 
-Install the dependencies of the project:
-```bash
-pip install -e .
-```
-
-**Note**: we recommend using [`uv`](https://docs.astral.sh/uv/) for a faster installation of the dependencies:
 ```bash
 uv sync
+npm --prefix web ci
 ```
 
 ### 2) Set up the schema environments
@@ -48,7 +42,7 @@ uv sync
 Schema Studio does not install any schema package next to itself. Each schema
 family lives in its own small environment under `environments/<profile>/`, and
 the app reads a schema by running a script with that environment's Python.
-This needs [`uv`](https://docs.astral.sh/uv/) on your `PATH`.
+This needs `uv` on your `PATH`.
 
 Set up the ones you want to browse (run from the repository root):
 
@@ -58,24 +52,20 @@ uv sync --project environments/nomad-measurements   # tracks `main`
 uv sync --project environments/bam-masterdata       # tracks `main`
 ```
 
-The two NOMAD environments install `nomad-lab` and are large downloads. You can
-also skip this step and use the **Load …** button next to a schema family in
-the app, which runs the same setup for that one profile.
+The two NOMAD environments install `nomad-lab` and are large downloads.
 
-Each environment is pinned by its `uv.lock`. To move one to the latest commit
-of its branch, click **Update schema** in the app, or run:
+### 3) Build and run
 
 ```bash
-uv lock --project environments/bam-masterdata --upgrade-package bam-masterdata
-uv sync --project environments/bam-masterdata
+npm --prefix web run build:pages                                        # frontend + Pyodide into web/dist
+.venv/bin/python scripts/build_snapshots.py --out web/dist/data --graphs  # schema snapshots of every set-up profile
+mkdir -p /tmp/site && rm -rf /tmp/site/schema-studio && cp -r web/dist /tmp/site/schema-studio
+cd /tmp/site && python -m http.server
 ```
 
-### 3) Run
-```bash
-schema-studio
-```
-
-This starts the local server on `http://127.0.0.1:5179` and opens your browser automatically.
+Open `http://localhost:8000/schema-studio/`. The site is built to be served
+under `/schema-studio/` (set by `web/.env.pages`), which is why it is copied
+into a folder of that name.
 
 ### 4) First-use flow
 1. Pick a schema family.
@@ -85,84 +75,70 @@ This starts the local server on `http://127.0.0.1:5179` and opens your browser a
 5. Click classes/quantities to view docs and metadata.
 6. Toggle **Editable mode** to add classes/quantities.
 
-## What You Get in Light Mode
+## What You Get
 
 - UML-style class cards (sections) with quantities and relationships
 - Class + quantity documentation panel
 - Under-the-hood usage panel (normalizers/helpers)
 - Bird's-eye package/class overview
 - Editable graph (add classes, add/rename/remove quantities)
-- JSON export and PDF snapshot export
-- Optional **Send Design** action when `SCHEMA_STUDIO_SEND_ENDPOINT` is configured
+- JSON, LinkML and PDF export
 
-## Light Mode vs Dev Mode
+## Static Site vs Dev Mode
 
-| Capability | Light Mode (current) | Dev Mode (source/full stack) |
+| Capability | Static site | Dev Mode |
 |---|---|---|
-| Install path | `pip install -e .` | Clone repo + Docker/local services |
+| Run with | built site + any static file server | Docker Compose (or local services) |
+| Server | none (Python core in the browser) | FastAPI |
 | Auth | No | Yes |
 | Multi-user | No | Yes |
-| Branch switching/diff | No | Yes |
-| Persistence | Local SQLite | MongoDB |
+| Branch switching/diff | No (the snapshot's branch) | Yes |
+| Edits stored in | this browser (download/load as JSON) | MongoDB |
 | Background jobs | Not required | Celery + Redis |
 
-## Optional Configuration
+## Configuration
 
-Make sure to set the environment variables before running `schema-studio`.
+These variables apply to reading schemas from the environments, in Dev Mode and
+in `scripts/build_snapshots.py`.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `SCHEMA_STUDIO_HOST` | `127.0.0.1` | Bind host |
-| `SCHEMA_STUDIO_PORT` | `5179` | Bind port |
-| `SCHEMA_STUDIO_HOME` | platform config dir | Where Light Mode stores SQLite data and cached schema reads |
-| `SCHEMA_STUDIO_DEFAULT_PACKAGE` | `nomad_simulations.schema_packages.model_method` | Initial package |
-| `SCHEMA_STUDIO_DEFAULT_NAMESPACE` | `nomad_simulations.schema_packages` | Initial base namespace |
+| `SCHEMA_STUDIO_HOME` | platform config dir | Where cached schema reads are kept |
 | `SCHEMA_STUDIO_ENVIRONMENTS_DIR` | `environments/` in the checkout | Folder that holds the schema environments |
+| `SCHEMA_STUDIO_SCHEMA_PROFILE` | `nomad-simulations` | Profile used when a package belongs to none |
 | `SCHEMA_STUDIO_EXTRACTOR_TIMEOUT_SECONDS` | `300` | Time limit for one schema read in an environment |
 | `SCHEMA_STUDIO_EXTRACTION` | `linkml` | How graphs, roots and usage info are built: `linkml` (from the LinkML snapshot) or `legacy` (graph builder in the schema environment). One value for all profiles, or per profile, e.g. `nomad-simulations=legacy` or `bam-masterdata=legacy`; profiles not named use `linkml`. Dev Mode reads it for graphs (including branch graphs), roots and usage; its overview and package list scan the git worktree instead. |
-| `SCHEMA_STUDIO_SEND_ENDPOINT` | unset | Enable `POST /send-design` passthrough |
-| `SCHEMA_STUDIO_DIST_DIR` | auto-detected | Override frontend static assets directory |
-| `UVICORN_LOG_LEVEL` | `info` | Server logging level |
+
+The static site is configured at build time in `web/.env.pages` (`VITE_STATIC_MODE`, `VITE_BASE_PATH`).
 
 ### Data location
-Light Mode stores data in:
-- `$SCHEMA_STUDIO_HOME/light_mode.sqlite3` (if `SCHEMA_STUDIO_HOME` is set), or
-- your platform config directory (fallback: `./.schema_studio_light/light_mode.sqlite3`).
+Cached schema reads are kept in:
+- `$SCHEMA_STUDIO_HOME/cache/` (if `SCHEMA_STUDIO_HOME` is set), or
+- `cache/` in your platform config directory (`schema_studio`; fallback: `./.schema_studio/`).
 
-## Keeping Schema Fresh
+The static site keeps its edits in the browser's local storage.
 
-Light Mode can create or update the environment of the currently selected schema family.
-This is the only action that installs anything, and it only touches `environments/<profile>/`:
-- In the UI: click **Update schema**
-- API: `POST http://127.0.0.1:5179/schema/update`
+## Keeping Schemas Fresh
 
-A schema environment is never created or updated as a side effect of building a graph.
-The first read of a module after an update takes a few seconds, because the schema
-package is imported in its own environment; results are then cached per schema commit.
+Each environment is pinned by its `uv.lock`. To move one to the latest commit
+of its branch, run:
 
-Version info endpoint:
-- `GET http://127.0.0.1:5179/schema/version`
+```bash
+uv lock --project environments/bam-masterdata --upgrade-package bam-masterdata
+uv sync --project environments/bam-masterdata
+```
+
+This is the only step that installs anything, and it only touches
+`environments/<profile>/`. A schema environment is never created or updated as a
+side effect of building a graph. For the static site, run
+`scripts/build_snapshots.py` again afterwards; the snapshots are built for the
+commit each environment holds.
 
 ## Common Issues
 
-### `405 Method Not Allowed` when building graph
-You are likely using a Dev Mode frontend build with a Light Mode backend.
-
-Fix:
-```bash
-VITE_LIGHT_MODE=true npm --prefix web run build
-```
-Then restart `schema-studio`.
-
-### `GET /git/branches` returns `410`
-Expected in Light Mode. Branch switching is intentionally disabled.
-
-### A schema family shows "not loaded" or requests answer `503`
-Its environment is not set up yet. Set it up as described in
-[Set up the schema environments](#2-set-up-the-schema-environments), or run schema update once:
-```bash
-curl -X POST "http://127.0.0.1:5179/schema/update?profile=nomad-simulations"
-```
+### Requests answer `503`
+The schema family's environment is not set up yet. Set it up as described in
+[Set up the schema environments](#2-set-up-the-schema-environments).
 
 ### `ImportError: cannot import name 'model_validator'`
 You are likely on an older Pydantic install. Use a clean Python 3.11+ environment and reinstall.
@@ -184,18 +160,8 @@ Open `https://localhost`.
 
 ## Local Source Development Notes
 
-- Backend deps: `api/requirements.txt`
-- Source installs use bundled Light Mode static assets by default, so end users do not need a frontend build.
-- If you change frontend code and want to ship those updates in Light Mode, refresh bundled static assets:
-  ```bash
-  VITE_LIGHT_MODE=true npm --prefix web run build
-  ./scripts/sync_light_mode_static.sh
-  ```
-- Then install/run:
-  ```bash
-  pip install -e .
-  schema-studio
-  ```
+- Backend deps: `api/requirements.txt` (Dev Mode, including MongoDB and Celery clients)
+- Frontend: `npm --prefix web run dev` starts the Vite dev server against a Dev Mode API at `http://localhost:5179` (`VITE_API_BASE`).
 
 ## Desktop App
 
@@ -213,40 +179,33 @@ Current desktop characteristics:
 For desktop-specific setup, testing, packaging, and maintenance notes, use the dedicated docs:
 
 - [Desktop Light Mode](docs/desktop-light-mode.md)
-- [Light Mode Schema Selection](docs/light-mode-schema-selection.md)
+- [Schema Profiles](docs/schema-profiles.md)
 - [Desktop Mode Extension](docs/desktop-mode-extension.md)
 - [Desktop Roadmap](docs/desktop-roadmap.md)
 - [BAM Schema Selection Plan](docs/bam-schema-selection-plan.md)
 
 ## Static Site (GitHub Pages)
 
-Schema Studio also builds as a static site that runs entirely in the browser, without a server. It behaves like Light Mode, with these differences:
+The static site needs no server. Compared with Dev Mode:
 
 - the schemas are snapshot files built into the site, one per schema module, for the commits shown when hovering over each schema family button;
 - graphs, edits, usage info and the LinkML download are computed in the browser by the same Python code the server runs, with [Pyodide](https://pyodide.org) in a web worker; the first graph of each module comes ready-made, so it shows before Pyodide has loaded;
 - edits are stored only in that browser; "Download edits" and "Load edits" move them between browsers;
-- updating schemas, Send design, branches and login need a server and are not offered.
+- branches, branch comparison and login need a server and are not offered.
 
-The workflow `.github/workflows/pages.yml` builds and publishes it when a release is published, or when started by hand. To build it locally (the three schema environments must be set up):
+The workflow `.github/workflows/pages.yml` builds and publishes it when a release is published, or when started by hand. To build and run it locally, see [Build and run](#3-build-and-run).
 
-```bash
-npm --prefix web ci
-npm --prefix web run build:pages          # static frontend + Pyodide into web/dist
-.venv/bin/python scripts/build_snapshots.py --out web/dist/data --graphs
-```
+## API (Dev Mode)
 
-The site expects to be served under `/schema-studio/` (set by `web/.env.pages`), for example by copying `web/dist` to a `schema-studio/` folder and running `python -m http.server` in its parent.
-
-## API (Light Mode)
-
-Core endpoints:
-- `GET /health`
+Core endpoints (all but the auth ones need a signed-in user):
+- `POST /auth/login`, `POST /auth/register`
 - `GET /workspace`, `PUT /workspace`
 - `GET /roots`, `GET /schema`, `GET /overview`, `GET /usage`
 - `GET /schema/edits`, `POST /schema/edits`, `DELETE /schema/edits`, `DELETE /schema/edits/{id}`
 - `GET /schema/linkml` (with the module's edits unless `edits=false`), `GET /schema/linkml/report`
-- `GET /schema/version`, `POST /schema/update`, `POST /send-design`
-- `GET /git/packages` (fixed branch behavior)
+- `GET /git/branches`, `GET /git/packages`, `POST /graph`, `POST /graph/diff`, `/tasks/*`
+
+The static site answers the same requests in the browser (`web/src/static/backend.ts`), except those that need the server.
 
 ## Authors
 

@@ -7,22 +7,22 @@ A structured overview of the repository for developers to navigate, understand, 
 ## 0) TL;DR 
 
 **Purpose:** Interactive editor for data models with two runtime modes:
-- **Light Mode**: pip-installable local mode (single user, SQLite persistence, no Mongo/Redis required).
+- **Static site**: runs in the browser without a server (GitHub Pages, desktop app, local `python -m http.server`); the Python core runs in Pyodide and edits stay in the browser.
 - **Dev Mode**: full branch-aware mode (auth + Mongo + optional Celery/Redis + git worktrees/diff).
-Both modes support schema graphing, docs/usage inspection, custom class/quantity edits, inherited member projection for `is_a` relationships, overview mode, and empty-canvas editing.
+Both modes show the same layout; Dev Mode adds sign-in, branches, branch comparison and edits stored on the server. Both support schema graphing, docs/usage inspection, custom class/quantity edits, inherited member projection for `is_a` relationships, overview mode, and empty-canvas editing.
 
 **Frontend:** React + TypeScript + Cytoscape + ELK  
 **Backend:** FastAPI
 - Dev Mode: async/Motor + GitPython + MongoDB + Celery (Redis)
-- Light Mode: local FastAPI + SQLite + installed schema package sourcing
+- Static site: no server; `api/sources/core.py` in Pyodide, snapshot files built by `scripts/build_snapshots.py`
 **Python:** 3.11 recommended/tested (package requires >=3.11).
 
 **Main directories:**
 - `web/` — frontend React app  
 - `api/` — FastAPI backend  
-- `api/light_mode/` — Light Mode app, schema source policy, local store, CLI  
+- `api/schema_profiles.py` — schema profiles and their environments  
 - `extractor/` — schema graph & usage extractor  
-- `scripts/` — maintenance helpers (including Light Mode static asset sync)
+- `scripts/` — maintenance helpers (including the static site's snapshot build)
 - `api/_data/` — auto-generated bare mirror + worktrees (Dev Mode git features)
 
 **Key endpoints:**
@@ -31,12 +31,7 @@ Both modes support schema graphing, docs/usage inspection, custom class/quantity
   - Branch-aware graphing: `POST /graph`, `POST /graph/diff`, `GET /git/branches`, `GET /git/packages`
   - Async tasks: `POST /tasks/graph`, `POST /tasks/graph/diff`, `GET /tasks/{id}`
   - Shared: `GET /roots`, `GET /schema`, `GET /overview`, `GET /usage`, schema edit endpoints
-- Light Mode:
-  - Core: `GET /health`, `GET /workspace`, `PUT /workspace`, `GET /roots`, `GET /schema`, `GET /overview`, `GET /usage`
-  - Schema edits: `GET /schema/edits`, `POST /schema/edits`, `DELETE /schema/edits`, `DELETE /schema/edits/{id}`
-  - Schema versioning/update: `GET /schema/version`, `POST /schema/update`
-  - Submission: `POST /send-design`
-  - `GET /git/packages` works with fixed branch policy; `GET /git/branches` returns `410` (disabled).
+- Static site: answers the shared requests in the browser (`web/src/static/backend.ts`); branches, login, `/graph` and `/tasks/*` are refused.
 
 Shared query flags for `/schema` and related graph endpoints: `include_quantities`, `include_subsections`, `include_inheritance`, `allow_cross_module`, `base_namespace`, `root`, and `empty` (empty-canvas mode).
 
@@ -59,19 +54,8 @@ export CELERY_RESULT_BACKEND=redis://localhost:6379/1
 Optional defaults: `SCHEMA_UML_BASE_PACKAGE`, `SCHEMA_UML_PACKAGE`. Legacy `NOMAD_SIM_REPO` / `GIT_REPO_DIR` still work.
 Default namespace scope targets `nomad_simulations.schema_packages`. For other projects, set `SCHEMA_UML_BASE_PACKAGE` to your namespace root (comma separated for multiple roots) and ensure each namespace exists in the repo you configured.
 
-**Essential env (Light Mode):**
-~~~bash
-# optional endpoint for "Send design"
-export SCHEMA_STUDIO_SEND_ENDPOINT=https://your-endpoint.example/api
-# optional frontend override
-export SCHEMA_STUDIO_DIST_DIR=/abs/path/to/web/dist
-# optional: disable first-run auto bootstrap (default enabled)
-export SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA=0
-~~~
-`Send Design` UI is shown only when `SCHEMA_STUDIO_SEND_ENDPOINT` is set.
-
 **Start it quickly:**
-- Light Mode: `pip install -e . && schema-studio`
+- Static site: `npm --prefix web run build:pages`, then `scripts/build_snapshots.py --out web/dist/data --graphs`, then serve a `schema-studio/` copy of `web/dist` with `python -m http.server` (see README).
 - Docker Compose (Dev Mode one shot): set `.env` with `SCHEMA_UML_REPO_HOST`, secrets, then `docker compose up --build`.
 - Local dev (Dev Mode): `./dev.sh` (API + web). For real async tasks, also run Redis and a Celery worker with the broker/backends above; otherwise Celery runs eagerly in-process. Override ports via `API_PORT` / `WEB_PORT`.
 
@@ -94,10 +78,10 @@ export SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA=0
 - An edit is an operation on the LinkML schema (`api/sources/edits.py`): add, rename or remove a class or attribute, set range, description or required, add or remove enum values. Each stored edit records profile, module, the schema commit it was made on, target and payload.
 - Edits are stored per mode and profile, each under the module of the class it changes (a new class: the module it is added to):
   - Dev Mode: Mongo (per user).
-  - Light Mode: local SQLite (single user). An older database format is recreated, not migrated.
+  - Static site: the browser's `localStorage` (`web/src/static/editStore.ts`); downloadable as JSON.
 - The backend replays all of the profile's stored edits, in order, onto the freshly converted LinkML schema of the module's snapshot, then builds the graph from that (`api/sources/editing.py`); a class shows the same edits in every module that draws it. The module's own edits that no longer apply, or that applied over a change in the schema source, are reported in `edit_conflicts`.
 - In Dev Mode a branch (`/graph`, `/tasks/graph`, and `branch` on `/roots`, `/schema/linkml` and `POST /schema/edits`) is read from its git worktree, and the stored edits are replayed onto it the same way.
-- `POST /schema/edits` builds the resulting graph before it stores anything, so an error stores nothing, and stores its edits all or none (SQLite: one transaction; Mongo: one document per request, since a standalone MongoDB has no transactions). `DELETE /schema/edits` deletes a list of edit ids and, if a module is named, that module's edits: in one transaction in Light Mode; in Dev Mode undoing one request's edits is one write, while deleting a module's edits may touch several documents and can be repeated safely.
+- `POST /schema/edits` builds the resulting graph before it stores anything, so an error stores nothing, and stores its edits all or none (Mongo: one document per request, since a standalone MongoDB has no transactions). `DELETE /schema/edits` deletes a list of edit ids and, if a module is named, that module's edits: in Dev Mode undoing one request's edits is one write, while deleting a module's edits may touch several documents and can be repeated safely.
 - Which edits a profile allows comes from the profile (`edit_rules`): NOMAD dtypes for both NOMAD profiles, openBIS data types and codes for bam-masterdata. Inherited members are edited on the class that declares them.
 - Frontend audit trail is UI history; each entry keeps the ids of the edits it stored, and undo deletes them (the entry stays if that fails). Clear deletes the current module's edits and those its entries made.
 
@@ -112,7 +96,7 @@ export SCHEMA_STUDIO_AUTO_BOOTSTRAP_SCHEMA=0
 
 **Workspace state:**
 - Stored in `src/store/workspace.ts` (branch/pkg/base namespace/startEmpty), synced with backend `/workspace` where available and persisted locally for reloads.
-- In Light Mode, branch is fixed to `develop` by backend policy.
+- On the static site, the branch is fixed per profile (the one its snapshot was built from).
 
 **Contract tests:**
 - `npm run test:run` (from `web/`) executes frontend UI flows + contract parsing/identifier checks using Vitest + happy-dom.
@@ -134,12 +118,8 @@ schema-studio/
 │  ├─ graph_runner.py           # Runs extractor in a worktree subprocess
 │  ├─ git_utils.py              # Dev Mode bare mirror & worktree management
 │  ├─ diff.py                   # Graph comparison logic (Dev Mode diff endpoints)
-│  ├─ light_mode/               # Light Mode backend
-│  │  ├─ app.py                 # Light Mode API (no auth, fixed-branch policy, send-design)
-│  │  ├─ schema_source.py       # Installed schema package sourcing + /schema/update policy
-│  │  ├─ store.py               # Local SQLite workspace/custom edit store
-│  │  ├─ cli.py                 # `schema-studio` entrypoint
-│  │  └─ tests/                 # Light Mode backend tests (no Mongo dependency)
+│  ├─ schema_profiles.py        # Schema profiles, their environments and schema versions
+│  ├─ studio_home.py            # Where cached schema reads are kept (SCHEMA_STUDIO_HOME)
 │  ├─ sources/                  # Snapshots, LinkML conversion, graph adapter and schema edits
 │  │  ├─ core.py                # Edits replayed onto a snapshot; graph, roots, usage, YAML (stdlib only)
 │  │  ├─ browser.py             # The static site's requests to the core (runs in Pyodide)
@@ -351,32 +331,13 @@ The frontend shows these entries as a list under **Under the hood** for the curr
 9. **Async task endpoints (`POST /tasks/graph`, `POST /tasks/graph/diff`, `GET /tasks/{id}`)**
    - Optional Celery-backed background extraction and diffing.
 
-### 3.2 Light Mode (`api/light_mode/app.py`)
+### 3.2 Static site (`web/src/static/backend.ts`)
 
-1. **Schema source policy (`GET /schema/version`, `POST /schema/update`)**
-   - Always uses installed `nomad-simulations` package.
-   - Update path pulls latest remote `develop` lineage via pip.
-   - Local repo indicators are ignored by policy.
-
-2. **Workspace (`GET /workspace`, `PUT /workspace`)**
-   - Single user local workspace in SQLite.
-   - Branch is enforced to `develop`; non-`develop` requests are rejected.
-
-3. **`GET /schema`, `GET /roots`**
-   - Builds graph from installed package modules.
-   - Replays persisted local edits from SQLite.
-
-4. **Schema edits (`GET`/`POST`/`DELETE /schema/edits`, `DELETE /schema/edits/{id}`)**
-   - Same edit semantics as Dev Mode; stored locally in SQLite.
-   - Inherited-quantity redefinition on child classes is rejected.
-
-5. **`GET /overview`, `GET /usage`**
-   - Overview and under-the-hood data from installed package imports/introspection.
-
-6. **Git endpoints in Light Mode**
-   - `GET /git/packages` is supported with fixed branch policy (`develop` only).
-   - `GET /git/branches` returns `410` by design.
-   - Branch diff endpoints (`/graph`, `/graph/diff`, `/tasks/*`) are not exposed.
+1. Answers the shared requests (`/workspace`, `/roots`, `/schema`, `/schema/edits`, `/overview`, `/usage`, `/git/packages`, `/schema/linkml`) in the browser.
+2. Reads the snapshot files built by `scripts/build_snapshots.py` (`data/index.json`); the first graph of each module is built ready-made.
+3. Runs `api/sources/browser.py` and `core.py` in Pyodide for graphs with edits, roots, usage and LinkML.
+4. Keeps edits in `localStorage`; the branch is fixed per profile; branches, login, `/graph` and `/tasks/*` are refused.
+5. `api/sources/tests/test_browser.py` checks its answers against `api/sources/tests/reference_server.py`, a server built on the shared core.
 
 **Key files**
 
@@ -387,10 +348,12 @@ The frontend shows these entries as a list under **Under the hood** for the curr
   - `api/git_utils.py` — bare mirror/worktree management.
   - `api/graph_runner.py` — subprocess graph extraction in worktrees.
   - `api/diff.py` — graph diffing logic.
-- Light Mode:
-  - `api/light_mode/app.py` — Light Mode API, fixed branch policy, send-design endpoint.
-  - `api/light_mode/schema_source.py` — installed package policy + update behavior.
-  - `api/light_mode/store.py` — SQLite workspace/custom edit persistence.
+- Shared:
+  - `api/schema_profiles.py` — profiles, environment policy, schema versions and environment updates.
+  - `api/sources/` — snapshots, LinkML conversion, graph adapter, schema edits.
+- Static site:
+  - `web/src/static/` — backend in the browser, edit store, Pyodide worker.
+  - `scripts/build_snapshots.py` — the site's snapshot files.
 - `extractor/graph_builder.py` — embeds graph structure + docstrings for sections and quantities.
 - `extractor/scripts/usage_index.py` — introspects normalize methods and helpers; exposes `get_usage_for_section`.
 
@@ -399,11 +362,10 @@ The frontend shows these entries as a list under **Under the hood** for the curr
 ## 4) Frontend Flow
 
 - **`App.tsx`**
-  - Sidebar controls are mode-aware:
-    - Dev Mode: package + branch selectors, compare-branches controls, auth session state.
-    - Light Mode: fixed `develop` branch UX, no branch-diff controls.
+  - One sidebar layout for both modes: schema family buttons, package and root selectors, toggles.
+    - Dev Mode adds: branch selector, compare-branches controls, auth session state.
   - Sidebar includes **Under the hood** (usage inspection via `/usage`) and **Compare branches** (Dev Mode only).
-  - **Build graph:** always resolves to `/schema` in Light Mode; Dev Mode can use `/schema`, `/graph`, or `/tasks/graph` depending on settings.
+  - **Build graph:** always resolves to `/schema` on the static site; Dev Mode can use `/schema`, `/graph`, or `/tasks/graph` depending on settings.
   - **Compare branches (Dev Mode only):** `/graph/diff` or `/tasks/graph/diff`.
   - **Bird’s-eye view:** calls `/overview` and renders an `OverviewGrid` of packages/classes.
   - **Exports:** JSON download and PDF snapshot (via `GraphView` export handle).
@@ -414,9 +376,8 @@ The frontend shows these entries as a list under **Under the hood** for the curr
   - Workspace controls include **Show base sections** (default off): off keeps diagrams focused on selected schema namespace; on restores full base/framework hierarchy.
   - Every request goes through `client.ts` (`createApiClient`, `apiFetch`); no component calls `fetch` or Axios directly.
   - Mode selection:
-    - Compile-time: `VITE_LIGHT_MODE=true` disables branch-diff/task paths.
-    - Compile-time: `VITE_STATIC_MODE=true` (the GitHub Pages build, `npm run build:pages`) also implies Light Mode; `client.ts` then answers every request with `static/backend.ts`, which reads the site's snapshot files (`data/index.json`) and runs `api/sources/core.py` in Pyodide in a web worker (`static/worker.ts`). Edits are kept in `localStorage` (`static/editStore.ts`).
-    - Runtime: frontend also detects Light Mode when `/schema/version` is available and switches behavior accordingly.
+    - Compile-time: `VITE_STATIC_MODE=true` (the GitHub Pages build, `npm run build:pages`) builds the static site: no branch-diff/task paths, and `client.ts` answers every request with `static/backend.ts`, which reads the site's snapshot files (`data/index.json`) and runs `api/sources/core.py` in Pyodide in a web worker (`static/worker.ts`). Edits are kept in `localStorage` (`static/editStore.ts`).
+    - Without it the app talks to the Dev Mode server at `VITE_API_BASE`.
 
 - **`GraphView.tsx`**
   - Renders sections as UML cards using Cytoscape + ELK.
@@ -511,7 +472,7 @@ The frontend shows these entries as a list under **Under the hood** for the curr
 **Add endpoints**
 
 - Dev Mode: add handlers in `api/main.py`/routers (`api/routes_git.py`, `api/routes_tasks.py`) and mount in `api/main.py`.
-- Light Mode: add handlers in `api/light_mode/app.py` (do not expose branch-switch/diff behavior).
+- Static site: answer the request in `web/src/static/backend.ts` (and `api/sources/browser.py` if it needs the core), and add it to `api/sources/tests/reference_server.py` and the parity scenario.
 
 **Adjust diagram styles/behavior**
 
@@ -568,31 +529,19 @@ PY)
 api/_data/
 ~~~
 
-**Light Mode local state**
+**Cached schema reads**
 
 ~~~text
-$SCHEMA_STUDIO_HOME/light_mode.sqlite3
+$SCHEMA_STUDIO_HOME/cache/
 # default fallback (if SCHEMA_STUDIO_HOME unset):
-#   <platform user config dir>/.../light_mode.sqlite3
-#   or <cwd>/.schema_studio_light/light_mode.sqlite3 (when config dir not writable)
+#   <platform user config dir>/schema_studio/cache/
+#   or <cwd>/.schema_studio/cache/ (when config dir not writable)
 ~~~
 
-**Light Mode schema updates**
+**Schema environment updates**
 
-- On startup, Light Mode attempts a one-time automatic bootstrap when schema metadata is unavailable.
-- Runtime update path is `POST /schema/update` (or UI "Update schema").
-- Update implementation runs `python -m pip install --upgrade git+https://github.com/nomad-coe/nomad-simulations.git@develop`, then invalidates import caches.
-
-**Light Mode frontend assets**
-
-- Light Mode serves bundled static assets from `api/light_mode/static` by default.
-- `SCHEMA_STUDIO_DIST_DIR` can override this path (useful for local frontend iteration).
-- When frontend source changes need to be shipped in Light Mode, rebuild and sync:
-
-~~~bash
-VITE_LIGHT_MODE=true npm --prefix web run build
-./scripts/sync_light_mode_static.sh
-~~~
+- `uv lock --project environments/<profile> --upgrade-package <package>` and `uv sync --project environments/<profile>`; nothing in the app creates or updates an environment by itself.
+- `api/schema_profiles.update_schema` runs the same two commands.
 
 ---
 
@@ -601,5 +550,4 @@ VITE_LIGHT_MODE=true npm --prefix web run build
 - Very large graphs + ELK can be slow in the browser; use filters for diffs or narrow the base namespace.
 - Quantities are not nodes in the canvas; removed/changed attributes should be surfaced via the diff banner or a future attribute diff list.  
 - Cross-module traversal can explode node count; keep a tight `base_namespace` during exploration.  
-- Branch diffing is intentionally unavailable in Light Mode.
-- If Light Mode receives `POST /graph`, `POST /graph/diff`, or `/tasks/*` calls (405/404), the frontend was likely built without Light Mode flags. Rebuild web with `VITE_LIGHT_MODE=true` and restart `schema-studio`.
+- Branch diffing needs Dev Mode; the static site has one branch per profile.

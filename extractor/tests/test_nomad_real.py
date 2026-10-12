@@ -32,10 +32,10 @@ COMPARED_MODULES = {
 @pytest.fixture()
 def profile(request, tmp_path, monkeypatch):
     monkeypatch.setenv("SCHEMA_STUDIO_HOME", str(tmp_path / "home"))
-    from api.light_mode import schema_source
+    from api import schema_profiles
 
-    selected = schema_source.SCHEMA_PROFILES[request.param]
-    if not schema_source.schema_available(selected):
+    selected = schema_profiles.SCHEMA_PROFILES[request.param]
+    if not schema_profiles.schema_available(selected):
         pytest.skip(f"environment for {selected.key} is not set up")
     return selected
 
@@ -53,7 +53,7 @@ def _legacy(profile, command: str, **arguments):
 
 @pytest.mark.parametrize("profile", ["nomad-simulations", "nomad-measurements"], indirect=True)
 def test_the_whole_profile_is_read_into_a_valid_document(profile):
-    from api.light_mode import schema_source
+    from api import schema_profiles
 
     arguments = ["--base", profile.default_base_namespace]
     for method in profile.discovery:
@@ -62,7 +62,7 @@ def test_the_whole_profile_is_read_into_a_valid_document(profile):
 
     commit = document["source"]["commit"]
     assert re.fullmatch(r"[0-9a-f]{40}", commit)
-    assert commit == schema_source.current_schema_info(profile).commit
+    assert commit == schema_profiles.current_schema_info(profile).commit
     assert "nomad-lab" in document["source"]["dependencies"]
     catalog = _legacy(profile, "catalog", base=profile.default_base_namespace, dist=profile.package_dist, discovery=list(profile.discovery))
     assert [module["name"] for module in document["modules"]] == [module["package"] for module in catalog["modules"]]

@@ -6,7 +6,7 @@ Policy:
 - The app never installs or imports a schema package. It reads a schema by
   running a script from `extractor/scripts/` with the environment's interpreter.
 - Creating or updating an environment is an explicit action (`update_schema`).
-- Light mode branch is fixed by profile (for example develop/main).
+- Each profile tracks one fixed branch (for example develop/main).
 - Never use local checkouts/worktrees.
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ from threading import Lock
 
 from extractor.runner import EnvironmentMissing, ExtractorEnvironment, ExtractorError, run_script
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 LEGACY_SCRIPT = REPO_ROOT / "extractor" / "scripts" / "legacy.py"
 NOMAD_SCRIPT = REPO_ROOT / "extractor" / "scripts" / "nomad.py"
 BAM_SCRIPT = REPO_ROOT / "extractor" / "scripts" / "bam.py"
@@ -150,7 +150,7 @@ def _profile_for_hint(hint: str) -> SchemaProfile | None:
 
 def _select_profile() -> SchemaProfile:
     """Select active schema profile from env override, then package hint, then default."""
-    requested = os.getenv("SCHEMA_STUDIO_LIGHT_SCHEMA_PROFILE", "").strip().lower()
+    requested = os.getenv("SCHEMA_STUDIO_SCHEMA_PROFILE", "").strip().lower()
     if requested in SCHEMA_PROFILES:
         return SCHEMA_PROFILES[requested]
 
@@ -164,7 +164,7 @@ def _select_profile() -> SchemaProfile:
 
 
 ACTIVE_PROFILE = _select_profile()
-LIGHT_PROFILE_KEY = ACTIVE_PROFILE.key
+ACTIVE_PROFILE_KEY = ACTIVE_PROFILE.key
 PACKAGE_IMPORT = ACTIVE_PROFILE.package_import
 PACKAGE_DIST = ACTIVE_PROFILE.package_dist
 DEFAULT_BRANCH = ACTIVE_PROFILE.default_branch
@@ -219,7 +219,7 @@ def _resolve_profile(profile: SchemaProfile | str | None, *, package: str | None
 
 
 def _is_packaged_backend() -> bool:
-    """Return whether Light Mode is running from a packaged desktop backend."""
+    """Return whether the app runs from a packaged desktop backend."""
     return getattr(sys, "frozen", False) or os.getenv("SCHEMA_STUDIO_PACKAGED_BACKEND") == "1"
 
 
@@ -232,7 +232,7 @@ def _normalize_repo(url: str) -> str:
 def setup_hint(profile: SchemaProfile) -> str:
     """One sentence that tells the user how to create the profile environment."""
     return (
-        f"Load it from the schema selection in the app, or run `uv sync --project {profile.environment.directory}`."
+        f"Run `uv sync --project {profile.environment.directory}`."
     )
 
 
@@ -270,11 +270,11 @@ def _schema_info_from_payload(profile: SchemaProfile, payload: dict) -> SchemaIn
 
     source_url = direct_url.get("url")
     if not isinstance(source_url, str) or source_url.startswith("file://"):
-        raise SchemaUnavailable(f"Light Mode does not support local {profile.package_dist} sources.")
+        raise SchemaUnavailable(f"Local {profile.package_dist} sources are not supported.")
 
     if _normalize_repo(source_url) != _normalize_repo(profile.default_remote_repo):
         raise SchemaUnavailable(
-            f"Light Mode profile '{profile.key}' must use repository {profile.default_remote_repo}."
+            f"Profile '{profile.key}' must use repository {profile.default_remote_repo}."
         )
 
     vcs_info = direct_url.get("vcs_info")
@@ -284,7 +284,7 @@ def _schema_info_from_payload(profile: SchemaProfile, payload: dict) -> SchemaIn
     requested = vcs_info.get("requested_revision")
     if requested and requested != profile.default_branch:
         raise SchemaUnavailable(
-            f"Light Mode profile '{profile.key}' is pinned to remote {profile.default_branch}; found revision {requested!r}."
+            f"Profile '{profile.key}' is pinned to remote {profile.default_branch}; found revision {requested!r}."
         )
 
     commit = vcs_info.get("commit_id")
@@ -369,7 +369,7 @@ def _run_uv(arguments: list[str], profile: SchemaProfile) -> None:
 def update_schema(profile: SchemaProfile | str | None = None, *, package: str | None = None, base_namespace: str | None = None) -> SchemaInfo:
     """
     Create the profile environment, or move it to the latest commit of its
-    tracked branch. Keeps local Light Mode edits in SQLite.
+    tracked branch.
     """
     resolved = _resolve_profile(profile, package=package, base_namespace=base_namespace)
     if _is_packaged_backend():

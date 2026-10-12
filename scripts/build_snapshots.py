@@ -32,7 +32,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from api.light_mode.schema_source import (  # noqa: E402
+from api.schema_profiles import (  # noqa: E402
     SchemaProfile,
     current_schema_info,
     list_schema_profiles,

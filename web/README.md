@@ -51,4 +51,4 @@ These Vite env vars (see `App.tsx`) control the initial workspace:
 - `npm run test` (watch) or `npm run test:run` (CI-friendly) to run the suite.
 - `npm run test:contracts` runs the API contract/identifier checks under Vitest.
 - `npm run build` validates TypeScript + Vite configuration.
-- `tests/static-parity.test.ts` compares the static backend with the Light Mode server; it is run by `api/sources/tests/test_browser.py` and skipped on its own.
+- `tests/static-parity.test.ts` compares the static backend with a reference server built on the shared Python core; it is run by `api/sources/tests/test_browser.py` and skipped on its own.

@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 import dataclasses
-import importlib
 import json
-import sys
 from types import SimpleNamespace
 
 import httpx
@@ -34,7 +32,7 @@ def snapshots(studio_home, monkeypatch):
 
 
 def profile(key: str):
-    from api.light_mode.schema_source import SCHEMA_PROFILES
+    from api.schema_profiles import SCHEMA_PROFILES
 
     return SCHEMA_PROFILES[key]
 
@@ -117,17 +115,12 @@ def test_bam_snapshot_uses_the_bam_converter(snapshots):
 
 @pytest.fixture()
 async def client(snapshots, monkeypatch):
-    for name in list(sys.modules):
-        if name == "api.light_mode.app":
-            sys.modules.pop(name)
-    import api.light_mode.app as app_mod
     import api.sources.linkml_routes as routes
 
-    app_mod = importlib.reload(app_mod)
+    from .reference_server import create_app
+
     monkeypatch.setattr(routes, "get_snapshot", snapshots.get_snapshot)
-    monkeypatch.setattr(app_mod, "current_schema_info", lambda *a, **k: SimpleNamespace(
-        version="0588fda", source="remote-develop", package_version="1.0"))
-    transport = httpx.ASGITransport(app=app_mod.app)
+    transport = httpx.ASGITransport(app=create_app())
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as test_client:
         yield test_client
 
@@ -171,13 +164,13 @@ async def test_linkml_download_for_bam(client):
     assert schema["annotations"]["source_module"] == "bam_masterdata.datamodel.object_types"
 
 
-@pytest.mark.anyio
-async def test_profiles_say_which_ones_export_linkml(client):
-    profiles = (await client.get("/schema/profiles")).json()["profiles"]
-    assert {entry["key"]: entry["linkml_export"] for entry in profiles} == {
+def test_profiles_say_which_ones_export_linkml(snapshots):
+    from api.schema_profiles import SCHEMA_PROFILES
+
+    assert {key: snapshots.supports_linkml(entry) for key, entry in SCHEMA_PROFILES.items()} == {
         "nomad-simulations": True, "nomad-measurements": True, "bam-masterdata": True,
     }
-    assert {entry["key"]: entry["capabilities"] for entry in profiles} == {
+    assert {key: sorted(entry.capabilities) for key, entry in SCHEMA_PROFILES.items()} == {
         "nomad-simulations": ["methods", "usage"], "nomad-measurements": ["methods", "usage"], "bam-masterdata": [],
     }
 

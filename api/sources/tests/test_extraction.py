@@ -46,7 +46,7 @@ def extraction(monkeypatch):
 
 
 def profile(key):
-    from api.light_mode.schema_source import SCHEMA_PROFILES
+    from api.schema_profiles import SCHEMA_PROFILES
 
     return SCHEMA_PROFILES[key]
 

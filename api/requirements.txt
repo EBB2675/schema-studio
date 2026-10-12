@@ -1,7 +1,6 @@
 fastapi>=0.110
 uvicorn
 pydantic>=2,<3
-networkx
 gitpython
 orjson
 httpx

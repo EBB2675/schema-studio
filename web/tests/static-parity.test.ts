@@ -1,9 +1,9 @@
 /**
- * The static backend (with the Python core in Pyodide) answers like the Light Mode server.
+ * The static backend (with the Python core in Pyodide) answers like the server-side code.
  *
- * Run by `api/sources/tests/test_browser.py`, which builds a small site, asks the server the
- * requests of `fixtures/static-parity-scenario.json` and hands over the answers; skipped
- * when run on its own.
+ * Run by `api/sources/tests/test_browser.py`, which builds a small site, asks a reference server
+ * built on the shared core (`reference_server.py`) the requests of
+ * `fixtures/static-parity-scenario.json` and hands over the answers; skipped when run on its own.
  */
 // @vitest-environment node
 import { readFile } from "node:fs/promises";
@@ -55,7 +55,7 @@ class MemoryStorage implements Storage {
 }
 
 describe.skipIf(!dir || !site || !pyodideDir)("static backend", () => {
-  it("answers the scenario like the Light Mode server", async () => {
+  it("answers the scenario like the reference server", async () => {
     const { scenario, answers } = JSON.parse(await readFile(join(dir!, "expected.json"), "utf8")) as { scenario: Step[]; answers: Answer[] };
     const { loadPyodide } = await import("pyodide");
     const pyodide = (await loadPyodide({ indexURL: `${pyodideDir!}/` })) as unknown as PyodideLike;

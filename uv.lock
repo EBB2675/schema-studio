@@ -5,8 +5,8 @@ resolution-markers = [
     "python_full_version >= '3.14' and sys_platform != 'win32'",
     "python_full_version >= '3.14' and sys_platform == 'win32'",
     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform != 'win32'",
-    "python_full_version < '3.12' and sys_platform != 'win32'",
     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'win32'",
+    "python_full_version < '3.12' and sys_platform != 'win32'",
     "python_full_version < '3.12' and sys_platform == 'win32'",
 ]
 
@@ -718,15 +718,6 @@ wheels = [
 ]
 
 [[package]]
-name = "networkx"
-version = "3.6.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/6a/51/63fe664f3908c97be9d2e4f1158eb633317598cfa6e1fc14af5383f17512/networkx-3.6.1.tar.gz", hash = "sha256:26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509", size = 2517025, upload-time = "2025-12-08T17:02:39.908Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9e/c9/b2622292ea83fbb4ec318f5b9ab867d0a28ab43c5717bb85b0a5f6b3b0a4/networkx-3.6.1-py3-none-any.whl", hash = "sha256:d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762", size = 2068504, upload-time = "2025-12-08T17:02:38.159Z" },
-]
-
-[[package]]
 name = "orjson"
 version = "3.11.7"
 source = { registry = "https://pypi.org/simple" }
@@ -1419,10 +1410,8 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "gitpython" },
-    { name = "httpx" },
     { name = "jsonschema" },
     { name = "linkml-runtime" },
-    { name = "networkx" },
     { name = "orjson" },
     { name = "platformdirs" },
     { name = "pydantic" },
@@ -1440,6 +1429,7 @@ full = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "httpx" },
     { name = "pyinstaller" },
     { name = "pytest" },
 ]
@@ -1449,11 +1439,9 @@ requires-dist = [
     { name = "celery", extras = ["redis"], marker = "extra == 'full'", specifier = ">=5.3,<6" },
     { name = "fastapi", specifier = ">=0.110" },
     { name = "gitpython" },
-    { name = "httpx" },
     { name = "jsonschema", specifier = ">=4.0" },
     { name = "linkml-runtime", specifier = "==1.11.1" },
     { name = "motor", marker = "extra == 'full'", specifier = ">=3.3.1" },
-    { name = "networkx" },
     { name = "orjson" },
     { name = "platformdirs" },
     { name = "pydantic", specifier = ">=2,<3" },
@@ -1466,6 +1454,7 @@ provides-extras = ["full"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "httpx" },
     { name = "pyinstaller", specifier = ">=6.19.0" },
     { name = "pytest", specifier = ">=7" },
 ]

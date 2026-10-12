@@ -18,7 +18,7 @@ from typing import Any
 
 from extractor.runner import EnvironmentMissing, ExtractorError, run_script
 
-from ..light_mode.schema_source import (
+from ..schema_profiles import (
     LEGACY_SCRIPT,
     SchemaProfile,
     SchemaUnavailable,
@@ -26,7 +26,7 @@ from ..light_mode.schema_source import (
     schema_profile_for_package,
     setup_hint,
 )
-from ..light_mode.store import config_root
+from ..studio_home import config_root
 
 logger = logging.getLogger(__name__)
 

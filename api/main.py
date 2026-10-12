@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse
 from pydantic import BaseModel, Field
 
-from .light_mode.schema_source import SchemaUnavailable, schema_profile_for_package
+from .schema_profiles import SchemaUnavailable, schema_profile_for_package
 from .sources import editing
 from .sources.graph import expand_names
 from .sources.legacy import ExtractionFailed, UnknownRoot

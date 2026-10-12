@@ -24,13 +24,13 @@ from typing import Any
 from extractor.contract import CONTRACT_VERSION, validate_document
 from extractor.runner import EnvironmentMissing, ExtractorError, run_script
 
-from ..light_mode.schema_source import (
+from ..schema_profiles import (
     SchemaProfile,
     SchemaUnavailable,
     current_schema_info,
     setup_hint,
 )
-from ..light_mode.store import config_root
+from ..studio_home import config_root
 from .legacy import EXTRACTOR_TIMEOUT_SECONDS, raise_script_error
 from .core import snapshot_yaml  # noqa: F401  (re-exported)
 from .to_linkml import Conversion, convert as convert_document

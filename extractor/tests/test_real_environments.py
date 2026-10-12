@@ -18,19 +18,19 @@ PROFILE_KEYS = ["nomad-simulations", "nomad-measurements", "bam-masterdata"]
 @pytest.fixture()
 def profile(request, tmp_path, monkeypatch):
     monkeypatch.setenv("SCHEMA_STUDIO_HOME", str(tmp_path / "home"))
-    from api.light_mode import schema_source
+    from api import schema_profiles
 
-    selected = schema_source.SCHEMA_PROFILES[request.param]
-    if not schema_source.schema_available(selected):
+    selected = schema_profiles.SCHEMA_PROFILES[request.param]
+    if not schema_profiles.schema_available(selected):
         pytest.skip(f"environment for {selected.key} is not set up")
     return selected
 
 
 @pytest.mark.parametrize("profile", PROFILE_KEYS, indirect=True)
 def test_environment_reports_the_commit_of_its_tracked_branch(profile):
-    from api.light_mode import schema_source
+    from api import schema_profiles
 
-    info = schema_source.current_schema_info(profile)
+    info = schema_profiles.current_schema_info(profile)
 
     assert info.source == f"remote-{profile.default_branch}"
     assert info.commit and len(info.commit) == 40

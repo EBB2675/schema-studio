@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..light_mode.schema_source import SchemaProfile, schema_profile_for_package
+from ..schema_profiles import SchemaProfile, schema_profile_for_package
 from . import core
 from . import edits as edit_ops
 from . import graph

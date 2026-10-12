@@ -1,4 +1,4 @@
-"""HTTP responses for the LinkML download, shared by Light Mode and Dev Mode."""
+"""HTTP responses for the LinkML download."""
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -10,7 +10,7 @@ from fastapi.responses import Response
 
 from extractor.contract import ContractError
 
-from ..light_mode.schema_source import SchemaUnavailable, schema_profile_for_package
+from ..schema_profiles import SchemaUnavailable, schema_profile_for_package
 from . import editing
 from .legacy import ExtractionFailed
 from .snapshots import LinkMLUnavailable, get_snapshot

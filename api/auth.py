@@ -21,7 +21,7 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .light_mode.schema_source import schema_profile_for_package
+from .schema_profiles import schema_profile_for_package
 from .settings import DEFAULT_BASE_PACKAGE, DEFAULT_BRANCH, DEFAULT_PACKAGE
 
 TOKEN_EXPIRES_HOURS = int(os.getenv("SCHEMA_UML_TOKEN_HOURS", "12"))

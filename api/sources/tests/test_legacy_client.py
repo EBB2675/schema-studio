@@ -18,12 +18,12 @@ if str(PROJECT_ROOT) not in sys.path:
 @pytest.fixture()
 def legacy(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setenv("SCHEMA_STUDIO_HOME", str(tmp_path / "home"))
-    monkeypatch.delenv("SCHEMA_STUDIO_LIGHT_SCHEMA_PROFILE", raising=False)
+    monkeypatch.delenv("SCHEMA_STUDIO_SCHEMA_PROFILE", raising=False)
     monkeypatch.delenv("SCHEMA_STUDIO_DEFAULT_PACKAGE", raising=False)
-    import api.light_mode.schema_source as schema_source
+    import api.schema_profiles as schema_profiles
     import api.sources.legacy as module
 
-    importlib.reload(schema_source)
+    importlib.reload(schema_profiles)
     module = importlib.reload(module)
     module.version = {"value": "commit-a"}
     monkeypatch.setattr(
