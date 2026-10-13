@@ -3145,7 +3145,7 @@ export default function App() {
         ref={workspaceRef}
         style={{
           gridTemplateColumns: docPanelCollapsed
-            ? "minmax(0, 1fr) 44px"
+            ? "minmax(0, 1fr) auto"
             : `minmax(0, 1fr) 10px ${docPanelWidth}px`,
         }}
       >
@@ -3386,7 +3386,7 @@ export default function App() {
             flexDirection: "column",
             height: "100vh",
             borderLeft: "1px solid var(--panel-border)",
-            padding: docPanelCollapsed ? "10px 6px" : "10px",
+            padding: "10px",
             gap: "10px",
             overflowY: docPanelCollapsed ? "hidden" : "auto"
           }}
@@ -3398,10 +3398,10 @@ export default function App() {
               onClick={() => setDocPanelCollapsed(false)}
               aria-expanded={false}
               aria-controls="right-panel-sections"
-              title="Open Documentation and Under the hood"
+              title="Open Documentation"
             >
               <span aria-hidden>«</span>
-              <span className="side-rail-label">Documentation · Under the hood</span>
+              <span>Documentation</span>
             </button>
           ) : (
             <div style={{ display: "flex", justifyContent: "flex-end" }}>

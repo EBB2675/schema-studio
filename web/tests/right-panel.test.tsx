@@ -74,7 +74,7 @@ describe('right panel', () => {
     expect(right).not.toBeVisible();
     expect(screen.queryByRole('separator', { name: /resize documentation panel/i })).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: /Documentation · Under the hood/ }));
+    await user.click(screen.getByTitle('Open Documentation'));
     expect(right).toBeVisible();
     expect(screen.getByRole('separator', { name: /resize documentation panel/i })).toBeInTheDocument();
 
