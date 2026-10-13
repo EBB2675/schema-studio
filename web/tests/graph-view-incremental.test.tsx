@@ -114,16 +114,16 @@ describe('GraphView updates the canvas in place', () => {
     expect(pos(OTHER)).toEqual({ x: 900, y: 700 });
     expect(fakeCy.getElementById(PARENT).selected()).toBe(true);
 
-    // Subclasses point at their parent, so they go in a column left of it, next to each other.
+    // Subclasses go in a row under their parent, where its + is.
     const one = pos(CHILD_1);
     const two = pos(CHILD_2);
     for (const child of [one, two]) {
-      expect(child.x).toBeLessThan(parentAt.x);
-      expect(parentAt.x - child.x).toBeLessThan(500);
-      expect(Math.abs(child.y - parentAt.y)).toBeLessThan(200);
+      expect(child.y).toBeGreaterThan(parentAt.y);
+      expect(child.y - parentAt.y).toBeLessThan(200);
+      expect(Math.abs(child.x - parentAt.x)).toBeLessThan(300);
     }
-    expect(one.x).toBe(two.x);
-    expect(Math.abs(one.y - two.y)).toBeGreaterThanOrEqual(60);
+    expect(one.y).toBe(two.y);
+    expect(Math.abs(one.x - two.x)).toBeGreaterThanOrEqual(200);
 
     // Inheritance and subsection edges have ids named after the link, not a position in a list.
     expect(fakeCy.getElementById(`inherits:${CHILD_1}->${PARENT}`).empty()).toBe(false);
@@ -156,9 +156,9 @@ describe('GraphView updates the canvas in place', () => {
 
   it('places a new class off any class it would cover', () => {
     const { rerender } = renderLaidOut();
-    // A class sits exactly where the column of subclasses would go first.
+    // A class sits exactly where the row of subclasses would go first.
     const parentAt = pos(PARENT);
-    fakeCy.getElementById(OTHER).position({ x: parentAt.x - 60 - 90 - 100, y: parentAt.y });
+    fakeCy.getElementById(OTHER).position({ x: parentAt.x, y: parentAt.y + 110 });
 
     rerender(view({ umlState: expanded, expandedClassIds: [PARENT] }));
 

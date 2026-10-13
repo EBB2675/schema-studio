@@ -22,7 +22,8 @@ browser. The graph follows the conventions of `extractor/graph_builder.py`:
 - each class gets an `inherits` edge to every ancestor (from `is_a` and
   `mixins`, in Python's method resolution order), not only to its direct bases;
 - each class node counts its direct subclasses (`subclasses`), and the classes
-  named in `expand` bring their direct subclasses into the graph;
+  named in `expand` bring their direct subclasses into the graph, linked only to
+  classes already in it (their own subsections are not followed);
 - the query flags of the graph endpoints are applied here, with the same
   traversal, depth and size limits as the graph builder.
 
@@ -323,14 +324,12 @@ def build_graph(
             edge_keys.add(key)
             edges.append({"source": source, "target": target, "type": kind, "card": card})
 
-    def add_section(name: str, depth: int = 0) -> None:
-        if depth > max_depth or name in seen:
-            return
-        seen.add(name)
+    def add_node(name: str) -> bool:
+        """The class's node and its quantities; False when its module is not drawn."""
         cls = classes[name]
         module = class_module(name, cls)
         if not allowed(module):
-            return
+            return False
         nodes[name] = {
             "id": name, "kind": "section", "label": _title(name, cls),
             "doc": cls.get("description"), "module": module, "dtype": None, "shape": None, "card": None,
@@ -338,12 +337,8 @@ def build_graph(
             "subclasses": sum(allowed(class_module(sub, classes[sub])) for sub in subclasses.get(name, ())),
             **_class_details(cls),
         }
-        if len(nodes) > max_nodes:
-            return
-
-        members = effective_attributes(name, classes, memo)
         if include_quantities:
-            for _, slot in members:
+            for _, slot in effective_attributes(name, classes, memo):
                 kind = annotation(slot, "source_kind")
                 if kind not in QUANTITY_KINDS:
                     continue
@@ -358,8 +353,6 @@ def build_graph(
                         **(_property_details(slot) if kind == "property" else {}),
                     }
                 add_edge(name, quantity_id, "hasQuantity", card)
-                if len(nodes) > max_nodes:
-                    return
             for python_name, code, value in vocabulary_terms(name, schema, memo):
                 term_id = f"{name}.{python_name}"
                 if term_id not in nodes:
@@ -370,9 +363,16 @@ def build_graph(
                         "methods": None, "unit": None, **_term_details(code, value),
                     }
                 add_edge(name, term_id, "hasQuantity", None)
-                if len(nodes) > max_nodes:
-                    return
+        return True
 
+    def add_section(name: str, depth: int = 0) -> None:
+        if depth > max_depth or name in seen:
+            return
+        seen.add(name)
+        if not add_node(name) or len(nodes) > max_nodes:
+            return
+
+        members = effective_attributes(name, classes, memo)
         if include_inheritance:
             for ancestor in _mro(name, classes, memo)[1:]:
                 if not allowed(class_module(ancestor, classes[ancestor])):
@@ -393,10 +393,34 @@ def build_graph(
                     return
 
         if name in expand:
-            for sub in subclasses.get(name, ()):
-                add_section(sub, depth + 1)
-                if len(nodes) > max_nodes:
-                    return
+            expanded_subclasses.extend(subclasses.get(name, ()))
+
+    # Subclasses an expanded class brings are drawn on their own: their arrows go to
+    # classes already on the canvas, and their subsections stay off it, so one click
+    # shows one more level and nothing else. An expanded subclass brings its own.
+    expanded_subclasses: list[str] = []
+
+    def add_expanded_subclasses() -> None:
+        added: list[str] = []
+        while expanded_subclasses and len(nodes) <= max_nodes:
+            name = expanded_subclasses.pop(0)
+            if name in seen:
+                continue
+            seen.add(name)
+            if not add_node(name):
+                continue
+            added.append(name)
+            if name in expand:
+                expanded_subclasses.extend(subclasses.get(name, ()))
+        for name in added:
+            if include_inheritance:
+                for ancestor in _mro(name, classes, memo)[1:]:
+                    if ancestor in nodes:
+                        add_edge(name, ancestor, "inherits")
+            if include_subsections:
+                for _, slot in effective_attributes(name, classes, memo):
+                    if annotation(slot, "source_kind") == "subsection" and slot.get("range") in nodes:
+                        add_edge(name, slot["range"], "hasSubSection", annotation(slot, "display_card"))
 
     starts, offered = entry_points(schema, extraction, package)
     if root:
@@ -411,6 +435,7 @@ def build_graph(
     else:
         for name in starts:
             add_section(name, 0)
+    add_expanded_subclasses()
 
     node_list = sorted(nodes.values(), key=lambda node: (node["kind"], node["module"] or "", node["label"]))
     edges.sort(key=lambda edge: (edge["source"], edge["type"], edge["target"]))
