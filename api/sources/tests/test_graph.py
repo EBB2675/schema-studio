@@ -148,6 +148,29 @@ def test_expand_brings_in_the_direct_subclasses():
     assert CHILD in shown and GRANDCHILD not in shown
 
 
+def test_expanded_subclasses_come_without_classes_of_their_own():
+    # GrandChild holds parts of Part through Child; Part is drawn only because Child holds it.
+    plain = build(root="Child", include_subsections=False)
+    assert PART not in nodes(plain)
+    expanded = build(root="Child", expand=[CHILD], include_subsections=False)
+    assert set(nodes(expanded)) - set(nodes(plain)) >= {GRANDCHILD}
+    assert {n for n in nodes(expanded) if nodes(expanded)[n]["kind"] == "section"} - {
+        n for n in nodes(plain) if nodes(plain)[n]["kind"] == "section"} == {GRANDCHILD}
+    # With subsections drawn, the arrow to a class already on the canvas is kept.
+    expanded = build(root="Child", expand=[CHILD])
+    assert (GRANDCHILD, PART, "hasSubSection") in edges(expanded)
+    assert (GRANDCHILD, BASE, "inherits") in edges(expanded)
+    assert nodes(expanded)[f"{GRANDCHILD}.size"]["owner"] == GRANDCHILD
+
+
+def test_an_expanded_subclass_that_is_expanded_too_brings_its_own():
+    schema = {"classes": {**SCHEMA["classes"], "pkg.app.main.Great": cls("pkg.app.main.Great", is_a=GRANDCHILD, effective=[])}}
+    result = graph.build_graph(schema, EXTRACTION, "pkg.app.main", root="Child", expand=[CHILD, GRANDCHILD])
+    assert ("pkg.app.main.Great", GRANDCHILD, "inherits") in edges(result)
+    result = graph.build_graph(schema, EXTRACTION, "pkg.app.main", root="Child", expand=[GRANDCHILD])
+    assert "pkg.app.main.Great" not in nodes(result)  # GrandChild itself is not drawn
+
+
 def test_subclasses_outside_the_allowed_modules_are_neither_counted_nor_expanded():
     schema = {"classes": {**SCHEMA["classes"], FAR: cls(FAR, is_a=CHILD, effective=[])}}
     extraction = EXTRACTION
