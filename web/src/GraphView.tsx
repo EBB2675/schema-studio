@@ -47,8 +47,6 @@ type Props = {
   onLayoutReady?: (handle: GraphExportHandle) => void;
   showQuantityMetadata?: boolean;
   showInheritance?: boolean;
-  // Off for profiles whose source has no methods to show (capability "methods").
-  showMethods?: boolean;
   theme?: "dark" | "light";
   umlState?: UmlGraphState | null;
   baseNamespaces?: string[];
@@ -259,7 +257,6 @@ const placedBox = (node: NodeSingular): PlacedBox => {
 function umlLabel(
   name: string,
   attrs: { name: string; dtype?: string; shape?: string | null; card?: string | null; diff?: QtyDiffState }[],
-  methods: string[],
   showMetadata: boolean
 ) {
   const attrLines = attrs.map(a => {
@@ -275,11 +272,7 @@ function umlLabel(
     if (a.card) parts.push(` [${a.card}]`);
     return parts.join("");
   });
-  const methodLines = methods.map(s => s + "()");
-
-  const lines = [name, "────────────", ...attrLines];
-  if (methods.length) lines.push("────────────", ...methodLines);
-  return lines.join("\n");
+  return [name, "────────────", ...attrLines].join("\n");
 }
 
 export default function GraphView({
@@ -291,7 +284,6 @@ export default function GraphView({
   onLayoutReady,
   showQuantityMetadata = true,
   showInheritance = true,
-  showMethods = true,
   theme = "dark",
   umlState,
   baseNamespaces = [],
@@ -548,15 +540,13 @@ export default function GraphView({
   // Build:
   // - sectionsMap: id -> section node
   // - attrsMap: section id -> display lines for UML
-  // - methodsMap: section id -> methods
   // - quantitiesByOwner: section id -> QtyMeta[]  (for DocPanel)
-  const { sectionsMap, attrsMap, methodsMap, umlEdges, quantitiesByOwner } = useMemo(() => {
+  const { sectionsMap, attrsMap, umlEdges, quantitiesByOwner } = useMemo(() => {
     const sections = new Map<string, RawNode>();
     const attrs = new Map<
       string,
       { name: string; dtype?: string; shape?: string | null; card?: string | null; diff?: QtyDiffState }[]
     >();
-    const methods = new Map<string, string[]>();
     const qByOwner = new Map<string, QtyMeta[]>();
 
     const buildSnapshot = (n?: RawNode | null): QtySnapshot | undefined => {
@@ -574,7 +564,6 @@ export default function GraphView({
       if (n.kind === "section") {
         sections.set(n.id, n);
         attrs.set(n.id, attrs.get(n.id) ?? []);
-        methods.set(n.id, showMethods ? ((n.methods ?? []) as string[]) : []);
         qByOwner.set(n.id, qByOwner.get(n.id) ?? []);
       }
     }
@@ -621,9 +610,7 @@ export default function GraphView({
 
     if (umlState) {
       const sourceSections = new Map(sections);
-      const sourceMethods = new Map(methods);
       sections.clear();
-      methods.clear();
       attrs.clear();
       qByOwner.clear();
       classCards.forEach((cls) => {
@@ -641,7 +628,6 @@ export default function GraphView({
             details: cls.details ?? source?.details ?? null,
           } as RawNode)
         );
-        methods.set(cls.id, sourceMethods.get(cls.id) ?? []);
 
         // Cards show only the quantities a class declares; inherited ones stay in the docs panel.
         attrs.set(
@@ -712,8 +698,8 @@ export default function GraphView({
       return false;
     });
 
-    return { sectionsMap: sections, attrsMap: attrs, methodsMap: methods, umlEdges, quantitiesByOwner: qByOwner };
-  }, [graphNodes, resolvedEdges, quantityDiffs, diff, showInheritance, classCards, toQtyMeta, umlState, showMethods]);
+    return { sectionsMap: sections, attrsMap: attrs, umlEdges, quantitiesByOwner: qByOwner };
+  }, [graphNodes, resolvedEdges, quantityDiffs, diff, showInheritance, classCards, toQtyMeta, umlState]);
 
   const keyedEdges = useMemo(() => keyEdges(umlEdges), [umlEdges]);
 
@@ -723,7 +709,7 @@ export default function GraphView({
     for (const [secId, sec] of sectionsMap.entries()) {
       nodes.push({
         id: secId,
-        label: umlLabel(sec.label, attrsMap.get(secId) ?? [], methodsMap.get(secId) ?? [], showQuantityMetadata),
+        label: umlLabel(sec.label, attrsMap.get(secId) ?? [], showQuantityMetadata),
         rawName: sec.label,
         kind: "uml_class",
         module: sec.module ?? "",
@@ -743,7 +729,7 @@ export default function GraphView({
         card: edge.card ?? ""
       }));
     return { nodes, edges };
-  }, [sectionsMap, attrsMap, methodsMap, keyedEdges, showQuantityMetadata]);
+  }, [sectionsMap, attrsMap, keyedEdges, showQuantityMetadata]);
 
   // The canvas lives as long as this component; its handlers read the latest props through this ref.
   const latestRef = useRef({ onReady, onLayoutReady, publishClassSelection, quantitiesByOwner, sectionsMap });

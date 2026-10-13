@@ -2367,6 +2367,10 @@ export default function App() {
   const profileCapabilities = currentSchemaProfile?.capabilities;
   const showUsage = !profileCapabilities || profileCapabilities.includes("usage");
   const showMethods = !profileCapabilities || profileCapabilities.includes("methods");
+  // Class methods are listed under the hood, not on the canvas cards.
+  const selectedMethods = showMethods && selected?.kind === "class"
+    ? graph?.nodes.find((n) => n.kind === "section" && n.id === selected.id)?.methods ?? []
+    : [];
 
   const exportLinkml = async () => {
     if (!currentGraph?.package) return;
@@ -3234,7 +3238,6 @@ export default function App() {
                 pinnedClassIds={pinnedClassIds}
                 showQuantityMetadata={showQuantityMetadata}
                 showInheritance={includeInheritance}
-                showMethods={showMethods}
                 theme={theme}
                 onReady={setGraphHandle}
                 layoutKey={canvasKey}
@@ -3314,7 +3317,6 @@ export default function App() {
                   selectedClassId={selectedClassId}
                   showQuantityMetadata={showQuantityMetadata}
                   showInheritance={includeInheritance}
-                  showMethods={showMethods}
                   theme={theme}
                   onReady={setGraphHandle}
                   layoutKey={canvasKey}
@@ -3461,7 +3463,7 @@ export default function App() {
                   open={openUnderTheHood}
                   onToggle={setOpenUnderTheHood}
                 >
-                  <UnderTheHoodPanel apiBase={apiBase} token={token} branch={isLightMode ? undefined : workspaceBranch || undefined} />
+                  <UnderTheHoodPanel apiBase={apiBase} token={token} branch={isLightMode ? undefined : workspaceBranch || undefined} methods={selectedMethods} />
                 </CollapsibleSection>
               </div>
             ) : null}
