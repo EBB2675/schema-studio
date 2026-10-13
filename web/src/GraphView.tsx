@@ -574,7 +574,8 @@ export default function GraphView({
       if (n.kind === "section") {
         sections.set(n.id, n);
         attrs.set(n.id, attrs.get(n.id) ?? []);
-        methods.set(n.id, showMethods ? ((n.methods ?? []) as string[]) : []);
+        // normalize() is listed in the Under the Hood panel, not on the card.
+        methods.set(n.id, showMethods ? ((n.methods ?? []) as string[]).filter(m => m !== "normalize") : []);
         qByOwner.set(n.id, qByOwner.get(n.id) ?? []);
       }
     }
