@@ -22,8 +22,9 @@ browser. The graph follows the conventions of `extractor/graph_builder.py`:
 - each class gets an `inherits` edge to every ancestor (from `is_a` and
   `mixins`, in Python's method resolution order), not only to its direct bases;
 - each class node counts its direct subclasses (`subclasses`), and the classes
-  named in `expand` bring their direct subclasses into the graph, linked only to
-  classes already in it (their own subsections are not followed);
+  named in `expand` bring their direct subclasses into the graph, with the
+  classes those hold directly, linked only to classes already in it (the
+  subsections of what they bring are not followed further);
 - the query flags of the graph endpoints are applied here, with the same
   traversal, depth and size limits as the graph builder.
 
@@ -395,23 +396,32 @@ def build_graph(
         if name in expand:
             expanded_subclasses.extend(subclasses.get(name, ()))
 
-    # Subclasses an expanded class brings are drawn on their own: their arrows go to
-    # classes already on the canvas, and their subsections stay off it, so one click
+    # Subclasses an expanded class brings come with the classes they hold directly, and
+    # no further: the arrows of both go to classes already on the canvas, so one click
     # shows one more level and nothing else. An expanded subclass brings its own.
     expanded_subclasses: list[str] = []
 
     def add_expanded_subclasses() -> None:
         added: list[str] = []
-        while expanded_subclasses and len(nodes) <= max_nodes:
-            name = expanded_subclasses.pop(0)
+
+        def bring(name: str) -> bool:
             if name in seen:
-                continue
+                return False
             seen.add(name)
             if not add_node(name):
-                continue
+                return False
             added.append(name)
             if name in expand:
                 expanded_subclasses.extend(subclasses.get(name, ()))
+            return True
+
+        while expanded_subclasses and len(nodes) <= max_nodes:
+            name = expanded_subclasses.pop(0)
+            if not bring(name) or not include_subsections:
+                continue
+            for _, slot in effective_attributes(name, classes, memo):
+                if annotation(slot, "source_kind") == "subsection" and slot.get("range") in classes:
+                    bring(slot["range"])
         for name in added:
             if include_inheritance:
                 for ancestor in _mro(name, classes, memo)[1:]:

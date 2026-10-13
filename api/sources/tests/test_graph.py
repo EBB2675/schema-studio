@@ -148,19 +148,34 @@ def test_expand_brings_in_the_direct_subclasses():
     assert CHILD in shown and GRANDCHILD not in shown
 
 
-def test_expanded_subclasses_come_without_classes_of_their_own():
-    # GrandChild holds parts of Part through Child; Part is drawn only because Child holds it.
-    plain = build(root="Child", include_subsections=False)
-    assert PART not in nodes(plain)
-    expanded = build(root="Child", expand=[CHILD], include_subsections=False)
-    assert set(nodes(expanded)) - set(nodes(plain)) >= {GRANDCHILD}
-    assert {n for n in nodes(expanded) if nodes(expanded)[n]["kind"] == "section"} - {
-        n for n in nodes(plain) if nodes(plain)[n]["kind"] == "section"} == {GRANDCHILD}
-    # With subsections drawn, the arrow to a class already on the canvas is kept.
-    expanded = build(root="Child", expand=[CHILD])
+def test_expanded_subclasses_bring_the_classes_they_hold_directly():
+    # Variant holds a Detail, which holds a Leaf; none is drawn before Child is expanded.
+    variant, detail, leaf = "pkg.app.main.Variant", "pkg.app.main.Detail", "pkg.app.main.Leaf"
+    schema = {"classes": {
+        **SCHEMA["classes"],
+        variant: cls(variant, is_a=CHILD, attributes=[attribute("detail", "subsection", range_=detail, display_card="0..1")],
+                     effective=[("detail", "subsection", variant)]),
+        detail: cls(detail, attributes=[attribute("leaf", "subsection", range_=leaf, display_card="0..*")],
+                    effective=[("leaf", "subsection", detail)]),
+        leaf: cls(leaf, effective=[]),
+    }}
+    plain = graph.build_graph(schema, EXTRACTION, "pkg.app.main", root="Child")
+    assert not {variant, detail, leaf} & set(nodes(plain))
+    expanded = graph.build_graph(schema, EXTRACTION, "pkg.app.main", root="Child", expand=[CHILD])
+    assert {GRANDCHILD, variant, detail} <= set(nodes(expanded))
+    assert edges(expanded)[(variant, detail, "hasSubSection")] == "0..1"
+    assert (variant, CHILD, "inherits") in edges(expanded)
+    # One level only: what Detail holds stays off the canvas.
+    assert leaf not in nodes(expanded)
+    assert (detail, leaf, "hasSubSection") not in edges(expanded)
+    # Subsections a subclass inherits lead to classes already on the canvas.
     assert (GRANDCHILD, PART, "hasSubSection") in edges(expanded)
-    assert (GRANDCHILD, BASE, "inherits") in edges(expanded)
     assert nodes(expanded)[f"{GRANDCHILD}.size"]["owner"] == GRANDCHILD
+    # Without subsections, a subclass comes alone.
+    without = graph.build_graph(schema, EXTRACTION, "pkg.app.main", root="Child", expand=[CHILD],
+                                include_subsections=False)
+    assert {n for n, node in nodes(without).items() if node["kind"] == "section"} - {
+        n for n, node in nodes(plain).items() if node["kind"] == "section"} == {GRANDCHILD, variant}
 
 
 def test_an_expanded_subclass_that_is_expanded_too_brings_its_own():
