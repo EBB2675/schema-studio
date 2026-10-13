@@ -54,7 +54,7 @@ const UnderTheHoodPanel: React.FC<Props> = ({ apiBase, token, branch }) => {
   }, [selected, apiBase, token, branch]);
 
   return (
-    <div className="panel under-the-hood-panel">
+    <div className="under-the-hood-panel">
       {!selected || selected.kind !== 'class' ? (
         <div className="uth-empty">Select a section to see normalization and utility functions.</div>
       ) : (

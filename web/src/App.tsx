@@ -182,6 +182,10 @@ export default function App() {
     const stored = Number.parseInt(window.localStorage.getItem("schema-uml-doc-width") || "", 10);
     return Number.isFinite(stored) ? stored : 380;
   });
+  const [docPanelCollapsed, setDocPanelCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("schema-uml-doc-collapsed") === "1";
+  });
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [linkmlStatus, setLinkmlStatus] = useState<string | null>(null);
   const [canvasStatus, setCanvasStatus] = useState<string | null>(null);
@@ -210,7 +214,7 @@ export default function App() {
   const [openUnderTheHood, setOpenUnderTheHood] = useState<boolean>(false);
   const [openCompare, setOpenCompare] = useState<boolean>(false);
   const [openDocumentation, setOpenDocumentation] = useState<boolean>(true);
-  const [openAuditTrail, setOpenAuditTrail] = useState<boolean>(true);
+  const [openAuditTrail, setOpenAuditTrail] = useState<boolean>(false);
 
   const isAuditChange = (value: unknown): value is AuditTrailEntry["change"] => {
     if (!value || typeof value !== "object") return false;
@@ -760,6 +764,11 @@ export default function App() {
   }, [clampDocWidth, docPanelWidth]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("schema-uml-doc-collapsed", docPanelCollapsed ? "1" : "0");
+  }, [docPanelCollapsed]);
+
+  useEffect(() => {
     setDocPanelWidth((w) => clampDocWidth(w));
   }, [clampDocWidth]);
 
@@ -828,7 +837,8 @@ export default function App() {
         "Workspace (left): pick package, root, toggles; then Build graph.",
         "Graph canvas (center): pan/zoom, select classes, toggle UML/Edit.",
         "Documentation (right): class and quantity docs; edit quantities in Edit mode.",
-        "Audit trail (right bottom): log of edits; export/reset.",
+        "Under the hood (right, below Documentation): where the selected class is used in code.",
+        "Audit trail (left): log of edits; export/reset.",
       ];
       if (!isLightMode) lines.push("Compare branches (left): diff two git branches.");
       lines.push("Empty canvas: start custom schema without loading existing graph.");
@@ -850,18 +860,22 @@ export default function App() {
 
     const target = mapping[section];
     target.setter(true);
-    const el = document.getElementById(target.elementId);
-    if (el) {
-      const behavior: ScrollBehavior =
-        typeof window !== "undefined" &&
-        typeof window.matchMedia === "function" &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "auto"
-          : "smooth";
-      el.scrollIntoView({ behavior, block: "start" });
-      const headerBtn = el.querySelector("button.collapsible-header") as HTMLButtonElement | null;
-      headerBtn?.focus({ preventScroll: true });
-    }
+    if (section === "documentation" || section === "under") setDocPanelCollapsed(false);
+    // Wait a frame so a collapsed right panel is visible before scrolling to it.
+    requestAnimationFrame(() => {
+      const el = document.getElementById(target.elementId);
+      if (el) {
+        const behavior: ScrollBehavior =
+          typeof window !== "undefined" &&
+          typeof window.matchMedia === "function" &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches
+            ? "auto"
+            : "smooth";
+        el.scrollIntoView({ behavior, block: "start" });
+        const headerBtn = el.querySelector("button.collapsible-header") as HTMLButtonElement | null;
+        headerBtn?.focus({ preventScroll: true });
+      }
+    });
   }, []);
 
   const startDocResize = (e: React.MouseEvent) => {
@@ -2950,17 +2964,127 @@ export default function App() {
           </div>
         </CollapsibleSection>
 
-        {showUsage ? (
-          <CollapsibleSection
-            title="Under the hood"
-            hint="Raw schema structure"
-            id="section-under"
-            open={openUnderTheHood}
-            onToggle={setOpenUnderTheHood}
-          >
-            <UnderTheHoodPanel apiBase={apiBase} token={token} branch={isLightMode ? undefined : workspaceBranch || undefined} />
-          </CollapsibleSection>
-        ) : null}
+        <CollapsibleSection
+          title="Audit trail"
+          hint="Track edits and export"
+          id="section-audit"
+          open={openAuditTrail}
+          onToggle={setOpenAuditTrail}
+        >
+          <div className="action-stack" style={{ gap: 10 }}>
+            <div className="row" style={{ gap: 8 }}>
+              {!isLightMode ? (
+                <button
+                  className="btn secondary"
+                  type="button"
+                  onClick={exportAuditLog}
+                  disabled={!auditTrail.length}
+                  title={auditTrail.length ? "Download audit log as JSON" : "No edits recorded yet"}
+                >
+                  Export audit JSON
+                </button>
+              ) : null}
+              <button
+                className="btn secondary"
+                type="button"
+                onClick={restoreAllArchivedToCurrent}
+                disabled={archivedAuditCount === 0}
+                title="Reactivate archived edits on this canvas"
+              >
+                Restore archived
+              </button>
+              <button
+                className="btn secondary"
+                type="button"
+                onClick={clearAuditTrail}
+                disabled={!auditTrail.length && !(graph?.applied_edits?.length) && !(graph?.edit_conflicts?.length)}
+              >
+                Clear
+              </button>
+            </div>
+            {graph?.edit_conflicts?.length ? (
+              <div className="small" role="status" style={{ color: "#b45309" }}>
+                <div>
+                  {graph.edit_conflicts.filter((c) => !c.applied).length} stored edit(s) could not be applied,{" "}
+                  {graph.edit_conflicts.filter((c) => c.applied).length} applied over a change in the schema source:
+                </div>
+                <ul style={{ margin: "4px 0 0", paddingLeft: 16 }}>
+                  {graph.edit_conflicts.map((conflict, index) => (
+                    <li key={`${conflict.edit.id ?? index}-${conflict.reason}`}>
+                      {conflict.edit.op} {conflict.edit.target.split(".").pop()}: {conflict.detail} ({conflict.reason})
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <div className="small" style={{ color: "var(--muted)" }}>
+              {auditEntriesForCurrentPackage.length
+                ? `${activeAuditCount} active edits${archivedAuditCount > 0 ? ` (${archivedAuditCount} archived)` : ""}`
+                : "No edits on this canvas yet"}
+            </div>
+            <div
+              style={{
+                maxHeight: 240,
+                overflowY: "auto",
+                border: "1px solid var(--panel-border)",
+                borderRadius: 10,
+                padding: 8,
+                background: "var(--panel)",
+                fontSize: 12
+              }}
+            >
+              {[...auditEntriesForCurrentPackage].reverse().map((entry) => {
+                const archived = Boolean(
+                  entry.replayable === false ||
+                  (entry.package ? normalizePackageName(entry.package) !== currentPackageForAudit : false)
+                );
+                return (
+                  <div
+                    key={entry.id}
+                    style={{
+                      padding: "6px 8px",
+                      borderBottom: "1px solid var(--panel-border)",
+                    }}
+                  >
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <button
+                      className="btn secondary"
+                      type="button"
+                      onClick={() => undoAuditEntry(entry.id)}
+                      disabled={archived}
+                      title={archived ? "Archived for a different canvas; undo disabled" : "Undo this change"}
+                      style={{ padding: "6px 10px" }}
+                    >
+                      🗑
+                    </button>
+                    {archived ? (
+                      <button
+                        className="btn secondary"
+                        type="button"
+                        onClick={() => restoreArchivedEntry(entry.id)}
+                        style={{ padding: "6px 10px" }}
+                        title="Reactivate this edit on the current canvas"
+                      >
+                        ↺
+                      </button>
+                    ) : null}
+                    <div>
+                      <div style={{ fontWeight: 700 }}>
+                        {entry.description}
+                        {archived ? " (archived)" : ""}
+                      </div>
+                      <div style={{ color: "var(--muted)" }}>
+                        {new Date(entry.timestamp).toLocaleString()}
+                      </div>
+                      <div style={{ color: "var(--subtitle)" }}>Change: {entry.change.type}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </CollapsibleSection>
 
         {!isLightMode ? (
           <CollapsibleSection
@@ -3026,7 +3150,11 @@ export default function App() {
       <div
         className="workspace"
         ref={workspaceRef}
-        style={{ gridTemplateColumns: `minmax(0, 1fr) 10px ${docPanelWidth}px` }}
+        style={{
+          gridTemplateColumns: docPanelCollapsed
+            ? "minmax(0, 1fr) 40px"
+            : `minmax(0, 1fr) 10px ${docPanelWidth}px`,
+        }}
       >
         {/* Persistent help button */}
         <div className="floating-help">
@@ -3235,7 +3363,7 @@ export default function App() {
                   </div>
                 ) : null}
                 <div>
-                  {isLightMode ? "5)" : "6)"} Communicate your edits via <button className="link-button" type="button" onClick={() => focusAndOpen("audit")}>Audit trail 👉</button> - export or clear the log anytime.
+                  {isLightMode ? "5)" : "6)"} Communicate your edits via <button className="link-button" type="button" onClick={() => focusAndOpen("audit")}>Audit trail 👈</button> - export or clear the log anytime.
                 </div>
               </div>
               <div style={{ marginTop: 14 }}>
@@ -3247,15 +3375,17 @@ export default function App() {
           )}
         </div>
 
-        <div
-          className="resizer"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize documentation panel"
-          onMouseDown={startDocResize}
-        />
+        {docPanelCollapsed ? null : (
+          <div
+            className="resizer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize documentation panel"
+            onMouseDown={startDocResize}
+          />
+        )}
 
-        {/* Right: Documentation + quantity editing */}
+        {/* Right: Documentation, Under the hood; collapses to a thin rail */}
         <div
           style={{
             minWidth: 0,
@@ -3263,166 +3393,71 @@ export default function App() {
             flexDirection: "column",
             height: "100vh",
             borderLeft: "1px solid var(--panel-border)",
-            padding: "10px",
+            padding: docPanelCollapsed ? "10px 4px" : "10px",
             gap: "10px",
-            overflowY: "auto"
+            overflowY: docPanelCollapsed ? "hidden" : "auto"
           }}
         >
-          {/* TOP PANEL — content-stacked like left sidebar */}
-          <div
-            style={{
-              flex: "0 0 auto"
-            }}
-          >
-            <CollapsibleSection
-              title="Documentation"
-              hint="Browse docs and edit quantities"
-              className="panel"
-              id="section-documentation"
-              open={openDocumentation}
-              onToggle={setOpenDocumentation}
+          <div style={{ display: "flex", justifyContent: docPanelCollapsed ? "center" : "flex-end" }}>
+            <button
+              type="button"
+              className="btn ghost small"
+              onClick={() => setDocPanelCollapsed((v) => !v)}
+              aria-expanded={!docPanelCollapsed}
+              aria-controls="right-panel-sections"
+              aria-label={docPanelCollapsed ? "Expand right panel" : "Collapse right panel"}
+              title={docPanelCollapsed ? "Show documentation" : "Hide panel"}
             >
-              <DocPanel
-                editRules={editRules}
-                editableMode={editableMode}
-                onRemoveQuantity={removeQuantity}
-                onEditQuantity={editQuantity}
-                onEditClass={editClassDoc}
-                blockedReason={addBlockedReason}
-                actionError={quantityActionErr}
-                clearActionError={clearQuantityActionError}
-              />
-            </CollapsibleSection>
+              {docPanelCollapsed ? "«" : "»"}
+            </button>
           </div>
 
-          {/* BOTTOM PANEL — content-stacked like left sidebar */}
+          {/* Kept mounted while collapsed so the sections keep their state */}
           <div
-            style={{
-              flex: "0 0 auto"
-            }}
+            id="right-panel-sections"
+            style={{ display: docPanelCollapsed ? "none" : "flex", flexDirection: "column", gap: "10px" }}
           >
-            <CollapsibleSection
-              title="Audit trail"
-              hint="Track edits and export"
-              className="panel"
-              id="section-audit"
-              open={openAuditTrail}
-              onToggle={setOpenAuditTrail}
+            {/* TOP PANEL — content-stacked like left sidebar */}
+            <div
+              style={{
+                flex: "0 0 auto"
+              }}
             >
-              <div className="action-stack" style={{ gap: 10 }}>
-                <div className="row" style={{ gap: 8 }}>
-                  {!isLightMode ? (
-                    <button
-                      className="btn secondary"
-                      type="button"
-                      onClick={exportAuditLog}
-                      disabled={!auditTrail.length}
-                      title={auditTrail.length ? "Download audit log as JSON" : "No edits recorded yet"}
-                    >
-                      Export audit JSON
-                    </button>
-                  ) : null}
-                  <button
-                    className="btn secondary"
-                    type="button"
-                    onClick={restoreAllArchivedToCurrent}
-                    disabled={archivedAuditCount === 0}
-                    title="Reactivate archived edits on this canvas"
-                  >
-                    Restore archived
-                  </button>
-                  <button
-                    className="btn secondary"
-                    type="button"
-                    onClick={clearAuditTrail}
-                    disabled={!auditTrail.length && !(graph?.applied_edits?.length) && !(graph?.edit_conflicts?.length)}
-                  >
-                    Clear
-                  </button>
-                </div>
-                {graph?.edit_conflicts?.length ? (
-                  <div className="small" role="status" style={{ color: "#b45309" }}>
-                    <div>
-                      {graph.edit_conflicts.filter((c) => !c.applied).length} stored edit(s) could not be applied,{" "}
-                      {graph.edit_conflicts.filter((c) => c.applied).length} applied over a change in the schema source:
-                    </div>
-                    <ul style={{ margin: "4px 0 0", paddingLeft: 16 }}>
-                      {graph.edit_conflicts.map((conflict, index) => (
-                        <li key={`${conflict.edit.id ?? index}-${conflict.reason}`}>
-                          {conflict.edit.op} {conflict.edit.target.split(".").pop()}: {conflict.detail} ({conflict.reason})
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                <div className="small" style={{ color: "var(--muted)" }}>
-                  {auditEntriesForCurrentPackage.length
-                    ? `${activeAuditCount} active edits${archivedAuditCount > 0 ? ` (${archivedAuditCount} archived)` : ""}`
-                    : "No edits on this canvas yet"}
-                </div>
-                <div
-                  style={{
-                    maxHeight: 240,
-                    overflowY: "auto",
-                    border: "1px solid var(--panel-border)",
-                    borderRadius: 10,
-                    padding: 8,
-                    background: "var(--panel)",
-                    fontSize: 12
-                  }}
+              <CollapsibleSection
+                title="Documentation"
+                hint="Browse docs and edit quantities"
+                className="panel"
+                id="section-documentation"
+                open={openDocumentation}
+                onToggle={setOpenDocumentation}
+              >
+                <DocPanel
+                  editRules={editRules}
+                  editableMode={editableMode}
+                  onRemoveQuantity={removeQuantity}
+                  onEditQuantity={editQuantity}
+                  onEditClass={editClassDoc}
+                  blockedReason={addBlockedReason}
+                  actionError={quantityActionErr}
+                  clearActionError={clearQuantityActionError}
+                />
+              </CollapsibleSection>
+            </div>
+
+            {showUsage ? (
+              <div style={{ flex: "0 0 auto" }}>
+                <CollapsibleSection
+                  title="Under the hood"
+                  hint="Raw schema structure"
+                  className="panel"
+                  id="section-under"
+                  open={openUnderTheHood}
+                  onToggle={setOpenUnderTheHood}
                 >
-                  {[...auditEntriesForCurrentPackage].reverse().map((entry) => {
-                    const archived = Boolean(
-                      entry.replayable === false ||
-                      (entry.package ? normalizePackageName(entry.package) !== currentPackageForAudit : false)
-                    );
-                    return (
-                      <div
-                        key={entry.id}
-                        style={{
-                          padding: "6px 8px",
-                          borderBottom: "1px solid var(--panel-border)",
-                        }}
-                      >
-                      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                        <button
-                          className="btn secondary"
-                          type="button"
-                          onClick={() => undoAuditEntry(entry.id)}
-                          disabled={archived}
-                          title={archived ? "Archived for a different canvas; undo disabled" : "Undo this change"}
-                          style={{ padding: "6px 10px" }}
-                        >
-                          🗑
-                        </button>
-                        {archived ? (
-                          <button
-                            className="btn secondary"
-                            type="button"
-                            onClick={() => restoreArchivedEntry(entry.id)}
-                            style={{ padding: "6px 10px" }}
-                            title="Reactivate this edit on the current canvas"
-                          >
-                            ↺
-                          </button>
-                        ) : null}
-                        <div>
-                          <div style={{ fontWeight: 700 }}>
-                            {entry.description}
-                            {archived ? " (archived)" : ""}
-                          </div>
-                          <div style={{ color: "var(--muted)" }}>
-                            {new Date(entry.timestamp).toLocaleString()}
-                          </div>
-                          <div style={{ color: "var(--subtitle)" }}>Change: {entry.change.type}</div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                  <UnderTheHoodPanel apiBase={apiBase} token={token} branch={isLightMode ? undefined : workspaceBranch || undefined} />
+                </CollapsibleSection>
               </div>
-            </CollapsibleSection>
+            ) : null}
           </div>
         </div>
       </div>
