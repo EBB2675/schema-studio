@@ -5,7 +5,7 @@ import App from '../src/App';
 import { useWorkspaceStore } from '../src/store/workspace';
 
 // Profiles say what their source offers besides the schema: the under-the-hood
-// panel needs "usage", method lists on class cards need "methods".
+// panel needs "usage".
 const mockGet = vi.fn();
 
 vi.mock('axios', () => {
@@ -21,7 +21,7 @@ vi.mock('axios', () => {
 
 vi.mock('../src/GraphView', () => ({
   __esModule: true,
-  default: ({ showMethods }: { showMethods?: boolean }) => <div>{`methods shown: ${showMethods ?? true}`}</div>,
+  default: () => <div>graph view</div>,
 }));
 
 const profile = (key: string, capabilities: string[]) => ({
@@ -53,23 +53,23 @@ describe('profile capabilities', () => {
 
   afterEach(() => cleanup());
 
-  it('hides the under-the-hood panel and method lists when the source offers neither', async () => {
+  it('hides the under-the-hood panel when the source offers no usage', async () => {
     answer([]);
     const user = userEvent.setup();
     render(<App />);
     await waitFor(() => expect(mockGet).toHaveBeenCalledWith('/schema/profiles'));
     await user.click(await screen.findByRole('button', { name: /\+ Start from empty canvas/i }));
-    expect(await screen.findByText('methods shown: false')).toBeInTheDocument();
+    expect(await screen.findByText('graph view')).toBeInTheDocument();
     expect(screen.queryByText('Under the hood')).toBeNull();
   });
 
-  it('shows both when the source offers usage and methods', async () => {
+  it('shows the under-the-hood panel when the source offers usage', async () => {
     answer(['methods', 'usage']);
     const user = userEvent.setup();
     render(<App />);
     await waitFor(() => expect(mockGet).toHaveBeenCalledWith('/schema/profiles'));
     await user.click(await screen.findByRole('button', { name: /\+ Start from empty canvas/i }));
-    expect(await screen.findByText('methods shown: true')).toBeInTheDocument();
+    expect(await screen.findByText('graph view')).toBeInTheDocument();
     expect(screen.getByText('Under the hood')).toBeInTheDocument();
   });
 });
