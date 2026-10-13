@@ -12,7 +12,7 @@ LinkML download and new edits then all use that branch's snapshot.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -106,6 +106,7 @@ def build_graph(
     allow_cross_module: bool = True,
     base_namespace: str | None = None,
     empty: bool = False,
+    expand: Collection[str] = (),
     source: Source | None = None,
     extractor: str | None = None,
 ) -> dict[str, Any]:
@@ -130,13 +131,13 @@ def build_graph(
             result: dict[str, Any] = {"package": package, "root": root, "nodes": [], "edges": []}
         else:
             located = {} if source is None else {"source_root": source.root, "source_version": source.sha}
-            result = extracted_graph(package, **flags, extractor=extractor, **located)
+            result = extracted_graph(package, **flags, expand=expand, extractor=extractor, **located)
         conflicts: list[dict[str, Any]] = _unsupported(stored, profile, package)
         applied: list[Mapping[str, Any]] = []
     else:
         state = edited(package, stored, base_namespace=base_namespace, source=source)
         try:
-            return core.build_graph(state, package, empty=empty, **{**flags, "root": root})
+            return core.build_graph(state, package, empty=empty, expand=expand, **{**flags, "root": root})
         except graph.RootNotFound as exc:
             raise UnknownRoot(f"ValueError: {exc}") from exc
     if applied:

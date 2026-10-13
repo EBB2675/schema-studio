@@ -685,7 +685,8 @@
    "methods": null,
    "module": "bam_masterdata.datamodel.object_types",
    "owner": null,
-   "shape": null
+   "shape": null,
+   "subclasses": 0
   },
   {
    "card": null,
@@ -699,7 +700,8 @@
    "methods": null,
    "module": "bam_masterdata.datamodel.object_types",
    "owner": null,
-   "shape": null
+   "shape": null,
+   "subclasses": 1
   }
  ],
  "package": "bam_masterdata.datamodel.object_types",

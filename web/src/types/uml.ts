@@ -28,6 +28,8 @@ export type UmlClassNode = {
   parentId?: string | null;
   parentRelation?: "inherits" | "hasSubSection" | null;
   parentCard?: string | null;
+  // Direct subclasses in the schema, drawn or not; null when the graph does not say.
+  subclasses?: number | null;
   details?: NodeDetails | null;
 };
 

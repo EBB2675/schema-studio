@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import cytoscape from "cytoscape";
 import elk from "elkjs/lib/elk.bundled.js";
 import cytoscapeElk from "cytoscape-elk";
-import type { Core, ElementDefinition } from "cytoscape";
+import type { Core, NodeSingular } from "cytoscape";
 import { useSelection, type QtyMeta, type QtySnapshot } from "./store/selection";
 import { NOMAD_EDIT_RULES, VOCAB_TERM, type EditRules, type QuantityFormData } from "./components/quantityShared";
 import type { ApiEdge, ApiNode } from "./types/api";
 import type { QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
 import { fqidFromParts } from "./utils/identifier";
+import { canvasEdges } from "./utils/canvasEdges";
+import { placeNewNodes, type PlacedBox, type Point } from "./utils/canvasPlacement";
 
 type QtyDiffState = "added" | "removed" | "changed" | undefined;
 
@@ -21,7 +23,8 @@ type RawEdge = ApiEdge;
 
 export type GraphExportHandle = {
   toPng: () => string | null;
-  focusNode: (name: string) => boolean;
+  // Selects a class; moveViewport: false leaves pan and zoom as they are.
+  focusNode: (name: string, options?: { moveViewport?: boolean }) => boolean;
   refit: () => void;
 };
 
@@ -37,6 +40,11 @@ type Props = {
     edges: DiffEdges;
   } | null;
   onReady?: (handle: GraphExportHandle | null) => void;
+  // A new value means a new graph: the canvas lays it out and fits it once. Other
+  // changes keep the classes where they are and place only the ones that join.
+  layoutKey?: string | number;
+  // Called after that layout and fit.
+  onLayoutReady?: (handle: GraphExportHandle) => void;
   showQuantityMetadata?: boolean;
   showInheritance?: boolean;
   // Off for profiles whose source has no methods to show (capability "methods").
@@ -56,6 +64,9 @@ type Props = {
   editableMode?: boolean;
   // What the schema lets the user add (types; bam-masterdata codes).
   editRules?: EditRules;
+  // Classes whose subclasses are shown, and the +/- on a card that shows or hides them.
+  expandedClassIds?: string[];
+  onToggleSubclasses?: (classId: string) => void | Promise<void>;
 };
 
 const cleanType = (t?: string | null) => {
@@ -107,6 +118,144 @@ const connectionPoints = (source: CardBox, target: CardBox) => {
   };
 };
 
+type Palette = { composition: string; compositionLabelBg: string; inheritance: string };
+
+const stylesheet = (palette: Palette) => [
+  {
+    selector: "node[kind='uml_class']",
+    style: {
+      shape: "round-rectangle",
+      "background-color": "#f5f7fa",
+      "border-color": "#0f172a",
+      "border-width": 1.5,
+      color: "#0f172a",
+      label: "data(label)",
+      "text-wrap": "wrap",
+      "text-max-width": "280px",
+      "font-size": 12,
+      "font-family": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
+      padding: "8px",
+      "text-halign": "center",
+      "text-valign": "center",
+      width: "label",
+      height: "label",
+      "shadow-blur": 12,
+      "shadow-color": "#94a3b8",
+      "shadow-offset-x": 2,
+      "shadow-offset-y": 4
+    } as Record<string, string | number>
+  },
+  {
+    selector: "edge[relationship='composition']",
+    style: {
+      "line-color": palette.composition,
+      width: 2,
+      "curve-style": "segments",
+      "source-arrow-shape": "diamond",
+      "source-arrow-color": palette.composition,
+      "target-arrow-shape": "triangle",
+      "target-arrow-color": palette.composition,
+      "arrow-scale": 1.1,
+      label: "data(card)",
+      "font-size": 10,
+      "text-rotation": "autorotate",
+      "text-margin-y": -6,
+      "text-background-color": palette.compositionLabelBg,
+      "text-background-opacity": 1,
+      "text-background-padding": "2px",
+      color: palette.composition
+    } as Record<string, string | number>
+  },
+  {
+    selector: "edge[relationship='inheritance']",
+    style: {
+      "line-color": palette.inheritance,
+      width: 2,
+      "curve-style": "bezier",
+      "target-arrow-shape": "triangle",
+      "target-arrow-color": palette.inheritance,
+      "arrow-scale": 1.1,
+      "target-arrow-fill": "hollow",
+      "line-style": "dashed",
+      "line-dash-pattern": [10, 8]
+    }
+  },
+  { selector: ".hidden", style: { display: "none" } },
+  { selector: ":selected", style: { "border-width": 3, "border-color": "#2563eb" } },
+  { selector: ".diff-added",   style: { "border-color": "#16a34a", "border-width": 4 } },
+  { selector: ".diff-removed", style: { "border-color": "#dc2626", "border-width": 4 } },
+  { selector: ".diff-changed", style: { "border-color": "#ca8a04", "border-width": 4 } },
+  { selector: "edge.diff-added",   style: { "line-color": "#16a34a", "target-arrow-color": "#16a34a", "source-arrow-color": "#16a34a", width: 3 } },
+  { selector: "edge.diff-removed", style: { "line-color": "#dc2626", "target-arrow-color": "#dc2626", "source-arrow-color": "#dc2626", width: 3, "line-style": "dashed" } }
+] as unknown as cytoscape.StylesheetJson;
+
+const FULL_LAYOUT = {
+  name: "elk",
+  nodeDimensionsIncludeLabels: true,
+  elk: {
+    algorithm: "layered",
+    "elk.direction": "RIGHT",
+    "elk.layered.spacing.nodeNodeBetweenLayers": 90,
+    "elk.spacing.nodeNode": 26,
+    "elk.layered.nodePlacement.bk.fixedAlignment": "BALANCED",
+    "elk.layered.mergeEdges": true,
+    "elk.edgeRouting": "ORTHOGONAL"
+  }
+} as unknown as cytoscape.LayoutOptions;
+
+const FIT_PADDING = 32;
+const NOT_LAID_OUT = Symbol("not laid out");
+// A fit never zooms in further than this, so a canvas with a class or two stays readable.
+const FIT_MAX_ZOOM = 1.2;
+
+const fitView = (cy: Core) => {
+  cy.resize();
+  cy.fit(undefined, FIT_PADDING);
+  if (cy.zoom() > FIT_MAX_ZOOM) {
+    cy.zoom(FIT_MAX_ZOOM);
+    cy.center();
+  }
+};
+
+type CanvasNodeData = {
+  id: string;
+  label: string;
+  rawName: string;
+  kind: "uml_class";
+  module: string;
+  doc: string;
+  path: string;
+  line?: number;
+};
+type CanvasEdgeData = { id: string; source: string; target: string; type: string; relationship: string; card: string };
+
+const sameData = (current: Record<string, unknown>, next: Record<string, unknown>) =>
+  Object.keys(next).every((key) => current[key] === next[key]);
+
+// Edge ids name the link itself, so an edge keeps its id when other edges come or go.
+// The same link drawn twice (two subsections of one class) is told apart by a counter.
+const keyEdges = (edges: RawEdge[]) => {
+  const seen = new Map<string, number>();
+  return edges.map((edge) => {
+    const base = `${edge.type}:${edge.source}->${edge.target}${edge.card ? `[${edge.card}]` : ""}`;
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    return { id: count ? `${base}#${count}` : base, edge };
+  });
+};
+
+const nodeBox = (node: NodeSingular): CardBox => {
+  const box = node.boundingBox({ includeLabels: true });
+  return { x: box.x1, y: box.y1, w: box.w, h: box.h };
+};
+
+// The space a class takes, as the wider of its canvas node and its Edit mode card.
+const placedBox = (node: NodeSingular): PlacedBox => {
+  const box = nodeBox(node);
+  const { x, y } = node.position();
+  return { x, y, w: editableCardWidth(box), h: box.h };
+};
+
 function umlLabel(
   name: string,
   attrs: { name: string; dtype?: string; shape?: string | null; card?: string | null; diff?: QtyDiffState }[],
@@ -138,6 +287,8 @@ export default function GraphView({
   edges,
   diff,
   onReady,
+  layoutKey,
+  onLayoutReady,
   showQuantityMetadata = true,
   showInheritance = true,
   showMethods = true,
@@ -155,6 +306,8 @@ export default function GraphView({
   onClearSelection,
   editableMode = false,
   editRules = NOMAD_EDIT_RULES,
+  expandedClassIds,
+  onToggleSubclasses,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const cyRef = useRef<Core | null>(null);
@@ -165,6 +318,7 @@ export default function GraphView({
     zoom: 1,
   });
   const [activeQuantityTarget, setActiveQuantityTarget] = useState<string | null>(null);
+  const [togglingClassId, setTogglingClassId] = useState<string | null>(null);
   const dragRef = useRef<{ id: string; startX: number; startY: number; nodeX: number; nodeY: number } | null>(null);
   const emptyQuantityDraft = useMemo<Required<QuantityFormData>>(
     () => ({ quantityName: "", dtype: editRules.dtypes[0]?.name ?? "", docstring: "", code: "", label: "", range: "", mandatory: false }),
@@ -489,9 +643,10 @@ export default function GraphView({
         );
         methods.set(cls.id, sourceMethods.get(cls.id) ?? []);
 
+        // Cards show only the quantities a class declares; inherited ones stay in the docs panel.
         attrs.set(
           cls.id,
-          cls.quantities.map((q) => ({
+          cls.quantities.filter((q) => !q.inherited).map((q) => ({
             name: q.name,
             dtype: q.dtype,
             shape: q.shape ?? undefined,
@@ -530,18 +685,25 @@ export default function GraphView({
       qByOwner.set(owner, metaList);
     }
 
-    const baseEdges = [...resolvedEdges];
+    const baseEdges = canvasEdges(resolvedEdges);
     if (diff?.edges?.removed?.length) {
+      const removedEdges: RawEdge[] = [];
       diff.edges.removed.forEach((e) => {
         if (!e?.source || !e?.target) return;
         const type = (e.type as RawEdge["type"]) ?? "hasSubSection";
-        baseEdges.push({
+        removedEdges.push({
           source: e.source,
           target: e.target,
           type,
           card: e.card ?? undefined
         });
       });
+      // Removed edges are thinned out against the graph as it was before the change.
+      const edgeKey = (e: RawEdge) => `${e.source}|${e.target}|${e.type}`;
+      const added = new Set((diff.edges.added ?? []).map(edgeKey));
+      const before = [...resolvedEdges.filter((e) => !added.has(edgeKey(e))), ...removedEdges];
+      const keptBefore = new Set(canvasEdges(before).map(edgeKey));
+      baseEdges.push(...removedEdges.filter((e) => keptBefore.has(edgeKey(e))));
     }
 
     const umlEdges = baseEdges.filter((e) => {
@@ -553,178 +715,81 @@ export default function GraphView({
     return { sectionsMap: sections, attrsMap: attrs, methodsMap: methods, umlEdges, quantitiesByOwner: qByOwner };
   }, [graphNodes, resolvedEdges, quantityDiffs, diff, showInheritance, classCards, toQtyMeta, umlState, showMethods]);
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-    cyRef.current?.destroy();
-    cyRef.current = null;
-    onReady?.(null);
+  const keyedEdges = useMemo(() => keyEdges(umlEdges), [umlEdges]);
 
-    const elements: ElementDefinition[] = [];
-
+  // What the canvas should hold; the reconcile effect below brings Cytoscape to it.
+  const canvasElements = useMemo(() => {
+    const nodes: CanvasNodeData[] = [];
     for (const [secId, sec] of sectionsMap.entries()) {
-      const attrs = attrsMap.get(secId) ?? [];
-      const methods = methodsMap.get(secId) ?? [];
-      elements.push({
-        data: {
-          id: secId,
-          label: umlLabel(sec.label, attrs, methods, showQuantityMetadata),
-          rawName: sec.label,
-          kind: "uml_class",
-          module: sec.module ?? "",
-          doc: sec.doc ?? "",
-          path: sec.path ?? "",
-          line: typeof sec.line === "number" ? sec.line : undefined
-        }
+      nodes.push({
+        id: secId,
+        label: umlLabel(sec.label, attrsMap.get(secId) ?? [], methodsMap.get(secId) ?? [], showQuantityMetadata),
+        rawName: sec.label,
+        kind: "uml_class",
+        module: sec.module ?? "",
+        doc: sec.doc ?? "",
+        path: sec.path ?? "",
+        line: typeof sec.line === "number" ? sec.line : undefined
       });
     }
+    const edges: CanvasEdgeData[] = keyedEdges
+      .filter(({ edge }) => sectionsMap.has(edge.source) && sectionsMap.has(edge.target))
+      .map(({ id, edge }) => ({
+        id,
+        source: edge.source,
+        target: edge.target,
+        type: edge.type,
+        relationship: edge.type === "inherits" ? "inheritance" : "composition",
+        card: edge.card ?? ""
+      }));
+    return { nodes, edges };
+  }, [sectionsMap, attrsMap, methodsMap, keyedEdges, showQuantityMetadata]);
 
-    umlEdges.forEach((e, i) => {
-      if (!sectionsMap.has(e.source) || !sectionsMap.has(e.target)) return;
-      const relationship = e.type === "inherits" ? "inheritance" : "composition";
-      elements.push({
-        data: {
-          id: `assoc:${relationship}:${i}:${e.source}->${e.target}`,
-          source: e.source,
-          target: e.target,
-          type: e.type,
-          relationship,
-          card: e.card ?? ""
-        }
-      });
+  // The canvas lives as long as this component; its handlers read the latest props through this ref.
+  const latestRef = useRef({ onReady, onLayoutReady, publishClassSelection, quantitiesByOwner, sectionsMap });
+  useEffect(() => {
+    latestRef.current = { onReady, onLayoutReady, publishClassSelection, quantitiesByOwner, sectionsMap };
+  });
+  const handleRef = useRef<GraphExportHandle | null>(null);
+  const layoutRef = useRef<cytoscape.Layouts | null>(null);
+  // Bumped by every full layout; a layout that finishes after a newer one started is ignored.
+  const layoutRunRef = useRef(0);
+  // Bumped whenever the view must stay put, which cancels a fit still waiting to happen.
+  const fitTicketRef = useRef(0);
+  const laidOutKeyRef = useRef<unknown>(NOT_LAID_OUT);
+  // Where classes were when they left the canvas, so they come back to the same spot.
+  const leftAtRef = useRef(new Map<string, Point>());
+
+  // Full geometry synchronization: measure every node's model-space bounding
+  // box and rebuild the card-box map. Only needed when the graph geometry
+  // actually changes (layout, classes added or relabelled), never on pan or zoom.
+  const syncAllCardBoxes = useCallback(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    const boxes: Record<string, CardBox> = {};
+    cy.nodes().forEach((n) => {
+      boxes[n.id()] = nodeBox(n);
     });
+    setCardBoxes((prev) => (sameCardBoxMap(prev, boxes) ? prev : boxes));
+  }, []);
+
+  // Creates the canvas once. Data, style and size changes update it in place.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
 
     const cy = cytoscape({
-      container: containerRef.current,
-      elements,
+      container,
+      elements: [],
       minZoom: 0.2,
       maxZoom: 3.5,
       wheelSensitivity: CANVAS_WHEEL_SENSITIVITY,
-      style: [
-        {
-          selector: "node[kind='uml_class']",
-          style: {
-            shape: "round-rectangle",
-            "background-color": "#f5f7fa",
-            "border-color": "#0f172a",
-            "border-width": 1.5,
-            color: "#0f172a",
-            label: "data(label)",
-            "text-wrap": "wrap",
-            "text-max-width": "280px",
-            "font-size": 12,
-            "font-family": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
-            padding: "8px",
-            "text-halign": "center",
-            "text-valign": "center",
-            width: "label",
-            height: "label",
-            "shadow-blur": 12,
-            "shadow-color": "#94a3b8",
-            "shadow-offset-x": 2,
-            "shadow-offset-y": 4
-          } as Record<string, string | number>
-        },
-        {
-          selector: "edge[relationship='composition']",
-          style: {
-            "line-color": palette.composition,
-            width: 2,
-            "curve-style": "segments",
-            "source-arrow-shape": "diamond",
-            "source-arrow-color": palette.composition,
-            "target-arrow-shape": "triangle",
-            "target-arrow-color": palette.composition,
-            "arrow-scale": 1.1,
-            label: "data(card)",
-            "font-size": 10,
-            "text-rotation": "autorotate",
-            "text-margin-y": -6,
-            "text-background-color": palette.compositionLabelBg,
-            "text-background-opacity": 1,
-            "text-background-padding": "2px",
-            color: palette.composition
-          } as Record<string, string | number>
-        },
-        {
-          selector: "edge[relationship='inheritance']",
-          style: {
-            "line-color": palette.inheritance,
-            width: 2,
-            "curve-style": "bezier",
-            "target-arrow-shape": "triangle",
-            "target-arrow-color": palette.inheritance,
-            "arrow-scale": 1.1,
-            "target-arrow-fill": "hollow",
-            "line-style": "dashed",
-            "line-dash-pattern": [10, 8]
-          }
-        },
-        { selector: ".hidden", style: { display: "none" } },
-        { selector: ":selected", style: { "border-width": 3, "border-color": "#2563eb" } },
-        { selector: ".diff-added",   style: { "border-color": "#16a34a", "border-width": 4 } },
-        { selector: ".diff-removed", style: { "border-color": "#dc2626", "border-width": 4 } },
-        { selector: ".diff-changed", style: { "border-color": "#ca8a04", "border-width": 4 } },
-        { selector: "edge.diff-added",   style: { "line-color": "#16a34a", "target-arrow-color": "#16a34a", "source-arrow-color": "#16a34a", width: 3 } },
-        { selector: "edge.diff-removed", style: { "line-color": "#dc2626", "target-arrow-color": "#dc2626", "source-arrow-color": "#dc2626", width: 3, "line-style": "dashed" } }
-      ],
-      layout: {
-        name: "elk",
-        nodeDimensionsIncludeLabels: true,
-        elk: {
-          algorithm: "layered",
-          "elk.direction": "RIGHT",
-          "elk.layered.spacing.nodeNodeBetweenLayers": 90,
-          "elk.spacing.nodeNode": 26,
-          "elk.layered.nodePlacement.bk.fixedAlignment": "BALANCED",
-          "elk.layered.mergeEdges": true,
-          "elk.edgeRouting": "ORTHOGONAL"
-        }
-      } as unknown as cytoscape.LayoutOptions
     });
+    cyRef.current = cy;
+    laidOutKeyRef.current = NOT_LAID_OUT;
+    leftAtRef.current = new Map();
 
-    let refitTimeout: number | null = null;
-
-    const refitToContent = () => {
-      cy.resize();
-      cy.fit(undefined, 32);
-    };
-
-    const scheduleRefit = () => {
-      refitToContent();
-      requestAnimationFrame(refitToContent);
-      if (refitTimeout) window.clearTimeout(refitTimeout);
-      refitTimeout = window.setTimeout(refitToContent, 140);
-    };
-
-    let handlePublished = false;
-
-    const publishHandle = () => {
-      if (handlePublished) return;
-      handlePublished = true;
-      onReady?.({
-        toPng: () =>
-          cyRef.current?.png({
-            full: true,
-            scale: 2,
-            bg: "#ffffff"
-          }) ?? null,
-        focusNode,
-        refit: () => scheduleRefit(),
-      });
-    };
-
-    cy.one("layoutstop", () => {
-      scheduleRefit();
-      publishHandle();
-    });
-
-    const resizeObserver = new ResizeObserver(() => scheduleRefit());
-    resizeObserver.observe(containerRef.current);
-
-    const focusNode = (name: string) => {
-      const cy = cyRef.current;
-      if (!cy) return false;
-
+    const focusNode = (name: string, options: { moveViewport?: boolean } = {}) => {
       const normalized = name.toLowerCase();
       const target = cy
         .nodes()
@@ -739,6 +804,7 @@ export default function GraphView({
       if (!target || target.empty()) return false;
 
       const d = target.data();
+      const { quantitiesByOwner, sectionsMap, publishClassSelection } = latestRef.current;
       const qList = quantitiesByOwner.get(d.id) || [];
 
       const quantities: QuantityNode[] = qList.map((q) => ({
@@ -769,14 +835,17 @@ export default function GraphView({
         details: sectionsMap.get(d.id)?.details ?? null,
       });
 
-      cy.animate(
-        {
-          center: { eles: target },
-          zoom: Math.min(1.2, cy.maxZoom()),
-        },
-        { duration: 240, easing: "ease-in-out" }
-      );
+      if (options.moveViewport !== false) {
+        cy.animate(
+          {
+            center: { eles: target },
+            zoom: Math.min(1.2, cy.maxZoom()),
+          },
+          { duration: 240, easing: "ease-in-out" }
+        );
+      }
 
+      cy.$(":selected").unselect();
       target.select();
       return true;
     };
@@ -789,51 +858,6 @@ export default function GraphView({
     cy.on("tap", (evt) => {
       if (evt.target === cy) useSelection.getState().setSelected(null);
     });
-
-    cyRef.current = cy;
-
-    cy.ready(() => {
-      // In rare cases ELK may not fire layoutstop (e.g., empty graphs);
-      // ensure the view centers and the handle is published once the core is ready.
-      scheduleRefit();
-      publishHandle();
-    });
-
-    // Diff highlights (unchanged)
-    if (diff) {
-      const addedIds   = new Set(diff.nodes?.added?.map((n) => n.id));
-      const removedIds = new Set(diff.nodes?.removed?.map((n) => n.id));
-      const changedIds = new Set(diff.nodes?.changed?.map((c) => c.id));
-
-      cy.$("node").forEach((n) => {
-        const id = n.id();
-        if (addedIds.has(id))   n.addClass("diff-added");
-        if (removedIds.has(id)) n.addClass("diff-removed");
-        if (changedIds.has(id)) n.addClass("diff-changed");
-      });
-
-      const edgeKey = (e: ApiEdge) => `${e.source}|${e.target}|${e.type ?? ""}`;
-      const addedE   = new Set(diff.edges?.added?.map(edgeKey));
-      const removedE = new Set(diff.edges?.removed?.map(edgeKey));
-
-      cy.$("edge").forEach(e => {
-        const k = `${e.data("source")}|${e.data("target")}|${e.data("type") || ""}`;
-        if (addedE.has(k))   e.addClass("diff-added");
-        if (removedE.has(k)) e.addClass("diff-removed");
-      });
-    }
-
-    return () => {
-      resizeObserver.disconnect();
-      if (refitTimeout) window.clearTimeout(refitTimeout);
-      onReady?.(null);
-      cyRef.current?.destroy();
-    };
-  }, [sectionsMap, attrsMap, methodsMap, umlEdges, quantitiesByOwner, diff, setSelected, onReady, showQuantityMetadata, palette, publishClassSelection]);
-
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
 
     let viewportRaf: number | null = null;
 
@@ -861,32 +885,174 @@ export default function GraphView({
       });
     };
 
-    // Full geometry synchronization: measure every node's model-space bounding
-    // box and rebuild the card-box map. Only needed when the graph geometry
-    // actually changes (initial overlay geometry, and when layout finishes).
-    const syncAllCardBoxes = () => {
-      const boxes: Record<string, CardBox> = {};
-      cy.nodes().forEach((n) => {
-        const box = n.boundingBox({ includeLabels: true });
-        boxes[n.id()] = { x: box.x1, y: box.y1, w: box.w, h: box.h };
-      });
-      setCardBoxes((prev) => (sameCardBoxMap(prev, boxes) ? prev : boxes));
-    };
-
-    // Establish initial geometry now, in case layout already completed before
-    // this effect registered its listener.
     applyViewport();
-    syncAllCardBoxes();
-
     cy.on("pan zoom", scheduleViewportSync);
     cy.on("layoutstop", syncAllCardBoxes);
 
-    return () => {
-      if (viewportRaf !== null) cancelAnimationFrame(viewportRaf);
-      cy.off("pan zoom", scheduleViewportSync);
-      cy.off("layoutstop", syncAllCardBoxes);
+    // A class dragged on the canvas itself: its +/- follows it.
+    cy.on("drag", "node", (evt) => {
+      const node = evt.target as NodeSingular;
+      const next = nodeBox(node);
+      setCardBoxes((prev) => (sameCardBox(prev[node.id()], next) ? prev : { ...prev, [node.id()]: next }));
+    });
+
+    // A resized panel changes the canvas size only; pan and zoom stay.
+    const resizeObserver = new ResizeObserver(() => cy.resize());
+    resizeObserver.observe(container);
+
+    const handle: GraphExportHandle = {
+      toPng: () =>
+        cy.png({
+          full: true,
+          scale: 2,
+          bg: "#ffffff"
+        }) ?? null,
+      focusNode,
+      refit: () => {
+        fitTicketRef.current += 1;
+        fitView(cy);
+      },
     };
-  }, [umlState, theme, umlEdges, graphNodes, showQuantityMetadata, diff]);
+    handleRef.current = handle;
+    latestRef.current.onReady?.(handle);
+
+    return () => {
+      resizeObserver.disconnect();
+      if (viewportRaf !== null) cancelAnimationFrame(viewportRaf);
+      layoutRef.current?.stop();
+      layoutRef.current = null;
+      handleRef.current = null;
+      latestRef.current.onReady?.(null);
+      cy.destroy();
+      if (cyRef.current === cy) cyRef.current = null;
+    };
+  }, [syncAllCardBoxes]);
+
+  useEffect(() => {
+    cyRef.current?.style(stylesheet(palette));
+  }, [palette]);
+
+  // Brings the canvas to canvasElements: classes and edges that left are removed, those
+  // that joined are added, the rest stay where they are. Only a new layoutKey, or a
+  // canvas that was empty, gets a full layout and fit.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+
+    const newGraph = laidOutKeyRef.current !== layoutKey;
+    if (newGraph) leftAtRef.current = new Map();
+    const leftAt = leftAtRef.current;
+    const wantedNodes = new Set(canvasElements.nodes.map((n) => n.id));
+    const wantedEdges = new Set(canvasElements.edges.map((e) => e.id));
+    const hadNodes = cy.nodes().length > 0;
+    const added: string[] = [];
+
+    cy.batch(() => {
+      cy.edges().forEach((e) => {
+        if (!wantedEdges.has(e.id())) e.remove();
+      });
+      cy.nodes().forEach((n) => {
+        if (wantedNodes.has(n.id())) return;
+        leftAt.set(n.id(), { ...n.position() });
+        n.remove();
+      });
+      for (const data of canvasElements.nodes) {
+        const node = cy.getElementById(data.id);
+        if (node.empty()) {
+          cy.add({ group: "nodes", data, position: { x: 0, y: 0 } });
+          added.push(data.id);
+        } else if (!sameData(node.data(), data)) {
+          node.data(data);
+        }
+      }
+      for (const data of canvasElements.edges) {
+        const edge = cy.getElementById(data.id);
+        if (edge.empty()) cy.add({ group: "edges", data });
+        else if (!sameData(edge.data(), data)) edge.data(data);
+      }
+    });
+
+    const diffClasses = "diff-added diff-removed diff-changed";
+    cy.nodes().removeClass(diffClasses);
+    cy.edges().removeClass(diffClasses);
+    if (diff) {
+      const addedIds   = new Set(diff.nodes?.added?.map((n) => n.id));
+      const removedIds = new Set(diff.nodes?.removed?.map((n) => n.id));
+      const changedIds = new Set(diff.nodes?.changed?.map((c) => c.id));
+
+      cy.nodes().forEach((n) => {
+        const id = n.id();
+        if (addedIds.has(id))   n.addClass("diff-added");
+        if (removedIds.has(id)) n.addClass("diff-removed");
+        if (changedIds.has(id)) n.addClass("diff-changed");
+      });
+
+      const edgeKey = (e: ApiEdge) => `${e.source}|${e.target}|${e.type ?? ""}`;
+      const addedE   = new Set(diff.edges?.added?.map(edgeKey));
+      const removedE = new Set(diff.edges?.removed?.map(edgeKey));
+
+      cy.edges().forEach(e => {
+        const k = `${e.data("source")}|${e.data("target")}|${e.data("type") || ""}`;
+        if (addedE.has(k))   e.addClass("diff-added");
+        if (removedE.has(k)) e.addClass("diff-removed");
+      });
+    }
+
+    laidOutKeyRef.current = layoutKey;
+    syncAllCardBoxes();
+
+    // Classes that come while the first layout still runs join that layout rather than
+    // being placed beside classes that have not got their place yet.
+    const layoutRunning = layoutRef.current !== null;
+    if ((newGraph || !hadNodes || layoutRunning) && cy.nodes().length > 0) {
+      layoutRef.current?.stop();
+      const run = ++layoutRunRef.current;
+      const fitTicket = ++fitTicketRef.current;
+      // ELK cannot be stopped: a layout that is no longer the latest finishes anyway,
+      // so its positions are turned into no-ops here.
+      const layout = cy.layout({
+        ...FULL_LAYOUT,
+        transform: (node: NodeSingular, position: Point) => (run === layoutRunRef.current ? position : node.position()),
+      } as cytoscape.LayoutOptions);
+      layoutRef.current = layout;
+      layout.one("layoutstop", () => {
+        if (run !== layoutRunRef.current || cyRef.current !== cy) return;
+        layoutRef.current = null;
+        syncAllCardBoxes();
+        // Anything that happened since the layout started (an expansion, an explicit fit) keeps its view.
+        if (fitTicket !== fitTicketRef.current) return;
+        fitView(cy);
+        // The container may still settle in the next frame; fit once more unless something moved on.
+        requestAnimationFrame(() => {
+          if (fitTicket === fitTicketRef.current && cyRef.current === cy) fitView(cy);
+        });
+        if (handleRef.current) latestRef.current.onLayoutReady?.(handleRef.current);
+      });
+      layout.run();
+      return;
+    }
+
+    fitTicketRef.current += 1;
+    if (added.length) {
+      const addedSet = new Set(added);
+      const existing = new Map<string, PlacedBox>();
+      cy.nodes().forEach((n) => {
+        if (!addedSet.has(n.id())) existing.set(n.id(), placedBox(n));
+      });
+      const joining = added.map((id) => {
+        const { w, h } = placedBox(cy.getElementById(id) as NodeSingular);
+        return { id, w, h };
+      });
+      const positions = placeNewNodes(existing, joining, canvasElements.edges, leftAt);
+      cy.batch(() => {
+        positions.forEach((position, id) => {
+          cy.getElementById(id).position(position);
+          leftAt.delete(id);
+        });
+      });
+    }
+    syncAllCardBoxes();
+  }, [canvasElements, diff, layoutKey, syncAllCardBoxes]);
 
   const cardViews = useMemo(
     () =>
@@ -904,13 +1070,13 @@ export default function GraphView({
       displayBoxes.set(cls.id, { ...box, w: editableCardWidth(box) });
     });
 
-    return umlEdges
-      .map((edge, index) => {
+    return keyedEdges
+      .map(({ id, edge }) => {
         const source = displayBoxes.get(edge.source);
         const target = displayBoxes.get(edge.target);
         if (!source || !target) return null;
         return {
-          key: `${edge.type}:${index}:${edge.source}->${edge.target}`,
+          key: id,
           edge,
           points: connectionPoints(source, target),
         };
@@ -920,7 +1086,7 @@ export default function GraphView({
         edge: RawEdge;
         points: { x1: number; y1: number; x2: number; y2: number };
       } => Boolean(view));
-  }, [cardViews, umlEdges]);
+  }, [cardViews, keyedEdges]);
 
   const onDragMove = useCallback(
     (e: MouseEvent) => {
@@ -988,9 +1154,58 @@ export default function GraphView({
     return { cls: targetCard.cls, pos: { top, left } };
   }, [activeQuantityTarget, cardViews, viewport]);
 
+  const expandedClassIdSet = useMemo(() => new Set(expandedClassIds ?? []), [expandedClassIds]);
+  // Subclasses hang below a card, linked by inheritance arrows, so the toggle needs those arrows shown.
+  const subclassToggle = (cls: UmlClassNode) => {
+    if (!onToggleSubclasses || !showInheritance) return null;
+    const expanded = expandedClassIdSet.has(cls.id);
+    const count = cls.subclasses ?? 0;
+    if (!expanded && count === 0) return null;
+    return (
+      <button
+        type="button"
+        className={`uml-subclass-toggle${expanded ? " is-expanded" : ""}`}
+        title={expanded ? "Hide subclasses" : `Show ${count} ${count === 1 ? "subclass" : "subclasses"}`}
+        aria-label={expanded ? `Hide subclasses of ${cls.name}` : `Show subclasses of ${cls.name}`}
+        aria-expanded={expanded}
+        disabled={togglingClassId !== null}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={async (e) => {
+          e.stopPropagation();
+          setTogglingClassId(cls.id);
+          try {
+            await onToggleSubclasses(cls.id);
+          } finally {
+            setTogglingClassId(null);
+          }
+        }}
+      >
+        {expanded ? "−" : "+"}
+      </button>
+    );
+  };
+
   return (
     <div className="graph" style={{ position: "relative" }}>
       <div className={`cy-canvas${showEditingUi ? " is-hidden" : ""}`} ref={containerRef} />
+      {!showEditingUi && onToggleSubclasses ? (
+        <div
+          className="uml-toggle-layer"
+          style={{
+            transform: `translate(${viewport.pan.x}px, ${viewport.pan.y}px) scale(${viewport.zoom})`,
+          }}
+        >
+          {cardViews.map(({ cls, box }) => {
+            const toggle = box ? subclassToggle(cls) : null;
+            if (!toggle || !box) return null;
+            return (
+              <div key={cls.id} className="uml-toggle-anchor" style={{ left: box.x + box.w / 2, top: box.y + box.h }}>
+                {toggle}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       {showEditingUi && (
         <div
           className="uml-overlay"
@@ -1195,6 +1410,7 @@ export default function GraphView({
               const hasInline = activeQuantityTarget === cls.id;
               const zIndex = hasInline ? 1200 : isSelected ? 900 : 200;
               const moduleLabel = cls.module ? (cls.module.split(".").pop() || cls.module) : null;
+              const toggle = subclassToggle(cls);
               return (
                 <div
                   key={cls.id}
@@ -1235,7 +1451,7 @@ export default function GraphView({
                     ) : null}
                   </div>
                   <div className="uml-qty-list">
-                    {cls.quantities.map((q) => {
+                    {cls.quantities.filter((q) => !q.inherited).map((q) => {
                       const metaParts = [
                         q.dtype,
                         q.shape && q.shape !== "[]" ? q.shape : null,
@@ -1251,6 +1467,7 @@ export default function GraphView({
                       );
                     })}
                   </div>
+                  {toggle ? <div className="uml-toggle-anchor">{toggle}</div> : null}
 
                 </div>
               );

@@ -62,6 +62,7 @@ type GraphRequestParams = {
   include_inheritance?: boolean;
   allow_cross_module?: boolean;
   base_namespace?: string;
+  expand?: string;
 };
 
 type GraphTaskBody = {
@@ -142,7 +143,17 @@ export default function App() {
 
   const [graph, setGraph] = useState<ApiGraph | null>(null);
   const [baseGraph, setBaseGraph] = useState<ApiGraph | null>(null);
-  const [umlState, setUmlState] = useState<UmlGraphState | null>(null);
+  // Classes whose subclasses the canvas shows; cleared when the module or root changes.
+  const [expandedClasses, setExpandedClasses] = useState<string[]>([]);
+  // Built from the graph in the same render, so cards and canvas never disagree.
+  const umlState = useMemo<UmlGraphState | null>(() => buildUmlStateFromGraph(graph), [graph]);
+  // Changes when a new graph is shown; the canvas then lays it out and fits it once.
+  const [canvasKey, setCanvasKey] = useState(0);
+  // Only the latest graph request may change what the canvas shows.
+  const graphRequestRef = useRef(0);
+  // expandedRef mirrors expandedClasses; expandIntentRef is what the latest request asked for.
+  const expandedRef = useRef<string[]>([]);
+  const expandIntentRef = useRef<string[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedQuantityId, setSelectedQuantityId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -749,19 +760,6 @@ export default function App() {
   }, [clampDocWidth, docPanelWidth]);
 
   useEffect(() => {
-    if (!graphHandle) return;
-
-    graphHandle.refit();
-    const t1 = window.setTimeout(() => graphHandle.refit(), 120);
-    const t2 = window.setTimeout(() => graphHandle.refit(), 360);
-
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-  }, [graphHandle, sidebarWidth, docPanelWidth]);
-
-  useEffect(() => {
     setDocPanelWidth((w) => clampDocWidth(w));
   }, [clampDocWidth]);
 
@@ -907,9 +905,109 @@ export default function App() {
     }
   }, [api, isLightMode, pkg, root, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
 
+  // The module's graph as the server draws it; no state changes beyond the workspace sync.
+  const fetchGraph = useCallback(async (
+    opts: { pkg: string; root: string; namespace: string; branch: string; empty: boolean; expand: string[] }
+  ): Promise<ApiGraph> => {
+    const expand = opts.expand.length ? opts.expand.join(",") : undefined;
+    let parsed: ApiGraph | null = null;
+    if (opts.empty) {
+      const r = await api.get("/schema", {
+        params: {
+          package: opts.pkg,
+          root: opts.root,
+          include_quantities: includeQuantities,
+          include_subsections: includeSubsections,
+          include_inheritance: includeInheritance,
+          allow_cross_module: crossModules,
+          base_namespace: opts.namespace || undefined,
+          expand,
+          empty: true,
+        },
+      });
+      parsed = ensureGraphResponse(r.data);
+      syncWorkspaceFromResponse(r.data);
+      return parsed;
+    }
+    if (isLightMode) {
+      const r = await api.get("/schema", {
+        params: {
+          package: opts.pkg,
+          root: opts.root,
+          include_quantities: includeQuantities,
+          include_subsections: includeSubsections,
+          include_inheritance: includeInheritance,
+          allow_cross_module: crossModules,
+          base_namespace: opts.namespace || undefined,
+          expand,
+        },
+      });
+      parsed = ensureGraphResponse(r.data);
+      syncWorkspaceFromResponse(r.data);
+    } else if (opts.branch) {
+      const asyncResult = await enqueueGraphTask(
+        { branch: opts.branch, package: opts.pkg },
+        {
+          root: opts.root,
+          include_quantities: includeQuantities,
+          include_subsections: includeSubsections,
+          include_inheritance: includeInheritance,
+          allow_cross_module: crossModules,
+          base_namespace: opts.namespace || undefined,
+          expand,
+        }
+      );
+      if (asyncResult) {
+        const maybeGraph = (asyncResult as { graph?: unknown })?.graph ?? asyncResult;
+        parsed = ensureGraphResponse(maybeGraph);
+        syncWorkspaceFromResponse(asyncResult as WorkspaceEnvelope);
+      }
+      if (!parsed) {
+        const r = await api.post(
+          "/graph",
+          {
+            branch: opts.branch,
+            package: opts.pkg,
+          },
+          {
+            params: {
+              root: opts.root,
+              include_quantities: includeQuantities,
+              include_subsections: includeSubsections,
+              include_inheritance: includeInheritance,
+              allow_cross_module: crossModules,
+              base_namespace: opts.namespace || undefined,
+              expand,
+            },
+          }
+        );
+        parsed = ensureGraphResponse(r.data?.graph ?? r.data);
+        syncWorkspaceFromResponse(r.data);
+      }
+    } else {
+      const r = await api.get("/schema", {
+        params: {
+          package: opts.pkg,
+          root: opts.root,
+          include_quantities: includeQuantities,
+          include_subsections: includeSubsections,
+          include_inheritance: includeInheritance,
+          allow_cross_module: crossModules,
+          base_namespace: opts.namespace || undefined,
+          expand,
+        },
+      });
+      parsed = ensureGraphResponse(r.data);
+      syncWorkspaceFromResponse(r.data);
+    }
+    if (!parsed) throw new Error("Failed to load graph");
+    return parsed;
+  }, [api, crossModules, enqueueGraphTask, includeQuantities, includeSubsections, includeInheritance, isLightMode, syncWorkspaceFromResponse]);
+
   // build single-branch graph (resets diff view)
+  // keepView: the same graph again (after an undo, say), so the canvas keeps its layout and view.
   const loadGraph = useCallback(async (
-    overrides?: { pkg?: string; root?: string; namespace?: string; branch?: string; forceEmpty?: boolean }
+    overrides?: { pkg?: string; root?: string; namespace?: string; branch?: string; forceEmpty?: boolean; expand?: string[]; keepView?: boolean }
   ) => {
     if (!token) {
       setErr("Login required");
@@ -929,103 +1027,28 @@ export default function App() {
     setQuantityActionErr(null);
     setLoading(true);
     setDiffData(null);
-    setGraphHandle(null);
+    const request = ++graphRequestRef.current;
+    // Another module or root starts with no class expanded.
+    const expand = overrides?.expand ?? (pkgToUse === pkg && rootToUse === root ? expandIntentRef.current : []);
     try {
-      let parsed: ApiGraph | null = null;
-      if (useEmpty) {
-        const r = await api.get("/schema", {
-          params: {
-            package: pkgToUse,
-            root: rootToUse,
-            include_quantities: includeQuantities,
-            include_subsections: includeSubsections,
-            include_inheritance: includeInheritance,
-            allow_cross_module: crossModules,
-            base_namespace: namespaceToUse || undefined,
-            empty: true,
-          },
-        });
-        parsed = ensureGraphResponse(r.data);
-        syncWorkspaceFromResponse(r.data);
-        setGraph(parsed);
-        setBaseGraph(parsed);
-        return;
-      }
-      if (isLightMode) {
-        const r = await api.get("/schema", {
-          params: {
-            package: pkgToUse,
-            root: rootToUse,
-            include_quantities: includeQuantities,
-            include_subsections: includeSubsections,
-            include_inheritance: includeInheritance,
-            allow_cross_module: crossModules,
-            base_namespace: namespaceToUse || undefined,
-          },
-        });
-        parsed = ensureGraphResponse(r.data);
-        syncWorkspaceFromResponse(r.data);
-      } else if (branchToUse) {
-        const asyncResult = await enqueueGraphTask(
-          { branch: branchToUse, package: pkgToUse },
-          {
-            root: rootToUse,
-            include_quantities: includeQuantities,
-            include_subsections: includeSubsections,
-            include_inheritance: includeInheritance,
-            allow_cross_module: crossModules,
-            base_namespace: namespaceToUse || undefined,
-          }
-        );
-        if (asyncResult) {
-          const maybeGraph = (asyncResult as { graph?: unknown })?.graph ?? asyncResult;
-          parsed = ensureGraphResponse(maybeGraph);
-          syncWorkspaceFromResponse(asyncResult as WorkspaceEnvelope);
-        }
-        if (!parsed) {
-          const r = await api.post(
-            "/graph",
-            {
-              branch: branchToUse,
-              package: pkgToUse,
-            },
-            {
-              params: {
-                root: rootToUse,
-                include_quantities: includeQuantities,
-                include_subsections: includeSubsections,
-                include_inheritance: includeInheritance,
-                allow_cross_module: crossModules,
-                base_namespace: namespaceToUse || undefined,
-              },
-            }
-          );
-          parsed = ensureGraphResponse(r.data?.graph ?? r.data);
-          syncWorkspaceFromResponse(r.data);
-        }
-      } else {
-        const r = await api.get("/schema", {
-          params: {
-            package: pkgToUse,
-            root: rootToUse,
-            include_quantities: includeQuantities,
-            include_subsections: includeSubsections,
-            include_inheritance: includeInheritance,
-            allow_cross_module: crossModules,
-            base_namespace: namespaceToUse || undefined,
-          },
-        });
-        parsed = ensureGraphResponse(r.data);
-        syncWorkspaceFromResponse(r.data);
-      }
+      const parsed = await fetchGraph({
+        pkg: pkgToUse, root: rootToUse, namespace: namespaceToUse, branch: branchToUse, empty: useEmpty, expand,
+      });
+      if (request !== graphRequestRef.current) return;
+      expandedRef.current = expand;
+      expandIntentRef.current = expand;
+      setExpandedClasses(expand);
       setGraph(parsed);
       setBaseGraph(parsed);
+      if (!overrides?.keepView) setCanvasKey((key) => key + 1);
+      if (useEmpty) return;
       // If the server returned a clean graph without applied persisted edits, archive any local audit history
       // so “active edits” reflects only new work in this session.
       if (!parsed.applied_edits || parsed.applied_edits.length === 0) {
         archiveAllAuditEntries();
       }
     } catch (e: unknown) {
+      if (request !== graphRequestRef.current) return;
       const message = formatApiError(e);
       setErr(message || "Failed to load graph");
       setGraph(null);
@@ -1033,7 +1056,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [api, archiveAllAuditEntries, crossModules, enqueueGraphTask, includeQuantities, includeSubsections, includeInheritance, isLightMode, normalizedNamespace, pkg, root, setStartEmpty, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
+  }, [archiveAllAuditEntries, fetchGraph, normalizedNamespace, pkg, root, setStartEmpty, startEmpty, token, workspaceBranch]);
 
   const resetEmptyCanvas = useCallback(async () => {
     if (!token) {
@@ -1048,11 +1071,10 @@ export default function App() {
       archiveAuditTrail();
       setGraph(null);
       setBaseGraph(null);
-      setUmlState(null);
       setSelected(null);
       setSelectedClassId(null);
       setSelectedQuantityId(null);
-      await loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, branch: workspaceBranch, forceEmpty: true });
+      await loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, branch: workspaceBranch, forceEmpty: true, expand: [] });
       setCanvasStatus("Canvas reset to empty.");
     } catch (e: unknown) {
       setCanvasStatus(`Reset failed: ${formatApiError(e)}`);
@@ -1183,7 +1205,7 @@ export default function App() {
     setQuantityActionErr(null);
     setDiffLoading(true);
     setGraph(null); // switch to diff mode
-    setGraphHandle(null);
+    const request = ++graphRequestRef.current;
     try {
       const params = {
         root,
@@ -1212,18 +1234,19 @@ export default function App() {
           )
         ).data;
 
+      if (request !== graphRequestRef.current) return;
       const parsed = ensureDiffResponse(responseData);
       setDiffData(parsed);
+      setCanvasKey((key) => key + 1);
       syncWorkspaceFromResponse(responseData);
     } catch (e: unknown) {
+      if (request !== graphRequestRef.current) return;
       setErr(formatApiError(e));
       setDiffData(null);
     } finally {
       setDiffLoading(false);
     }
   };
-
-  const buildUmlState = useCallback((g: ApiGraph | null): UmlGraphState | null => buildUmlStateFromGraph(g), []);
 
   const seedAuditFromAppliedEdits = useCallback(
     (graphWithEdits: ApiGraph | null) => {
@@ -1254,11 +1277,11 @@ export default function App() {
       const blankGraph: ApiGraph = { package: targetPkg, root: "", nodes: [], edges: [] };
       setMode("graph");
       setDiffData(null);
-      setGraphHandle(null);
       archiveAuditTrail();
+      graphRequestRef.current += 1;
       setGraph(blankGraph);
       setBaseGraph(blankGraph);
-      setUmlState(buildUmlState(blankGraph));
+      setCanvasKey((key) => key + 1);
       setSelected(null);
       setSelectedClassId(null);
       setSelectedQuantityId(null);
@@ -1266,11 +1289,11 @@ export default function App() {
       setPkg(targetPkg);
       setEditableMode(true);
       setCanvasStatus(null);
-      await loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, forceEmpty: true });
+      await loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, forceEmpty: true, expand: [] });
     } else {
       await loadGraph({ forceEmpty: false });
     }
-  }, [archiveAuditTrail, auditTrail.length, baseGraph?.package, buildUmlState, emptyCanvasActive, graph?.package, loadGraph, normalizedNamespace, resetEmptyCanvas, scratchPackage, setPkg, setSelected, setStartEmpty]);
+  }, [archiveAuditTrail, auditTrail.length, baseGraph?.package, emptyCanvasActive, graph?.package, loadGraph, normalizedNamespace, resetEmptyCanvas, scratchPackage, setPkg, setSelected, setStartEmpty]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -1278,8 +1301,10 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    setUmlState(buildUmlState(graph));
-  }, [buildUmlState, graph]);
+    expandedRef.current = [];
+    expandIntentRef.current = [];
+    setExpandedClasses([]);
+  }, [pkg, root]);
 
   useEffect(() => {
     seedAuditFromAppliedEdits(graph);
@@ -1476,6 +1501,9 @@ export default function App() {
   // Store edits on the server (all or none) and show the graph it rebuilds from the edited schema.
   const submitEdits = async (edits: EditRequest[]): Promise<ApiGraph> => {
     const targetPackage = graph?.package || pkg;
+    // The stored edit always shows; a graph request still on its way is outdated by it.
+    graphRequestRef.current += 1;
+    const expand = expandIntentRef.current;
     const res = await api.post(
       "/schema/edits",
       { package: targetPackage, edits },
@@ -1488,6 +1516,7 @@ export default function App() {
           allow_cross_module: crossModules,
           base_namespace: normalizedNamespace || undefined,
           empty: startEmpty ? true : undefined,
+          expand: expand.length ? expand.join(",") : undefined,
           // Dev Mode checks and draws the edits on the branch it shows.
           branch: isLightMode ? undefined : workspaceBranch || undefined,
         },
@@ -1498,9 +1527,11 @@ export default function App() {
     // A root the edits renamed follows its class; a removed one leaves the whole module.
     if ((updated.root ?? "") !== (root ?? "")) setRoot(updated.root ?? "");
     const merged = replayGraphWithAudit(updated);
+    expandedRef.current = expand;
+    expandIntentRef.current = expand;
+    setExpandedClasses(expand);
     setBaseGraph(updated);
     setGraph(merged);
-    setUmlState(buildUmlState(merged));
     return updated;
   };
 
@@ -1803,6 +1834,36 @@ export default function App() {
     [applyForwardChange, auditTrail, filterActiveAuditForPackage, normalizePackageName, pkg]
   );
 
+  // Shows or hides a class's subclasses: the server redraws the graph with the new set of expanded
+  // classes, and the canvas adds or removes only the classes that differ. A quick second click builds
+  // on the first; only the answer to the latest request is shown.
+  const toggleSubclasses = useCallback(
+    async (classId: string) => {
+      if (loading) return;
+      const current = expandIntentRef.current;
+      const next = current.includes(classId) ? current.filter((id) => id !== classId) : [...current, classId];
+      expandIntentRef.current = next;
+      const request = ++graphRequestRef.current;
+      setErr(null);
+      try {
+        const parsed = await fetchGraph({
+          pkg: graph?.package || pkg, root: startEmpty ? "" : root, namespace: normalizedNamespace,
+          branch: workspaceBranch ?? "", empty: startEmpty, expand: next,
+        });
+        if (request !== graphRequestRef.current) return;
+        expandedRef.current = next;
+        setExpandedClasses(next);
+        setBaseGraph(parsed);
+        setGraph(replayGraphWithAudit(parsed));
+      } catch (e: unknown) {
+        if (request !== graphRequestRef.current) return;
+        expandIntentRef.current = expandedRef.current;
+        setErr(formatApiError(e) || "Failed to load graph");
+      }
+    },
+    [fetchGraph, graph?.package, loading, normalizedNamespace, pkg, replayGraphWithAudit, root, startEmpty, workspaceBranch]
+  );
+
   const rebuildGraphWithAudit = useCallback(
     (entries: AuditTrailEntry[]) => {
       const baseline = baseGraph ?? graph;
@@ -1811,9 +1872,8 @@ export default function App() {
       const applicable = filterActiveAuditForPackage(entries, targetPackage).filter((a) => !a.editIds?.length);
       const rebuilt = applicable.reduce((acc, curr) => applyForwardChange(acc, curr.change), baseline);
       setGraph(rebuilt);
-      setUmlState(buildUmlState(rebuilt));
     },
-    [applyForwardChange, baseGraph, buildUmlState, filterActiveAuditForPackage, graph, normalizePackageName, pkg]
+    [applyForwardChange, baseGraph, filterActiveAuditForPackage, graph, normalizePackageName, pkg]
   );
 
   // Deletes the stored edits of audit entries (and a module's own edits) in one request: all or none.
@@ -1839,7 +1899,7 @@ export default function App() {
         return;
       }
       setAuditTrail(remaining as AuditTrailEntry[]);
-      await loadGraph();
+      await loadGraph({ keepView: true });
       return;
     }
 
@@ -1862,7 +1922,7 @@ export default function App() {
       return;
     }
     setAuditTrail((prev) => prev.filter((entry) => !auditEntriesForCurrentPackage.includes(entry)));
-    await loadGraph();
+    await loadGraph({ keepView: true });
   };
 
   useEffect(() => {
@@ -1982,11 +2042,12 @@ export default function App() {
     setSelected(null);
   }, [setSelected]);
 
-  const focusRootSection = useCallback(() => {
+  // Selects the root class of a graph once the canvas has laid it out, leaving the fitted view as it is.
+  const focusRootSection = useCallback((handle: GraphExportHandle) => {
     const targetRoot = normalizeId(currentGraph?.root || root);
     if (!targetRoot) return;
 
-    const handled = graphHandle?.focusNode(targetRoot);
+    const handled = handle.focusNode(targetRoot, { moveViewport: false });
     if (handled) return;
 
     const fallbackNode = currentGraph?.nodes?.find?.((n) => {
@@ -2012,19 +2073,13 @@ export default function App() {
       setSelectedClassId(fallbackId);
       setSelectedQuantityId(null);
     }
-  }, [currentGraph, graphHandle, root, setSelected, setSelectedClassId, setSelectedQuantityId]);
-
-  useEffect(() => {
-    focusRootSection();
-  }, [focusRootSection]);
+  }, [currentGraph, root, setSelected, setSelectedClassId, setSelectedQuantityId]);
 
   const returnToHome = useCallback(() => {
     setMode("graph");
     setGraph(null);
     setBaseGraph(null);
     setDiffData(null);
-    setGraphHandle(null);
-    setUmlState(null);
     setSelectedClassId(null);
     setSelectedQuantityId(null);
     setSelected(null);
@@ -2391,11 +2446,10 @@ export default function App() {
         };
         setMode("graph");
         setDiffData(null);
-        setGraphHandle(null);
+        graphRequestRef.current += 1;
         setGraph(nextGraph);
         setBaseGraph(nextGraph);
-        const nextUml = buildUmlState(nextGraph);
-        setUmlState(nextUml);
+        setCanvasKey((key) => key + 1);
         archiveAuditTrail();
         setSelectedClassId(null);
         setSelectedQuantityId(null);
@@ -2654,7 +2708,7 @@ export default function App() {
             </div>
             {STATIC_MODE ? (
               <Suspense fallback={null}>
-                <StaticSitePanel onEditsChanged={() => void loadGraph()} />
+                <StaticSitePanel onEditsChanged={() => void loadGraph({ keepView: true })} />
               </Suspense>
             ) : null}
             {isLightMode ? (
@@ -3037,6 +3091,9 @@ export default function App() {
                   <button className="btn secondary" type="button" onClick={returnToHome}>
                     Back to home
                   </button>
+                  <button className="btn secondary" type="button" onClick={() => graphHandle?.refit()} disabled={!graphHandle}>
+                    Fit to view
+                  </button>
                   <div>
                     Base: {diffData.base.branch} ({diffData.base.sha.slice(0, 7)}) → Head: {diffData.head.branch} ({diffData.head.sha.slice(0, 7)})
                   </div>
@@ -3059,6 +3116,8 @@ export default function App() {
                 showMethods={showMethods}
                 theme={theme}
                 onReady={setGraphHandle}
+                layoutKey={canvasKey}
+                onLayoutReady={focusRootSection}
               />
             </>
           ) : graph ? (
@@ -3067,6 +3126,16 @@ export default function App() {
                 <div className="graph-toolbar">
                   <button className="btn secondary" type="button" onClick={returnToHome} style={{ alignSelf: "flex-start" }}>
                     Back to home
+                  </button>
+                  <button
+                    className="btn secondary"
+                    type="button"
+                    onClick={() => graphHandle?.refit()}
+                    disabled={!graphHandle}
+                    title="Fit the whole diagram into view"
+                    style={{ alignSelf: "flex-start" }}
+                  >
+                    Fit to view
                   </button>
                   <div className="label" style={{ marginBottom: 4 }}>Canvas mode</div>
                   <div className="toggle-group">
@@ -3127,6 +3196,8 @@ export default function App() {
                   showMethods={showMethods}
                   theme={theme}
                   onReady={setGraphHandle}
+                  layoutKey={canvasKey}
+                  onLayoutReady={focusRootSection}
                   onSelectClass={handleCanvasClassSelect}
                   onCreateQuantity={createQuantityOnCanvas}
                   onCreateClass={createClassOnCanvas}
@@ -3135,6 +3206,8 @@ export default function App() {
                   creatingClass={creatingClass}
                   onClearSelection={handleCanvasClear}
                   editableMode={editableMode}
+                  expandedClassIds={expandedClasses}
+                  onToggleSubclasses={toggleSubclasses}
                 />
               </div>
             </>

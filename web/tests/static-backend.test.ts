@@ -62,6 +62,14 @@ describe("static backend", () => {
     expect(runCore).not.toHaveBeenCalled();
   });
 
+  it("asks the core for expanded subclasses and hands it the class list", async () => {
+    const { backend, runCore } = setup();
+    await backend.request("GET", "/schema", { package: "ns.pkg.a", root: "Root", base_namespace: "ns.pkg", expand: "ns.pkg.a.Root, ns.pkg.a.Other" });
+    expect(runCore).toHaveBeenLastCalledWith(expect.objectContaining({
+      op: "graph", flags: expect.objectContaining({ expand: ["ns.pkg.a.Root", "ns.pkg.a.Other"] }),
+    }));
+  });
+
   it("asks the core when the filters differ or edits exist, and stores new edits in the browser", async () => {
     const { backend, runCore } = setup();
     await backend.request("GET", "/schema", { package: "ns.pkg.a", root: "Root", include_quantities: false, base_namespace: "ns.pkg" });

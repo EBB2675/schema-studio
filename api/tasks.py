@@ -30,6 +30,7 @@ def build_graph_task(
     include_subsections: bool = True,
     include_inheritance: bool = True,
     allow_cross_module: bool = True,
+    expand: list[str] | None = None,
     owner_id: str | None = None,
     edits: list[dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
@@ -64,6 +65,7 @@ def build_graph_task(
         include_subsections=include_subsections,
         include_inheritance=include_inheritance,
         allow_cross_module=allow_cross_module,
+        expand=expand or (),
     )
     return {"branch": br, "sha": sha, "graph": graph, "owner_id": owner_str}
 

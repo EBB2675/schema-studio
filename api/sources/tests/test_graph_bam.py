@@ -89,7 +89,7 @@ def test_nomad_nodes_carry_no_openbis_facts():
     package = document["modules"][0]["name"]
     result = graph.build_graph(schema, document, package)
     base_fields = {"id", "kind", "label", "doc", "module", "dtype", "shape", "card", "owner", "methods"}
-    assert {key for node in result["nodes"] for key in node} == base_fields | {"unit"}
+    assert {key for node in result["nodes"] for key in node} == base_fields | {"unit", "subclasses"}
 
 
 def test_frontend_fixture_is_what_the_adapter_builds(snapshot):

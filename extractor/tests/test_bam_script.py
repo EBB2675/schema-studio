@@ -264,7 +264,9 @@ def linkml_graph(document: dict, package: str, **flags):
 
 
 def without_added_fields(result: dict) -> dict:
-    nodes = [{key: value for key, value in node.items() if key not in ADDED_FIELDS} for node in result["nodes"]]
+    # The subclass count is the adapter's own too; the graph builder has none.
+    left_out = (*ADDED_FIELDS, "subclasses")
+    nodes = [{key: value for key, value in node.items() if key not in left_out} for node in result["nodes"]]
     return {**result, "nodes": nodes}
 
 
