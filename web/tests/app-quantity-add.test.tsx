@@ -235,6 +235,8 @@ describe('App editable quantity add flow', () => {
       ).find((btn) => btn.getAttribute('title')?.includes('Toggle editing')) ?? (await screen.findByRole('button', { name: /^Edit$/i }));
     await user.click(editToggle);
     await user.click(await screen.findByRole('button', { name: /^Trigger quantity add$/i }));
+    // The audit trail starts closed; open it to reach its undo and clear buttons.
+    await user.click(screen.getByRole('button', { name: /^Audit trail/, expanded: false }));
   };
 
   it('undo deletes the stored edits of a change in one request', async () => {
