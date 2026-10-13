@@ -447,6 +447,40 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   box-shadow: 0 0 0 2px var(--input-focus-shadow);
 }
 
+/* Collapsed right panel: a vertical tab naming what it opens */
+.side-rail-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 0;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+
+.side-rail-tab:hover,
+.side-rail-tab:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--input-focus-shadow);
+}
+
+.side-rail-label {
+  writing-mode: vertical-rl;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
 .workspace-toolbar {
   padding: 10px 12px;
   font-size: 13px;

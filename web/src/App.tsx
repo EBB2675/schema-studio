@@ -182,10 +182,8 @@ export default function App() {
     const stored = Number.parseInt(window.localStorage.getItem("schema-uml-doc-width") || "", 10);
     return Number.isFinite(stored) ? stored : 380;
   });
-  const [docPanelCollapsed, setDocPanelCollapsed] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem("schema-uml-doc-collapsed") === "1";
-  });
+  // The right panel starts collapsed; the canvas gets the room until someone opens it.
+  const [docPanelCollapsed, setDocPanelCollapsed] = useState<boolean>(true);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [linkmlStatus, setLinkmlStatus] = useState<string | null>(null);
   const [canvasStatus, setCanvasStatus] = useState<string | null>(null);
@@ -762,11 +760,6 @@ export default function App() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("schema-uml-doc-width", String(clampDocWidth(docPanelWidth)));
   }, [clampDocWidth, docPanelWidth]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem("schema-uml-doc-collapsed", docPanelCollapsed ? "1" : "0");
-  }, [docPanelCollapsed]);
 
   useEffect(() => {
     setDocPanelWidth((w) => clampDocWidth(w));
@@ -3152,7 +3145,7 @@ export default function App() {
         ref={workspaceRef}
         style={{
           gridTemplateColumns: docPanelCollapsed
-            ? "minmax(0, 1fr) 40px"
+            ? "minmax(0, 1fr) 44px"
             : `minmax(0, 1fr) 10px ${docPanelWidth}px`,
         }}
       >
@@ -3393,24 +3386,38 @@ export default function App() {
             flexDirection: "column",
             height: "100vh",
             borderLeft: "1px solid var(--panel-border)",
-            padding: docPanelCollapsed ? "10px 4px" : "10px",
+            padding: docPanelCollapsed ? "10px 6px" : "10px",
             gap: "10px",
             overflowY: docPanelCollapsed ? "hidden" : "auto"
           }}
         >
-          <div style={{ display: "flex", justifyContent: docPanelCollapsed ? "center" : "flex-end" }}>
+          {docPanelCollapsed ? (
             <button
               type="button"
-              className="btn ghost small"
-              onClick={() => setDocPanelCollapsed((v) => !v)}
-              aria-expanded={!docPanelCollapsed}
+              className="side-rail-tab"
+              onClick={() => setDocPanelCollapsed(false)}
+              aria-expanded={false}
               aria-controls="right-panel-sections"
-              aria-label={docPanelCollapsed ? "Expand right panel" : "Collapse right panel"}
-              title={docPanelCollapsed ? "Show documentation" : "Hide panel"}
+              title="Open Documentation and Under the hood"
             >
-              {docPanelCollapsed ? "«" : "»"}
+              <span aria-hidden>«</span>
+              <span className="side-rail-label">Documentation · Under the hood</span>
             </button>
-          </div>
+          ) : (
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                className="btn ghost small"
+                onClick={() => setDocPanelCollapsed(true)}
+                aria-expanded
+                aria-controls="right-panel-sections"
+                aria-label="Collapse right panel"
+                title="Hide panel"
+              >
+                »
+              </button>
+            </div>
+          )}
 
           {/* Kept mounted while collapsed so the sections keep their state */}
           <div

@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { useWorkspaceStore } from '../src/store/workspace';
 
-// The right panel holds Documentation and Under the hood and collapses to a
-// thin rail; the Audit trail sits in the left sidebar.
+// The right panel holds Documentation and Under the hood, starts collapsed to a
+// labelled tab, and opens from it; the Audit trail sits in the left sidebar.
 const mockGet = vi.fn();
 
 vi.mock('axios', () => {
@@ -46,7 +46,6 @@ describe('right panel', () => {
     useWorkspaceStore.getState().setStartEmpty(true);
     window.localStorage.setItem('schema-uml-token', 't0k');
     window.localStorage.setItem('schema-uml-username', 'user');
-    window.localStorage.removeItem('schema-uml-doc-collapsed');
   });
 
   afterEach(() => cleanup());
@@ -67,21 +66,19 @@ describe('right panel', () => {
     expect(document.querySelector('aside.sidebar')!.contains(document.getElementById('section-audit'))).toBe(true);
   });
 
-  it('collapses and expands, and remembers the choice', async () => {
+  it('starts collapsed and opens from the labelled tab', async () => {
     const user = userEvent.setup();
     render(<App />);
     await waitFor(() => expect(mockGet).toHaveBeenCalledWith('/schema/profiles'));
     const right = document.getElementById('right-panel-sections')!;
+    expect(right).not.toBeVisible();
+    expect(screen.queryByRole('separator', { name: /resize documentation panel/i })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: /Documentation · Under the hood/ }));
     expect(right).toBeVisible();
     expect(screen.getByRole('separator', { name: /resize documentation panel/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Collapse right panel' }));
     expect(right).not.toBeVisible();
-    expect(screen.queryByRole('separator', { name: /resize documentation panel/i })).toBeNull();
-    expect(window.localStorage.getItem('schema-uml-doc-collapsed')).toBe('1');
-
-    await user.click(screen.getByRole('button', { name: 'Expand right panel' }));
-    expect(right).toBeVisible();
-    expect(window.localStorage.getItem('schema-uml-doc-collapsed')).toBe('0');
   });
 });
