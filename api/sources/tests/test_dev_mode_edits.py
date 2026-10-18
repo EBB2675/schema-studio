@@ -7,6 +7,7 @@ import httpx
 import pytest
 from bson import ObjectId
 
+from api.sources.linkml_yaml import export_name
 from api.sources.tests import fake_snapshot
 
 USER = {"id": "u1", "username": "tester"}
@@ -180,7 +181,7 @@ async def test_roots_and_linkml_read_the_same_branch(client: httpx.AsyncClient):
     roots = await client.get("/roots", params={"package": PACKAGE, "branch": "feature"})
     assert roots.json()["sections"] == ["Added", "RootSection"]
     exported = await client.get("/schema/linkml", params={"package": PACKAGE, "branch": "feature"})
-    assert exported.status_code == 200 and f"{PACKAGE}.Added:" in exported.text
+    assert exported.status_code == 200 and f"{export_name(PACKAGE)}_Added:" in exported.text
     assert {call.get("source_version") for call in fake_snapshot.CALLS} == {"sha-of-feature"}
 
 

@@ -281,6 +281,60 @@ def test_header_summarises_the_report():
     assert report_summary([]) == "conversion report: everything converted"
 
 
+def test_download_uses_valid_names_and_a_range_on_every_attribute():
+    import re
+
+    from api.sources.core import snapshot_yaml
+
+    enum_id = f"{M}.Child.kind"
+    doc = document(
+        [
+            cls("Base", [quantity("a")]),
+            cls("Mixin", [quantity("amplitude", '{"type_data": "complex128", "type_kind": "numpy"}')]),
+            cls("Child", [{"name": "kind", "kind": "quantity", "range": {"kind": "enum", "name": enum_id}},
+                          subsection("parts", f"{M}.Base", True)],
+                bases=["Base", "Mixin"], inherited=[("a", "Base"), ("amplitude", "Mixin")]),
+        ],
+        enums=[{"id": enum_id, "values": ["x"]}],
+    )
+    conversion = convert_nomad(doc)
+    internal = json.loads(json.dumps(conversion.schema))
+    text = snapshot_yaml({"linkml": conversion.schema, "profile": "nomad-simulations", "source": doc["source"],
+                          "tools": {}, "report": conversion.report})
+    assert conversion.schema == internal  # the app's schema keeps its dotted names
+    assert partial_reasons(conversion.report)[f"{M}.Mixin.amplitude"] == "unmapped source type: numpy complex128"
+
+    exported = yaml.safe_load(text)
+    classes, enums = exported["classes"], exported["enums"]
+    identifier = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+    for name, element in [*classes.items(), *enums.items()]:
+        assert identifier.match(name) and element["name"] == name, name
+    types = set(SchemaView(text).all_types())
+    for name, element in classes.items():
+        assert element.get("is_a") is None or element["is_a"] in classes
+        assert all(base in classes for base in element.get("mixins", ()))
+        for slot in (element.get("attributes") or {}).values():
+            assert slot.get("range") in {*classes, *enums, *types}, (name, slot["name"])
+
+    child = classes["pkg_mod_Child"]
+    assert child["annotations"]["source_id"] == f"{M}.Child"
+    assert child["class_uri"] == internal["classes"][f"{M}.Child"]["class_uri"]
+    assert child["attributes"]["kind"]["slot_uri"] == internal["classes"][f"{M}.Child"]["attributes"]["kind"]["slot_uri"]
+    assert (child["is_a"], child["mixins"]) == ("pkg_mod_Base", ["pkg_mod_Mixin"])
+    assert child["attributes"]["kind"]["range"] == "pkg_mod_Child_kind"
+    assert child["attributes"]["parts"]["range"] == "pkg_mod_Base"
+    assert enums["pkg_mod_Child_kind"]["annotations"]["source_id"] == enum_id
+    assert classes["pkg_mod_Mixin"]["attributes"]["amplitude"]["range"] == "Any"
+    assert classes["Any"] == {"name": "Any", "class_uri": "linkml:Any"}
+
+
+def test_download_refuses_names_that_would_clash():
+    from api.sources.linkml_yaml import ExportError, export_schema
+
+    with pytest.raises(ExportError, match="would both be exported as 'a_b'"):
+        export_schema({"classes": {"a.b": {"name": "a.b"}, "a_b": {"name": "a_b"}}})
+
+
 def test_namespace_is_the_pages_site():
     schema = convert_nomad(document([cls("C", [])])).schema
     assert schema["prefixes"]["nomadsim"] == "https://ebb2675.github.io/schema-studio/linkml/nomadsim/"
