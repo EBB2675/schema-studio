@@ -221,21 +221,21 @@ def with_stored(
 
 
 def snapshot_yaml(snapshot: Mapping[str, Any]) -> str:
-    """The snapshot's schema as converted, as LinkML YAML."""
-    from .linkml_yaml import dump_yaml
+    """The snapshot's schema as converted, as LinkML YAML (with export names, see `export_schema`)."""
+    from .linkml_yaml import dump_yaml, export_schema
 
     return dump_yaml(
-        snapshot["linkml"], profile=snapshot["profile"], source=snapshot["source"], tools=snapshot["tools"],
+        export_schema(snapshot["linkml"]), profile=snapshot["profile"], source=snapshot["source"], tools=snapshot["tools"],
         report=snapshot["report"],
     )
 
 
 def edited_yaml(state: Edited) -> str:
-    """The edited schema as LinkML YAML; marked as edited when an edit applied."""
-    from .linkml_yaml import dump_yaml
+    """The edited schema as LinkML YAML (with export names); marked as edited when an edit applied."""
+    from .linkml_yaml import dump_yaml, export_schema
 
     snapshot = state.snapshot
     return dump_yaml(
-        state.schema, profile=snapshot["profile"], source=snapshot["source"], tools=snapshot["tools"],
+        export_schema(state.schema), profile=snapshot["profile"], source=snapshot["source"], tools=snapshot["tools"],
         edited=bool(state.applied), report=snapshot["report"],
     )

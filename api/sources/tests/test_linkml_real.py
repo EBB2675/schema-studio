@@ -22,6 +22,7 @@ MODULES = {
 @pytest.mark.parametrize("key,module", [(key, module) for key, modules in MODULES.items() for module in modules])
 def test_module_exports_and_loads(key, module, studio_home):
     from api.light_mode.schema_source import SCHEMA_PROFILES, schema_available
+    from api.sources.linkml_yaml import export_name
     from api.sources.snapshots import get_snapshot, snapshot_yaml
 
     profile = SCHEMA_PROFILES[key]
@@ -33,7 +34,7 @@ def test_module_exports_and_loads(key, module, studio_home):
     view = SchemaView(text)
     document = snapshot["extraction"]
     for row in document["classes"]:
-        induced = {str(slot.name) for slot in view.class_induced_slots(row["id"])}
+        induced = {str(slot.name) for slot in view.class_induced_slots(export_name(row["id"]))}
         assert induced == {ref["name"] for ref in row["effective_attributes"]}, row["id"]
     assert not [row for row in snapshot["report"] if row["reason"].startswith("inheritance mismatch")]
 
@@ -52,6 +53,7 @@ def test_whole_profile_converts(key, studio_home):
 
 def test_whole_bam_datamodel_exports_and_loads(studio_home):
     from api.light_mode.schema_source import SCHEMA_PROFILES, schema_available
+    from api.sources.linkml_yaml import ANY_CLASS
     from api.sources.snapshots import get_snapshot, snapshot_yaml
 
     profile = SCHEMA_PROFILES["bam-masterdata"]
@@ -59,6 +61,7 @@ def test_whole_bam_datamodel_exports_and_loads(studio_home):
         pytest.skip("environment for bam-masterdata is not set up")
     snapshot = get_snapshot(profile)
     view = SchemaView(snapshot_yaml(snapshot))
-    assert len(view.all_classes()) == len(snapshot["extraction"]["classes"])
+    # The export adds the class `Any` as the range of attributes whose source type has no LinkML type.
+    assert len(set(view.all_classes()) - {ANY_CLASS}) == len(snapshot["extraction"]["classes"])
     assert len(view.all_enums()) == len(snapshot["extraction"]["enums"])
     assert not [row for row in snapshot["report"] if row["reason"].startswith("inheritance mismatch")]
