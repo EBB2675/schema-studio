@@ -146,7 +146,7 @@ def _usage_from_normalize_method(cls) -> List[UsageEntry]:
         return entries
 
     module_name = getattr(func, "__module__", cls.__module__)
-    qualname = f"{module_name}.{cls.__name__}.normalize"
+    qualname = f"{module_name}.{func.__qualname__}"
 
     entries.append(
         UsageEntry(

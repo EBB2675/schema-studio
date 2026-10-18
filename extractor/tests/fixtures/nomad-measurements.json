@@ -4086,7 +4086,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.ActivityResult.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4095,7 +4095,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.ActivityStep.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4119,7 +4119,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.Component.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4158,7 +4158,7 @@
     "doc": "Will attempt to fill the `reference` from the `lab_id` or vice versa.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.metainfo.basesections.v1",
-    "qualname": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference.normalize",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.EntityReference.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4176,7 +4176,7 @@
     "doc": "- If the instance is of type `EntryData`, it sets the archive's entry name based on the instance's name.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.metainfo.basesections.v1",
-    "qualname": "nomad.datamodel.metainfo.basesections.v1.Entity.normalize",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.BaseSection.normalize",
     "short_name": "normalize"
    },
    {
@@ -4209,7 +4209,7 @@
     "doc": "Will attempt to fill the `reference` from the `lab_id` or vice versa.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.metainfo.basesections.v1",
-    "qualname": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference.normalize",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.EntityReference.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4227,7 +4227,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.MeasurementResult.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4245,7 +4245,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.ProcessStep.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4276,7 +4276,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.SectionReference.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4351,7 +4351,7 @@
     "doc": "- Updates the `archive.workflow2.inputs` list with links to the input samples.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.metainfo.basesections.v1",
-    "qualname": "nomad.datamodel.metainfo.basesections.v1.InSituMeasurement.normalize",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.Measurement.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4360,7 +4360,7 @@
     "doc": "The normalizer for the `EntityReference` class.",
     "kind": "normalize_method",
     "module": "nomad_measurements.general",
-    "qualname": "nomad_measurements.general.ProcessReference.normalize",
+    "qualname": "nomad_measurements.general.ActivityReference.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4369,7 +4369,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.Accessory.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4387,7 +4387,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.AttenuatorSettings.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4396,7 +4396,7 @@
     "doc": "Will attempt to fill the `reference` from the `lab_id` or vice versa.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.metainfo.basesections.v1",
-    "qualname": "nomad.datamodel.metainfo.basesections.v1.CrystallographicTransmissionSampleReference.normalize",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.EntityReference.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4414,7 +4414,7 @@
     "doc": "The normalizer for the `SettingOverWavelengthRange` class.",
     "kind": "normalize_method",
     "module": "nomad_measurements.transmission.schema",
-    "qualname": "nomad_measurements.transmission.schema.DetectorGain.normalize",
+    "qualname": "nomad_measurements.transmission.schema.SettingOverWavelengthRange.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4423,7 +4423,7 @@
     "doc": "The normalizer for the `SettingOverWavelengthRange` class.",
     "kind": "normalize_method",
     "module": "nomad_measurements.transmission.schema",
-    "qualname": "nomad_measurements.transmission.schema.DetectorIntegrationTime.normalize",
+    "qualname": "nomad_measurements.transmission.schema.SettingOverWavelengthRange.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4432,7 +4432,7 @@
     "doc": "The normalizer for the `SettingOverWavelengthRange` class.",
     "kind": "normalize_method",
     "module": "nomad_measurements.transmission.schema",
-    "qualname": "nomad_measurements.transmission.schema.DetectorSettings.normalize",
+    "qualname": "nomad_measurements.transmission.schema.SettingOverWavelengthRange.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4489,7 +4489,7 @@
     "doc": "The normalizer for the `SettingOverWavelengthRange` class.",
     "kind": "normalize_method",
     "module": "nomad_measurements.transmission.schema",
-    "qualname": "nomad_measurements.transmission.schema.LampSettings.normalize",
+    "qualname": "nomad_measurements.transmission.schema.SettingOverWavelengthRange.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4498,7 +4498,7 @@
     "doc": "- If the instance is of type `EntryData`, it sets the archive's entry name based on the instance's name.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.metainfo.basesections.v1",
-    "qualname": "nomad.datamodel.metainfo.basesections.v1.LightSource.normalize",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.BaseSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4507,7 +4507,7 @@
     "doc": "- If the instance is of type `EntryData`, it sets the archive's entry name based on the instance's name.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.metainfo.basesections.v1",
-    "qualname": "nomad.datamodel.metainfo.basesections.v1.Monochromator.normalize",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.BaseSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4516,7 +4516,7 @@
     "doc": "The normalizer for the `SettingOverWavelengthRange` class.",
     "kind": "normalize_method",
     "module": "nomad_measurements.transmission.schema",
-    "qualname": "nomad_measurements.transmission.schema.MonochromatorSettings.normalize",
+    "qualname": "nomad_measurements.transmission.schema.SettingOverWavelengthRange.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4525,7 +4525,7 @@
     "doc": "The normalizer for the `SettingOverWavelengthRange` class.",
     "kind": "normalize_method",
     "module": "nomad_measurements.transmission.schema",
-    "qualname": "nomad_measurements.transmission.schema.MonochromatorSlitWidth.normalize",
+    "qualname": "nomad_measurements.transmission.schema.SettingOverWavelengthRange.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4559,7 +4559,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.RawFileTransmissionData.normalize",
+    "qualname": "nomad.datamodel.data.EntryData.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4577,7 +4577,7 @@
     "doc": "Adds the name of the instrument to the `results.eln.instruments` list.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.metainfo.basesections.v1",
-    "qualname": "nomad.datamodel.metainfo.basesections.v1.Spectrophotometer.normalize",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.Instrument.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4586,7 +4586,7 @@
     "doc": "Will attempt to fill the `reference` from the `lab_id` or vice versa.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.metainfo.basesections.v1",
-    "qualname": "nomad.datamodel.metainfo.basesections.v1.TransmissionSampleReference.normalize",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.EntityReference.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4595,7 +4595,7 @@
     "doc": "- Updates the `archive.workflow2.inputs` list with links to the input samples.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.metainfo.basesections.v1",
-    "qualname": "nomad.datamodel.metainfo.basesections.v1.UVVisNirTransmission.normalize",
+    "qualname": "nomad.datamodel.metainfo.basesections.v1.Measurement.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4604,7 +4604,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.UVVisNirTransmissionResult.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -4613,7 +4613,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.UVVisNirTransmissionSettings.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ]

@@ -8714,7 +8714,7 @@
     "doc": "The normalizer for the `BaseSection` class.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.metainfo.basesections.v2",
-    "qualname": "nomad.datamodel.metainfo.basesections.v2.Entity.normalize",
+    "qualname": "nomad.datamodel.metainfo.basesections.v2.BaseSection.normalize",
     "short_name": "normalize"
    },
    {
@@ -8729,7 +8729,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.GeometricalSpace.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -8738,7 +8738,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.SubSystem.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -8747,7 +8747,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.SubSystemProperties.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -8756,7 +8756,7 @@
     "doc": "The normalizer for the `BaseSection` class.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.metainfo.basesections.v2",
-    "qualname": "nomad.datamodel.metainfo.basesections.v2.System.normalize",
+    "qualname": "nomad.datamodel.metainfo.basesections.v2.BaseSection.normalize",
     "short_name": "normalize"
    },
    {
@@ -8794,7 +8794,7 @@
     "doc": "The normalizer for the `BaseSection` class.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.metainfo.basesections.v2",
-    "qualname": "nomad.datamodel.metainfo.basesections.v2.BaseSpinOrbitalState.normalize",
+    "qualname": "nomad.datamodel.metainfo.basesections.v2.BaseSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -8842,7 +8842,7 @@
     "doc": "The normalizer for the `BaseSection` class.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.metainfo.basesections.v2",
-    "qualname": "nomad.datamodel.metainfo.basesections.v2.ParticleState.normalize",
+    "qualname": "nomad.datamodel.metainfo.basesections.v2.BaseSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -8899,7 +8899,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.BSE.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -8908,7 +8908,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.BaseModelMethod.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -8926,7 +8926,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.BrokenSymmetryCenter.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -8959,7 +8959,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.CoreHoleSpectra.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -8990,7 +8990,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.DMFT.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -8999,7 +8999,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.EmpiricalDispersionModel.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9008,7 +9008,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.ExcitedStateMethodology.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9017,7 +9017,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.GW.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9026,7 +9026,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.HF.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9067,7 +9067,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.LocalCorrelation.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9085,7 +9085,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.ModelMethod.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9094,7 +9094,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.ModelMethodElectronic.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9103,7 +9103,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad_simulations.schema_packages.model_method",
-    "qualname": "nomad_simulations.schema_packages.model_method.MultireferenceCI.normalize",
+    "qualname": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9112,7 +9112,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad_simulations.schema_packages.model_method",
-    "qualname": "nomad_simulations.schema_packages.model_method.MultireferencePT.normalize",
+    "qualname": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9121,7 +9121,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad_simulations.schema_packages.model_method",
-    "qualname": "nomad_simulations.schema_packages.model_method.MultireferenceSCF.normalize",
+    "qualname": "nomad_simulations.schema_packages.model_method.BaseMultireferenceMethod.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9139,7 +9139,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.NonlocalCorrelation.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9148,7 +9148,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.OrbitalLocalization.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9175,7 +9175,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.RelativityModel.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9184,7 +9184,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.Screening.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9208,7 +9208,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad_simulations.schema_packages.model_method",
-    "qualname": "nomad_simulations.schema_packages.model_method.SlaterKoster.normalize",
+    "qualname": "nomad_simulations.schema_packages.model_method.TB.normalize",
     "short_name": "normalize"
    },
    {
@@ -9355,7 +9355,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad_simulations.schema_packages.model_method",
-    "qualname": "nomad_simulations.schema_packages.model_method.xTB.normalize",
+    "qualname": "nomad_simulations.schema_packages.model_method.TB.normalize",
     "short_name": "normalize"
    },
    {
@@ -9385,7 +9385,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.AlternativeRepresentation.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9394,7 +9394,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.ChemicalFormula.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9419,7 +9419,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.GlobalSymmetry.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9428,7 +9428,7 @@
     "doc": "Validate array dimensions match parent representation particle count.",
     "kind": "normalize_method",
     "module": "nomad_simulations.schema_packages.model_system",
-    "qualname": "nomad_simulations.schema_packages.model_system.LocalCrystalSymmetry.normalize",
+    "qualname": "nomad_simulations.schema_packages.model_system.LocalSymmetry.normalize",
     "short_name": "normalize"
    },
    {
@@ -9545,7 +9545,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.Representation.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ],
@@ -9554,7 +9554,7 @@
     "doc": "Is called during entry normalization.",
     "kind": "normalize_method",
     "module": "nomad.datamodel.data",
-    "qualname": "nomad.datamodel.data.NumericalSettings.normalize",
+    "qualname": "nomad.datamodel.data.ArchiveSection.normalize",
     "short_name": "normalize"
    }
   ]
