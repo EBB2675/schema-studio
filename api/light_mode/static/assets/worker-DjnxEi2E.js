@@ -362,22 +362,22 @@ def with_stored(
 
 
 def snapshot_yaml(snapshot: Mapping[str, Any]) -> str:
-    """The snapshot's schema as converted, as LinkML YAML."""
-    from .linkml_yaml import dump_yaml
+    """The snapshot's schema as converted, as LinkML YAML (with export names, see \`export_schema\`)."""
+    from .linkml_yaml import dump_yaml, export_schema
 
     return dump_yaml(
-        snapshot["linkml"], profile=snapshot["profile"], source=snapshot["source"], tools=snapshot["tools"],
+        export_schema(snapshot["linkml"]), profile=snapshot["profile"], source=snapshot["source"], tools=snapshot["tools"],
         report=snapshot["report"],
     )
 
 
 def edited_yaml(state: Edited) -> str:
-    """The edited schema as LinkML YAML; marked as edited when an edit applied."""
-    from .linkml_yaml import dump_yaml
+    """The edited schema as LinkML YAML (with export names); marked as edited when an edit applied."""
+    from .linkml_yaml import dump_yaml, export_schema
 
     snapshot = state.snapshot
     return dump_yaml(
-        state.schema, profile=snapshot["profile"], source=snapshot["source"], tools=snapshot["tools"],
+        export_schema(state.schema), profile=snapshot["profile"], source=snapshot["source"], tools=snapshot["tools"],
         edited=bool(state.applied), report=snapshot["report"],
     )
 `,y=`"""Edit operations on a LinkML schema held as plain JSON data.
@@ -1310,6 +1310,10 @@ browser. The graph follows the conventions of \`extractor/graph_builder.py\`:
   \`doc_de\` (the German half of the description), \`mandatory\`, \`section\`, \`iri\`;
 - each class gets an \`inherits\` edge to every ancestor (from \`is_a\` and
   \`mixins\`, in Python's method resolution order), not only to its direct bases;
+- each class node counts its direct subclasses (\`subclasses\`), and the classes
+  named in \`expand\` bring their direct subclasses into the graph, with the
+  classes those hold directly, linked only to classes already in it (the
+  subsections of what they bring are not followed further);
 - the query flags of the graph endpoints are applied here, with the same
   traversal, depth and size limits as the graph builder.
 
@@ -1324,7 +1328,7 @@ class an edit added (\`edit_added\`) is a starting point of its own module.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import Any
 
 # Framework base classes (NOMAD metainfo, openBIS entity types) are not part of a schema.
@@ -1338,6 +1342,11 @@ MAX_DEPTH = 20
 
 class RootNotFound(ValueError):
     """The requested root is not a class the module exposes."""
+
+
+def expand_names(text: str | None) -> tuple[str, ...]:
+    """The classes to expand, from the comma-separated query value."""
+    return tuple(name.strip() for name in (text or "").split(",") if name.strip())
 
 
 def root_namespace(package: str) -> str:
@@ -1569,6 +1578,7 @@ def build_graph(
     allow_cross_module: bool = True,
     base_namespace: str | None = None,
     empty: bool = False,
+    expand: Collection[str] = (),
     *,
     exclude_prefixes: tuple[str, ...] = EXCLUDE_PREFIXES,
     max_nodes: int = MAX_NODES,
@@ -1582,6 +1592,11 @@ def build_graph(
     classes: Mapping[str, Mapping[str, Any]] = schema.get("classes") or {}
     records = {record["id"]: record for record in extraction.get("classes") or ()}
     memo: dict[str, list[str]] = {}
+    subclasses: dict[str, list[str]] = {}
+    for name, cls in classes.items():
+        for base in [cls.get("is_a"), *(cls.get("mixins") or [])]:
+            if base in classes:
+                subclasses.setdefault(base, []).append(name)
 
     nodes: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []
@@ -1599,26 +1614,21 @@ def build_graph(
             edge_keys.add(key)
             edges.append({"source": source, "target": target, "type": kind, "card": card})
 
-    def add_section(name: str, depth: int = 0) -> None:
-        if depth > max_depth or name in seen:
-            return
-        seen.add(name)
+    def add_node(name: str) -> bool:
+        """The class's node and its quantities; False when its module is not drawn."""
         cls = classes[name]
         module = class_module(name, cls)
         if not allowed(module):
-            return
+            return False
         nodes[name] = {
             "id": name, "kind": "section", "label": _title(name, cls),
             "doc": cls.get("description"), "module": module, "dtype": None, "shape": None, "card": None,
             "owner": None, "methods": _methods(records.get(source_class_id(name, cls)), base_namespace),
+            "subclasses": sum(allowed(class_module(sub, classes[sub])) for sub in subclasses.get(name, ())),
             **_class_details(cls),
         }
-        if len(nodes) > max_nodes:
-            return
-
-        members = effective_attributes(name, classes, memo)
         if include_quantities:
-            for _, slot in members:
+            for _, slot in effective_attributes(name, classes, memo):
                 kind = annotation(slot, "source_kind")
                 if kind not in QUANTITY_KINDS:
                     continue
@@ -1633,8 +1643,6 @@ def build_graph(
                         **(_property_details(slot) if kind == "property" else {}),
                     }
                 add_edge(name, quantity_id, "hasQuantity", card)
-                if len(nodes) > max_nodes:
-                    return
             for python_name, code, value in vocabulary_terms(name, schema, memo):
                 term_id = f"{name}.{python_name}"
                 if term_id not in nodes:
@@ -1645,9 +1653,16 @@ def build_graph(
                         "methods": None, "unit": None, **_term_details(code, value),
                     }
                 add_edge(name, term_id, "hasQuantity", None)
-                if len(nodes) > max_nodes:
-                    return
+        return True
 
+    def add_section(name: str, depth: int = 0) -> None:
+        if depth > max_depth or name in seen:
+            return
+        seen.add(name)
+        if not add_node(name) or len(nodes) > max_nodes:
+            return
+
+        members = effective_attributes(name, classes, memo)
         if include_inheritance:
             for ancestor in _mro(name, classes, memo)[1:]:
                 if not allowed(class_module(ancestor, classes[ancestor])):
@@ -1667,6 +1682,45 @@ def build_graph(
                 if len(nodes) > max_nodes:
                     return
 
+        if name in expand:
+            expanded_subclasses.extend(subclasses.get(name, ()))
+
+    # Subclasses an expanded class brings come with the classes they hold directly, and
+    # no further: the arrows of both go to classes already on the canvas, so one click
+    # shows one more level and nothing else. An expanded subclass brings its own.
+    expanded_subclasses: list[str] = []
+
+    def add_expanded_subclasses() -> None:
+        added: list[str] = []
+
+        def bring(name: str) -> bool:
+            if name in seen:
+                return False
+            seen.add(name)
+            if not add_node(name):
+                return False
+            added.append(name)
+            if name in expand:
+                expanded_subclasses.extend(subclasses.get(name, ()))
+            return True
+
+        while expanded_subclasses and len(nodes) <= max_nodes:
+            name = expanded_subclasses.pop(0)
+            if not bring(name) or not include_subsections:
+                continue
+            for _, slot in effective_attributes(name, classes, memo):
+                if annotation(slot, "source_kind") == "subsection" and slot.get("range") in classes:
+                    bring(slot["range"])
+        for name in added:
+            if include_inheritance:
+                for ancestor in _mro(name, classes, memo)[1:]:
+                    if ancestor in nodes:
+                        add_edge(name, ancestor, "inherits")
+            if include_subsections:
+                for _, slot in effective_attributes(name, classes, memo):
+                    if annotation(slot, "source_kind") == "subsection" and slot.get("range") in nodes:
+                        add_edge(name, slot["range"], "hasSubSection", annotation(slot, "display_card"))
+
     starts, offered = entry_points(schema, extraction, package)
     if root:
         if root not in offered:
@@ -1680,6 +1734,7 @@ def build_graph(
     else:
         for name in starts:
             add_section(name, 0)
+    add_expanded_subclasses()
 
     node_list = sorted(nodes.values(), key=lambda node: (node["kind"], node["module"] or "", node["label"]))
     edges.sort(key=lambda edge: (edge["source"], edge["type"], edge["target"]))
@@ -1710,9 +1765,14 @@ Standard library and PyYAML only, so the same code can run in the browser.
 Output is deterministic: element fields come in a fixed order, named maps
 (classes, attributes, enums, ...) keep the order they were built in, and the
 header names the profile, the source commit and the tool versions.
+
+\`export_schema\` makes the schema fit for the standard LinkML generators
+(\`gen-pydantic\`, \`gen-python\`, \`linkml lint\`). Only the download is changed:
+the schema the app works with keeps its dotted names.
 """
 from __future__ import annotations
 
+import re
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -1734,6 +1794,87 @@ _RANK = {name: index for index, name in enumerate(FIELD_ORDER)}
 # Fields whose value maps a name to an element; their own key order is kept.
 NAMED_MAPS = frozenset({"prefixes", "enums", "classes", "slots", "types", "subsets",
                         "attributes", "permissible_values", "annotations"})
+
+
+_NOT_IDENTIFIER = re.compile(r"[^A-Za-z0-9_]")
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# The class an attribute gets when its source type has no LinkML type.
+ANY_CLASS = "Any"
+
+
+class ExportError(ValueError):
+    """The schema has no export with valid, distinct class and enum names."""
+
+
+def export_name(name: str) -> str:
+    """A class or enum name as exported: every character other than a letter, digit or \`_\` becomes \`_\`."""
+    return _NOT_IDENTIFIER.sub("_", name)
+
+
+def export_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
+    """The schema as downloaded: valid identifiers as class and enum names, and a range on every attribute.
+
+    The dotted name of each class and enum is kept as its \`source_id\`
+    annotation; \`is_a\`, \`mixins\`, enum \`inherits\` and attribute ranges use the
+    new names. An attribute without a range (its source type has no LinkML
+    type) gets the range \`Any\` (\`linkml:Any\`). \`schema\` is not changed.
+    """
+    classes = schema.get("classes") or {}
+    enums = schema.get("enums") or {}
+    renamed: dict[str, str] = {}
+    taken: dict[str, str] = {}
+    for name in [*classes, *enums]:
+        new = export_name(name)
+        if not _IDENTIFIER.fullmatch(new):
+            raise ExportError(f"{name!r} has no valid LinkML name ({new!r})")
+        if new in taken:
+            raise ExportError(f"{taken[new]!r} and {name!r} would both be exported as {new!r}")
+        renamed[name] = taken[new] = new
+
+    def ref(name: str) -> str:
+        return renamed.get(name, name)
+
+    def element(name: str, value: Mapping[str, Any]) -> dict[str, Any]:
+        return {**value, "name": renamed[name], "annotations": {"source_id": name, **(value.get("annotations") or {})}}
+
+    untyped = False
+    exported_classes: dict[str, Any] = {}
+    for name, value in classes.items():
+        cls = element(name, value)
+        if "is_a" in cls:
+            cls["is_a"] = ref(cls["is_a"])
+        if "mixins" in cls:
+            cls["mixins"] = [ref(base) for base in cls["mixins"]]
+        if cls.get("attributes"):
+            attributes = {}
+            for slot_name, slot in cls["attributes"].items():
+                slot = dict(slot)
+                if slot.get("range"):
+                    slot["range"] = ref(slot["range"])
+                else:
+                    slot["range"] = ANY_CLASS
+                    untyped = True
+                attributes[slot_name] = slot
+            cls["attributes"] = attributes
+        exported_classes[renamed[name]] = cls
+    if untyped:
+        if ANY_CLASS in taken:
+            raise ExportError(f"{taken[ANY_CLASS]!r} would be exported as {ANY_CLASS!r}, the range of untyped attributes")
+        exported_classes[ANY_CLASS] = {"name": ANY_CLASS, "class_uri": "linkml:Any"}
+
+    exported_enums: dict[str, Any] = {}
+    for name, value in enums.items():
+        enum = element(name, value)
+        if "inherits" in enum:
+            enum["inherits"] = [ref(base) for base in enum["inherits"]]
+        exported_enums[renamed[name]] = enum
+
+    exported = dict(schema)
+    if "classes" in schema or exported_classes:
+        exported["classes"] = exported_classes
+    if "enums" in schema:
+        exported["enums"] = exported_enums
+    return exported
 
 
 def _ordered(value: Any, *, named: bool = False) -> Any:
@@ -1818,4 +1959,4 @@ import sys
 if "/home/pyodide" not in sys.path:
     sys.path.insert(0, "/home/pyodide")
 from schema_core import browser as _schema_studio
-`);const t=e.globals.get("_schema_studio"),s=t.has_snapshot,i=t.add_snapshot,u=t.handle;let d=null,l=Promise.resolve();const _=async r=>{for(const a of r.snapshots)s(a)||i(a,await n(a));return r.op==="linkml_yaml"&&(d??=e.loadPackage("pyyaml"),await d),JSON.parse(String(u(JSON.stringify(r))))};return{run(r){const a=l.then(()=>_(r));return l=a.catch(()=>{}),a}}}const m=new URL("/",self.location.origin).href,w=new URL("data/",m).href,p=new URL("pyodide/",m).href;let o=null;async function k(e){const n=await fetch(new URL(e,w));if(!n.ok)throw new Error(`Could not load ${e} (${n.status})`);return n.text()}function E(){return o??=(async()=>{self.postMessage({status:"loading"});const{loadPyodide:e}=await import(`${p}pyodide.mjs`),n=await e({indexURL:p}),t=A(n,k);return self.postMessage({status:"ready"}),t})(),o.catch(()=>{o=null}),o}self.onmessage=async e=>{const{id:n,request:t}=e.data;try{const s=await E();if(!t){self.postMessage({id:n,answer:{ok:null}});return}self.postMessage({id:n,answer:await s.run(t)})}catch(s){const i=s instanceof Error?s.message:String(s);self.postMessage({id:n,answer:{error:`The in-browser schema engine failed: ${i}`,status:500}})}};
+`);const t=e.globals.get("_schema_studio"),s=t.has_snapshot,i=t.add_snapshot,p=t.handle;let d=null,l=Promise.resolve();const _=async r=>{for(const a of r.snapshots)s(a)||i(a,await n(a));return r.op==="linkml_yaml"&&(d??=e.loadPackage("pyyaml"),await d),JSON.parse(String(p(JSON.stringify(r))))};return{run(r){const a=l.then(()=>_(r));return l=a.catch(()=>{}),a}}}const u=new URL("/",self.location.origin).href,w=new URL("data/",u).href,m=new URL("pyodide/",u).href;let o=null;async function k(e){const n=await fetch(new URL(e,w));if(!n.ok)throw new Error(`Could not load ${e} (${n.status})`);return n.text()}function E(){return o??=(async()=>{self.postMessage({status:"loading"});const{loadPyodide:e}=await import(`${m}pyodide.mjs`),n=await e({indexURL:m}),t=A(n,k);return self.postMessage({status:"ready"}),t})(),o.catch(()=>{o=null}),o}self.onmessage=async e=>{const{id:n,request:t}=e.data;try{const s=await E();if(!t){self.postMessage({id:n,answer:{ok:null}});return}self.postMessage({id:n,answer:await s.run(t)})}catch(s){const i=s instanceof Error?s.message:String(s);self.postMessage({id:n,answer:{error:`The in-browser schema engine failed: ${i}`,status:500}})}};
