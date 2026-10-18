@@ -40,7 +40,7 @@ FLAGS = [
     {"include_quantities": False, "include_inheritance": False},
 ]
 # Fields the LinkML path adds to nodes (the legacy graph has none of them).
-ADDED_FIELDS = ("unit", "code", "title", "title_de", "doc_de", "mandatory", "section", "iri")
+ADDED_FIELDS = ("unit", "code", "title", "title_de", "doc_de", "mandatory", "section", "iri", "subclasses")
 # Docstrings of bam-masterdata's PropertyTypeAssignment and VocabularyTerm classes.
 GENERIC_DOCS = ("Base class used to define properties inside", "Base class used to define terms inside")
 
