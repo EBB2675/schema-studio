@@ -104,7 +104,9 @@
      }
     }
    ],
-   "bases": [],
+   "bases": [
+    "bam_masterdata.metadata.entities.ObjectType"
+   ],
    "description": "This Object allows to store information on an action by a user.//Dieses Objekt erlaubt eine Nutzer-Aktion zu beschreiben.",
    "effective_attributes": [
     {
@@ -666,7 +668,9 @@
      }
     }
    ],
-   "bases": [],
+   "bases": [
+    "bam_masterdata.metadata.entities.ObjectType"
+   ],
    "description": "Calibration//Kalibrierung",
    "effective_attributes": [
     {
@@ -1028,7 +1032,9 @@
      }
     }
    ],
-   "bases": [],
+   "bases": [
+    "bam_masterdata.metadata.entities.ObjectType"
+   ],
    "description": "Material simulation structure // Material-Simulationsstruktur",
    "effective_attributes": [
     {
@@ -1256,7 +1262,9 @@
      }
     }
    ],
-   "bases": [],
+   "bases": [
+    "bam_masterdata.metadata.entities.ObjectType"
+   ],
    "description": "A natural person//Eine natürliche Person",
    "effective_attributes": [
     {
@@ -1310,7 +1318,9 @@
     "vocabulary_enum": "bam_masterdata.datamodel.vocabulary_types.CalibrationProvider.terms"
    },
    "attributes": [],
-   "bases": [],
+   "bases": [
+    "bam_masterdata.metadata.entities.VocabularyType"
+   ],
    "description": "Calibration provider//Kalibrierdienstleister",
    "effective_attributes": [],
    "id": "bam_masterdata.datamodel.vocabulary_types.CalibrationProvider",
@@ -1323,11 +1333,29 @@
     "vocabulary_enum": "bam_masterdata.datamodel.vocabulary_types.ShortRngOrd.terms"
    },
    "attributes": [],
-   "bases": [],
+   "bases": [
+    "bam_masterdata.metadata.entities.VocabularyType"
+   ],
    "description": "Short range ordering in amorphous materials//Kurzstreckenordnung in amorphen Materialien",
    "effective_attributes": [],
    "id": "bam_masterdata.datamodel.vocabulary_types.ShortRngOrd",
    "name": "ShortRngOrd"
+  },
+  {
+   "attributes": [],
+   "bases": [],
+   "description": "Base class used to define object types. All object types must inherit from this class. The\n    object types are defined in the module `bam_masterdata/object_types.py`.\n\n    The `ObjectType` class contains a list of all `properties` defined for a `ObjectType`, for\n    internally represent the model in other formats (e.g., JSON or Excel).\n\n    Note this is also used for `CollectionType` and `DatasetType`, as they also contain a list of\n    properties.",
+   "effective_attributes": [],
+   "id": "bam_masterdata.metadata.entities.ObjectType",
+   "name": "ObjectType"
+  },
+  {
+   "attributes": [],
+   "bases": [],
+   "description": "Base class used to define vocabulary types. All vocabulary types must inherit from this class. The\n    vocabulary types are defined in the module `bam_masterdata/vocabulary_types.py`.\n\n    The `VocabularyType` class contains a list of all `terms` defined for a `VocabularyType`, for\n    internally represent the model in other formats (e.g., JSON or Excel).",
+   "effective_attributes": [],
+   "id": "bam_masterdata.metadata.entities.VocabularyType",
+   "name": "VocabularyType"
   }
  ],
  "contract_version": "1.0",

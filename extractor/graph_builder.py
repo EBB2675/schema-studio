@@ -3,6 +3,8 @@ from typing import Dict, Any, List, Iterable, Tuple, Optional, Set
 import importlib
 import inspect
 
+BAM_ENTITIES_MODULE = "bam_masterdata.metadata.entities"
+
 
 @dataclass
 class Node:
@@ -86,8 +88,10 @@ def build_graph(
     include_inheritance: bool = True,
     allow_cross_module: bool = True,
     base_namespace: Optional[str] = None,
-    # Framework base classes (NOMAD metainfo, openBIS entity types) are not part of a schema.
-    exclude_prefixes: Tuple[str, ...] = ("nomad.metainfo.", "bam_masterdata.metadata."),
+    # Framework base classes of NOMAD metainfo are not part of a schema. Of the
+    # openBIS framework, the entity types (ObjectType, VocabularyType, ...) are
+    # base sections; their root BaseEntity is not a section.
+    exclude_prefixes: Tuple[str, ...] = ("nomad.metainfo.",),
     max_nodes: int = 8000,
     max_depth: int = 20,
 ) -> Dict[str, Any]:
@@ -102,8 +106,10 @@ def build_graph(
     if base_namespace is None:
         base_namespace = _root_namespace(package)
 
+    # The openBIS entity types, which every BAM module imports, are bases only.
     sections_local: Dict[str, Any] = {
-        name: obj for name, obj in vars(mod).items() if _is_section(obj)
+        name: obj for name, obj in vars(mod).items()
+        if _is_section(obj) and getattr(obj, "__module__", "") != BAM_ENTITIES_MODULE
     }
 
     nodes: Dict[str, Node] = {}
@@ -236,7 +242,7 @@ def _is_bam_entity_class(obj: Any) -> bool:
     """Detect BAM datamodel classes derived from ObjectType or VocabularyType."""
     for base in getattr(obj, "__mro__", []):
         mod = getattr(base, "__module__", "")
-        if mod != "bam_masterdata.metadata.entities":
+        if mod != BAM_ENTITIES_MODULE:
             continue
         if base.__name__ in {"ObjectType", "VocabularyType"}:
             return True
@@ -247,7 +253,7 @@ def _is_bam_object_type_class(obj: Any) -> bool:
     """Detect BAM object type classes derived from `ObjectType`."""
     for base in getattr(obj, "__mro__", []):
         mod = getattr(base, "__module__", "")
-        if mod != "bam_masterdata.metadata.entities":
+        if mod != BAM_ENTITIES_MODULE:
             continue
         if base.__name__ in {"ObjectType"}:
             return True
@@ -258,7 +264,7 @@ def _is_bam_vocabulary_type_class(obj: Any) -> bool:
     """Detect BAM vocabulary classes derived from `VocabularyType`."""
     for base in getattr(obj, "__mro__", []):
         mod = getattr(base, "__module__", "")
-        if mod != "bam_masterdata.metadata.entities":
+        if mod != BAM_ENTITIES_MODULE:
             continue
         if base.__name__ == "VocabularyType":
             return True
