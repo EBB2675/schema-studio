@@ -269,7 +269,6 @@ function umlLabel(
     const dt = showMetadata ? cleanType(a.dtype) : "";
     if (dt) parts.push(`: ${dt}`);
     if (showMetadata && a.shape && a.shape !== "[]") parts.push(` ${a.shape}`);
-    if (a.card) parts.push(` [${a.card}]`);
     return parts.join("");
   });
   return [name, "────────────", ...attrLines].join("\n");
