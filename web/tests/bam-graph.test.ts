@@ -5,7 +5,7 @@ import { buildUmlStateFromGraph } from "../src/utils/umlState";
 
 // The graph the LinkML path builds for bam-masterdata `Amorphous` (a child of
 // `MatSimStructure`); api/sources/tests/test_graph_bam.py keeps the file current.
-const MODULE = "bam_masterdata.datamodel.object_types";
+const MODULE = "bam_masterdata.datamodel.v0.object_types";
 const AMORPHOUS = `${MODULE}.Amorphous`;
 const MAT_SIM = `${MODULE}.MatSimStructure`;
 
