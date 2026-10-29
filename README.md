@@ -6,7 +6,7 @@ Interactive schema explorer and editor for data models.
 - Local single-user app (no auth)
 - No MongoDB/Redis required
 - Custom edits persisted in local SQLite
-- Schema family selectable between `nomad-simulations`, `nomad-measurements` and `bam-masterdata`
+- Schema family selectable between `nomad-simulations`, `nomad-measurements`, `bam-masterdata v0` and `bam-masterdata v1`
 
 Back end: **FastAPI**  
 Front end: **React + Cytoscape + ELK**  
@@ -57,6 +57,10 @@ uv sync --project environments/nomad-simulations    # tracks `develop`
 uv sync --project environments/nomad-measurements   # tracks `main`
 uv sync --project environments/bam-masterdata       # tracks `main`
 ```
+
+bam-masterdata holds two datamodels, `bam_masterdata.datamodel.v0` and
+`bam_masterdata.datamodel.v1`. The app shows them as two schemas
+(`bam-masterdata-v0` and `bam-masterdata-v1`) read from this one environment.
 
 The two NOMAD environments install `nomad-lab` and are large downloads. You can
 also skip this step and use the **Load …** button next to a schema family in
@@ -119,7 +123,7 @@ Make sure to set the environment variables before running `schema-studio`.
 | `SCHEMA_STUDIO_DEFAULT_NAMESPACE` | `nomad_simulations.schema_packages` | Initial base namespace |
 | `SCHEMA_STUDIO_ENVIRONMENTS_DIR` | `environments/` in the checkout | Folder that holds the schema environments |
 | `SCHEMA_STUDIO_EXTRACTOR_TIMEOUT_SECONDS` | `300` | Time limit for one schema read in an environment |
-| `SCHEMA_STUDIO_EXTRACTION` | `linkml` | How graphs, roots and usage info are built: `linkml` (from the LinkML snapshot) or `legacy` (graph builder in the schema environment). One value for all profiles, or per profile, e.g. `nomad-simulations=legacy` or `bam-masterdata=legacy`; profiles not named use `linkml`. Dev Mode reads it for graphs (including branch graphs), roots and usage; its overview and package list scan the git worktree instead. |
+| `SCHEMA_STUDIO_EXTRACTION` | `linkml` | How graphs, roots and usage info are built: `linkml` (from the LinkML snapshot) or `legacy` (graph builder in the schema environment). One value for all profiles, or per profile, e.g. `nomad-simulations=legacy` or `bam-masterdata-v0=legacy`; profiles not named use `linkml`. Dev Mode reads it for graphs (including branch graphs), roots and usage; its overview and package list scan the git worktree instead. |
 | `SCHEMA_STUDIO_SEND_ENDPOINT` | unset | Enable `POST /send-design` passthrough |
 | `SCHEMA_STUDIO_DIST_DIR` | auto-detected | Override frontend static assets directory |
 | `UVICORN_LOG_LEVEL` | `info` | Server logging level |

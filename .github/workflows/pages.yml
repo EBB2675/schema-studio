@@ -46,8 +46,8 @@ jobs:
 
       - name: Set up the schema environments
         run: |
-          for profile in nomad-simulations nomad-measurements bam-masterdata; do
-            uv sync --locked --project "environments/$profile"
+          for environment in nomad-simulations nomad-measurements bam-masterdata; do
+            uv sync --locked --project "environments/$environment"
           done
 
       - name: Install the frontend

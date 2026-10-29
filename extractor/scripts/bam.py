@@ -17,9 +17,11 @@ are kept as annotations. Changes from that file:
   like NOMAD's `ArchiveSection`; only their roots (`BaseEntity`, pydantic's
   `BaseModel`) are left out. They are reached as bases only: no module
   exposes them and they hold no vocabulary terms of their own;
-- several modules in one run (`--base` walks `bam_masterdata.datamodel`), each
-  listed under `modules` with the entities it exposes at module level, in
-  module order, and every module-level name bound to one of them (`names`);
+- several modules in one run (`--base` walks one datamodel version, such as
+  `bam_masterdata.datamodel.v0`), each listed under `modules` with the entities
+  it exposes at module level, in module order, and every module-level name
+  bound to one of them (`names`). The versions are separate schemas: a run
+  reads modules of one version only, and codes resolve within it;
 - vocabulary terms keep their Python attribute name as the value annotation
   `python_name`, because the graph names term nodes after it; terms inherited
   from a base vocabulary stay on the base (the graph collects them);
@@ -267,17 +269,29 @@ def display_card(obj: Any) -> str | None:
 
 # -------- extraction --------
 
-def datamodel_modules() -> list[ModuleType]:
-    """Every module of the datamodel, including its domain subpackages."""
+def datamodel_version(names: list[str]) -> str:
+    """The datamodel version (`bam_masterdata.datamodel.v0`) all of these modules belong to."""
+    versions = set()
+    for name in names:
+        if not name.startswith(f"{DATAMODEL}."):
+            raise ValueError(f"{name}: only modules within a version of {DATAMODEL} are read")
+        versions.add(".".join(name.split(".")[:3]))
+    if len(versions) != 1:
+        raise ValueError(f"modules of one datamodel version are read at a time, not {', '.join(sorted(versions))}")
+    return versions.pop()
+
+
+def datamodel_modules(version: str) -> list[ModuleType]:
+    """Every module of a datamodel version, including its domain subpackages."""
     modules = []
-    for name in _load_sibling("discovery").list_modules_for_base(DATAMODEL):
+    for name in _load_sibling("discovery").list_modules_for_base(version):
         with contextlib.suppress(Exception):
             modules.append(importlib.import_module(name))
     return modules
 
 
 def build_catalog(modules: list[ModuleType]) -> dict[tuple[str, str], list[type]]:
-    """Entity classes by (definition kind, openBIS code), over the whole datamodel.
+    """Entity classes by (definition kind, openBIS code), over the whole datamodel version.
 
     Properties name their vocabulary and object targets by code. A code held by
     two definitions is kept with both, to be resolved or reported, never raced.
@@ -570,19 +584,20 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         base = args.base
         module_names, failed = _load_sibling("discovery").candidate_modules(base, args.dist, args.discovery or ["walk"])
         report.extend({"path": item["module"], "status": "skipped", "reason": item["error"]} for item in failed)
+        if not module_names:
+            # A datamodel version this release of the package does not have yet: an empty schema.
+            report.append({"path": base, "status": "skipped", "reason": "not in this version of the package"})
         modules = []
         for name in module_names:
             try:
                 modules.append(importlib.import_module(name))
             except Exception as exc:
                 report.append({"path": name, "status": "skipped", "reason": f"{type(exc).__name__}: {exc}"})
-    for name in module_names:
-        if name != DATAMODEL and not name.startswith(f"{DATAMODEL}."):
-            raise ValueError(f"{name}: only modules within {DATAMODEL} are read")
+    version = datamodel_version(module_names or [base])
     if args.root and len(modules) != 1:
         raise ValueError("--root needs exactly one --module")
     source = source_facts(args.dist, base, from_installed=not args.source_root)
-    return extract(modules, source, tuple(args.root), catalog=build_catalog(datamodel_modules()), report=report)
+    return extract(modules, source, tuple(args.root), catalog=build_catalog(datamodel_modules(version)), report=report)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -54,10 +54,10 @@ def _default_package_for_base(base_package: str) -> str:
     """Return a sensible default module for a base namespace."""
 
     base = base_package.strip()
-    if base.startswith("bam_masterdata.datamodel"):
-        return "bam_masterdata.datamodel.object_types"
+    if base.startswith("bam_masterdata.datamodel.v1"):
+        return "bam_masterdata.datamodel.v1.base_objects"
     if base.startswith("bam_masterdata"):
-        return f"{base}.object_types"
+        return "bam_masterdata.datamodel.v0.object_types"
     return f"{base}.model_method"
 
 

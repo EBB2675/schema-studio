@@ -18,8 +18,8 @@ wheels = [
 
 [[package]]
 name = "bam-masterdata"
-version = "0.14.0"
-source = { git = "https://github.com/BAMresearch/bam-masterdata.git?rev=main#9e2b29a18c15f4e1f8898b52ae1d7d10a2992fef" }
+version = "0.16.1"
+source = { git = "https://github.com/BAMresearch/bam-masterdata.git?rev=main#4162906a1bc634b078ccd48c9cd72f4ccd2dc0af" }
 dependencies = [
     { name = "click" },
     { name = "h5py" },

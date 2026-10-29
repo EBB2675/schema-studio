@@ -17,7 +17,7 @@ environments/<profile>`); they are read, never created or updated. The
 static site reads these files; nothing here depends on how they are served.
 
     python scripts/build_snapshots.py --out web/dist/data --graphs
-    python scripts/build_snapshots.py --out build/data --profile bam-masterdata
+    python scripts/build_snapshots.py --out build/data --profile bam-masterdata-v0
 """
 from __future__ import annotations
 
