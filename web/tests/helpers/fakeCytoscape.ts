@@ -79,8 +79,12 @@ export function makeFakeCy() {
 
   const EMPTY = { empty: () => true, id: () => '', data: () => ({}) } as unknown as FakeElement;
 
+  type FakeCollection = ReturnType<typeof coll>;
   const coll = (arr: FakeElement[]) => {
     const c = {
+      __elements: arr,
+      union: (other: { __elements: FakeElement[] }) => coll([...arr, ...other.__elements]),
+      layout: (options: Parameters<typeof cy.layout>[0] = {}) => cy.layout({ ...options, eles: c }),
       forEach: (f: (e: FakeElement) => void) => arr.forEach(f),
       filter: (f: (e: FakeElement) => boolean) => coll(arr.filter(f)),
       map: <T,>(f: (e: FakeElement) => T) => arr.map(f),
@@ -135,13 +139,13 @@ export function makeFakeCy() {
       elements.set(def.data.id, ele);
       return ele;
     },
-    // Like ELK: a layout lays out the nodes there were when it was made, cannot be
-    // stopped, and runs its result through the `transform` option.
-    layout(options: { transform?: (node: FakeElement, pos: Point) => Point } = {}) {
+    // Like ELK: a layout lays out the nodes there were when it was made (or those in
+    // `eles`), cannot be stopped, and runs its result through the `transform` option.
+    layout(options: { eles?: FakeCollection; transform?: (node: FakeElement, pos: Point) => Point } = {}) {
       stats.layouts += 1;
       stats.layoutOptions.push(options);
       const own: Listener[] = [];
-      const laidOut = nodes();
+      const laidOut = options.eles ? options.eles.__elements.filter((e) => e.isNode()) : nodes();
       const layout = {
         run: () => layout,
         stop: () => layout,

@@ -9,7 +9,7 @@ import type { ApiEdge, ApiNode } from "./types/api";
 import type { QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
 import { fqidFromParts } from "./utils/identifier";
 import { canvasEdges } from "./utils/canvasEdges";
-import { placeNewNodes, type PlacedBox, type Point } from "./utils/canvasPlacement";
+import { placeNewNodes, subsectionOnly, type PlacedBox, type Point } from "./utils/canvasPlacement";
 import { DEFAULT_LAYOUT_DIRECTION, type LayoutDirection } from "./utils/layoutDirection";
 
 type QtyDiffState = "added" | "removed" | "changed" | undefined;
@@ -1007,9 +1007,17 @@ export default function GraphView({
       layoutRef.current?.stop();
       const run = ++layoutRunRef.current;
       const fitTicket = ++fitTicketRef.current;
+      // ELK lays out the inheritance only, in the layout direction. Classes that are only
+      // subsections are placed afterwards, right of the class holding them.
+      const links = canvasElements.edges;
+      const heldOnly = subsectionOnly(canvasElements.nodes.map((n) => n.id), links);
+      const eles = cy
+        .nodes()
+        .filter((n) => !heldOnly.has(n.id()))
+        .union(cy.edges().filter((e) => e.data("type") === "inherits"));
       // ELK cannot be stopped: a layout that is no longer the latest finishes anyway,
       // so its positions are turned into no-ops here.
-      const layout = cy.layout({
+      const layout = eles.layout({
         ...fullLayout(layoutDirection),
         transform: (node: NodeSingular, position: Point) => (run === layoutRunRef.current ? position : node.position()),
       } as cytoscape.LayoutOptions);
@@ -1017,6 +1025,18 @@ export default function GraphView({
       layout.one("layoutstop", () => {
         if (run !== layoutRunRef.current || cyRef.current !== cy) return;
         layoutRef.current = null;
+        if (heldOnly.size) {
+          const laidOut = new Map<string, PlacedBox>();
+          cy.nodes().forEach((n) => {
+            if (!heldOnly.has(n.id())) laidOut.set(n.id(), placedBox(n));
+          });
+          const held = [...heldOnly].map((id) => {
+            const { w, h } = placedBox(cy.getElementById(id) as NodeSingular);
+            return { id, w, h };
+          });
+          const positions = placeNewNodes(laidOut, held, links, new Map(), layoutDirection);
+          cy.batch(() => positions.forEach((position, id) => cy.getElementById(id).position(position)));
+        }
         syncAllCardBoxes();
         // Anything that happened since the layout started (an expansion, an explicit fit) keeps its view.
         if (fitTicket === fitTicketRef.current) {
