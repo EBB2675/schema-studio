@@ -15,7 +15,7 @@ import { DEFAULT_LAYOUT_DIRECTION, type LayoutDirection } from "./utils/layoutDi
 type QtyDiffState = "added" | "removed" | "changed" | undefined;
 
 // Lower value makes mouse-wheel zoom less aggressive.
-const CANVAS_WHEEL_SENSITIVITY = 0.35;
+const CANVAS_WHEEL_SENSITIVITY = 0.7;
 
 cytoscapeElk(cytoscape, elk);
 
