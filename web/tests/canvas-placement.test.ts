@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { placeNewNodes, type PlacedBox } from '../src/utils/canvasPlacement';
+import { placeNewNodes, subsectionOnly, type PlacedBox } from '../src/utils/canvasPlacement';
 
 const box = (x: number, y: number): PlacedBox => ({ x, y, w: 200, h: 60 });
 const node = (id: string) => ({ id, w: 200, h: 60 });
@@ -105,5 +105,18 @@ describe('placeNewNodes', () => {
       );
       expect(placed.get('T')).toEqual({ x: 290, y: 0 });
     }
+  });
+});
+
+describe('subsectionOnly', () => {
+  const holds = (source: string, target: string) => ({ source, target, type: 'hasSubSection' });
+
+  it('picks the held classes that are in no inheritance link', () => {
+    const links = [inherits('Sub', 'Base'), holds('Sub', 'Held'), holds('Held', 'Deeper'), holds('Base', 'Sub')];
+    expect(subsectionOnly(['Base', 'Sub', 'Held', 'Deeper', 'Free'], links)).toEqual(new Set(['Held', 'Deeper']));
+  });
+
+  it('leaves every class to the layout when all of them would be left out', () => {
+    expect(subsectionOnly(['A', 'B'], [holds('A', 'B'), holds('B', 'A')])).toEqual(new Set());
   });
 });

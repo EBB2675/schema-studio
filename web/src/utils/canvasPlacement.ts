@@ -34,6 +34,27 @@ function sideOf(node: string, link: Link, direction: LayoutDirection): Side {
 }
 
 /**
+ * The classes that are only subsections: held by another class and in no `inherits`
+ * link. The full layout leaves these out and places them with `placeNewNodes`, so a
+ * subsection goes right of the class holding it in every layout direction. Empty when
+ * every class would be left out, since then nothing is laid out to place them by.
+ */
+export function subsectionOnly(nodeIds: string[], links: Link[]): Set<string> {
+  const inherits = new Set<string>();
+  const held = new Set<string>();
+  for (const link of links) {
+    if (link.type === "inherits") {
+      inherits.add(link.source);
+      inherits.add(link.target);
+    } else if (link.type === "hasSubSection") {
+      held.add(link.target);
+    }
+  }
+  const result = new Set(nodeIds.filter((id) => held.has(id) && !inherits.has(id)));
+  return result.size < nodeIds.length ? result : new Set();
+}
+
+/**
  * Where to put classes that join a canvas whose other classes keep their place.
  *
  * A class that was on the canvas before goes back where it was, if that spot is

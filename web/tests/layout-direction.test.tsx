@@ -118,4 +118,27 @@ describe('GraphView layout direction', () => {
     expect(fakeCy.stats.fits).toBe(fits);
     expect(onLayoutReady).toHaveBeenCalledTimes(1);
   });
+
+  it.each(LAYOUT_DIRECTIONS.map(({ value }) => value))(
+    'lays out the inheritance only and puts a subsection right of its holder with %s',
+    (direction: LayoutDirection) => {
+      const HELD = 'pkg.Held';
+      render(view({
+        layoutDirection: direction,
+        umlState: {
+          ...state,
+          classes: [...state.classes, { id: HELD, name: 'Held', module: 'pkg', quantities: [] }],
+          edges: [...state.edges, { source: SUB, target: HELD, type: 'hasSubSection' }],
+        },
+      }));
+      const eles = (fakeCy.stats.layoutOptions.at(-1) as { eles: { __elements: { id(): string }[] } }).eles;
+      expect(eles.__elements.map((e) => e.id()).sort()).toEqual([BASE, SUB, `inherits:${SUB}->${BASE}`].sort());
+
+      act(() => fakeCy.finishLayout());
+      const holder = fakeCy.getElementById(SUB).position() as { x: number; y: number };
+      const held = fakeCy.getElementById(HELD).position() as { x: number; y: number };
+      expect(held.y).toBe(holder.y);
+      expect(held.x).toBeGreaterThan(holder.x);
+    }
+  );
 });
