@@ -26,7 +26,7 @@ from .conftest import PROJECT_ROOT, load_fixture
 
 WEB = PROJECT_ROOT / "web"
 INFO = SimpleNamespace(version="0588fda", source="remote-develop", package_version="1.0", commit="0588fda")
-PROFILES = ("nomad-measurements", "bam-masterdata")
+PROFILES = ("nomad-measurements", "bam-masterdata-v0")
 
 
 @pytest.fixture()
@@ -99,8 +99,8 @@ def test_index_lists_profiles_modules_and_ready_graphs(site):
     assert index["format"] == 1 and index["static"] is True
     profiles = {profile["key"]: profile for profile in index["profiles"]}
     assert set(profiles) == set(PROFILES)
-    bam = profiles["bam-masterdata"]
-    assert bam["edit_rule_set"] == "bam-masterdata" and bam["commit"] == load_fixture("bam-masterdata")["source"]["commit"]
+    bam = profiles["bam-masterdata-v0"]
+    assert bam["edit_rule_set"] == "bam-masterdata" and bam["commit"] == load_fixture("bam-masterdata-v0")["source"]["commit"]
     # The stored documents hold only some modules; each has the graph of its first root ready.
     assert all(list(module["graphs"]) == module["sections"][:1] for module in bam["modules"])
     for profile in profiles.values():
@@ -156,7 +156,7 @@ async def test_core_answers_match_the_server_with_edits(site, light):
 
 @pytest.mark.anyio
 async def test_core_errors_match_the_server(site, light):
-    key, package = "bam-masterdata", _profile(site, "bam-masterdata")["default_package"]
+    key, package = "bam-masterdata-v0", _profile(site, "bam-masterdata-v0")["default_package"]
     flags = {"root": "NoSuchRoot", "include_quantities": True, "include_subsections": True, "include_inheritance": True,
              "allow_cross_module": True, "base_namespace": None}
     served = await light.get("/schema", params={"package": package, "root": "NoSuchRoot"})

@@ -21,18 +21,18 @@ import pytest
 
 pytestmark = pytest.mark.slow
 
-KEY = "bam-masterdata"
+KEY = "bam-masterdata-v0"
 PACKAGES = [
-    "bam_masterdata.datamodel.object_types",
-    "bam_masterdata.datamodel.vocabulary_types",
-    "bam_masterdata.datamodel.instruments",
-    "bam_masterdata.datamodel.creep_test.object_types",
-    "bam_masterdata.datamodel.collection_types",
+    "bam_masterdata.datamodel.v0.object_types",
+    "bam_masterdata.datamodel.v0.vocabulary_types",
+    "bam_masterdata.datamodel.v0.instruments",
+    "bam_masterdata.datamodel.v0.creep_test.object_types",
+    "bam_masterdata.datamodel.v0.collection_types",
 ]
 ROOTS = [
-    ("bam_masterdata.datamodel.object_types", "SearchQuery"),
-    ("bam_masterdata.datamodel.object_types", "Amorphous"),
-    ("bam_masterdata.datamodel.instruments", "Thermocouple"),
+    ("bam_masterdata.datamodel.v0.object_types", "SearchQuery"),
+    ("bam_masterdata.datamodel.v0.object_types", "Amorphous"),
+    ("bam_masterdata.datamodel.v0.instruments", "Thermocouple"),
 ]
 FLAGS = [
     {},
@@ -145,7 +145,7 @@ def test_amorphous_shows_inherited_properties_like_its_parent(studio_home):
     from api.sources.snapshots import get_snapshot
 
     profile = available()
-    package = "bam_masterdata.datamodel.object_types"
+    package = "bam_masterdata.datamodel.v0.object_types"
     snapshot = get_snapshot(profile, package)
     result = graph.build_graph(snapshot["linkml"], snapshot["extraction"], package, root="Amorphous",
                                base_namespace=profile.default_base_namespace)

@@ -17,7 +17,7 @@ def _write_fake_bam_package(root: Path) -> None:
     files: dict[str, str] = {
         "bam_masterdata/__init__.py": "",
         "bam_masterdata/metadata/__init__.py": "",
-        "bam_masterdata/datamodel/__init__.py": "",
+        "bam_masterdata/datamodel/v0/__init__.py": "",
         "bam_masterdata/metadata/entities.py": """
 class ObjectType:
     pass
@@ -63,7 +63,7 @@ class VocabularyTerm:
     label: str
     description: str
 """,
-        "bam_masterdata/datamodel/object_types.py": """
+        "bam_masterdata/datamodel/v0/object_types.py": """
 from bam_masterdata.metadata.definitions import DataType, PropertyTypeAssignment
 from bam_masterdata.metadata.entities import ObjectType
 
@@ -96,7 +96,7 @@ class Device(BaseEntity):
         vocabulary_code="DEVICE_STATUS",
     )
 """,
-        "bam_masterdata/datamodel/vocabulary_types.py": """
+        "bam_masterdata/datamodel/v0/vocabulary_types.py": """
 from bam_masterdata.metadata.definitions import VocabularyTerm
 from bam_masterdata.metadata.entities import VocabularyType
 
@@ -118,18 +118,18 @@ def test_build_graph_extracts_bam_object_types_and_controlled_vocab(monkeypatch,
     monkeypatch.syspath_prepend(str(tmp_path))
     importlib.invalidate_caches()
 
-    sections = list_sections("bam_masterdata.datamodel.object_types")
+    sections = list_sections("bam_masterdata.datamodel.v0.object_types")
     assert sections == ["BaseEntity", "Device"]
 
     graph = build_graph(
-        package="bam_masterdata.datamodel.object_types",
+        package="bam_masterdata.datamodel.v0.object_types",
         root="Device",
-        base_namespace="bam_masterdata.datamodel",
+        base_namespace="bam_masterdata.datamodel.v0",
     )
 
     nodes_by_id = {node["id"]: node for node in graph["nodes"]}
 
-    section_id = "bam_masterdata.datamodel.object_types.Device"
+    section_id = "bam_masterdata.datamodel.v0.object_types.Device"
     assert section_id in nodes_by_id
 
     identifier = nodes_by_id[f"{section_id}.identifier"]
@@ -145,14 +145,14 @@ def test_build_graph_extracts_bam_object_types_and_controlled_vocab(monkeypatch,
 
     edge_types = {(edge["source"], edge["target"], edge["type"]) for edge in graph["edges"]}
     assert (
-        "bam_masterdata.datamodel.object_types.Device",
-        "bam_masterdata.datamodel.object_types.BaseEntity",
+        "bam_masterdata.datamodel.v0.object_types.Device",
+        "bam_masterdata.datamodel.v0.object_types.BaseEntity",
         "inherits",
     ) in edge_types
 
     # The openBIS entity types are base sections; their root BaseEntity is not part of the schema.
     assert (
-        "bam_masterdata.datamodel.object_types.BaseEntity",
+        "bam_masterdata.datamodel.v0.object_types.BaseEntity",
         "bam_masterdata.metadata.entities.ObjectType",
         "inherits",
     ) in edge_types
@@ -168,13 +168,13 @@ def test_build_graph_extracts_bam_vocabulary_terms(monkeypatch, tmp_path: Path):
     importlib.invalidate_caches()
 
     graph = build_graph(
-        package="bam_masterdata.datamodel.vocabulary_types",
+        package="bam_masterdata.datamodel.v0.vocabulary_types",
         root="DeviceStatus",
-        base_namespace="bam_masterdata.datamodel",
+        base_namespace="bam_masterdata.datamodel.v0",
     )
 
     nodes_by_id = {node["id"]: node for node in graph["nodes"]}
-    term_id = "bam_masterdata.datamodel.vocabulary_types.DeviceStatus.active"
+    term_id = "bam_masterdata.datamodel.v0.vocabulary_types.DeviceStatus.active"
     assert term_id in nodes_by_id
     assert nodes_by_id[term_id]["dtype"] == "VOCAB_TERM"
     assert nodes_by_id[term_id]["doc"] == "Device is active"

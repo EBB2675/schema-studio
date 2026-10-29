@@ -18,8 +18,8 @@ from api.sources.to_linkml import convert_bam
 
 from .conftest import PROJECT_ROOT, load_fixture
 
-MODULE = "bam_masterdata.datamodel.object_types"
-NS = "bam_masterdata.datamodel"
+MODULE = "bam_masterdata.datamodel.v0.object_types"
+NS = "bam_masterdata.datamodel.v0"
 AMORPHOUS = f"{MODULE}.Amorphous"
 MAT_SIM = f"{MODULE}.MatSimStructure"
 WEB_FIXTURE = PROJECT_ROOT / "web" / "tests" / "fixtures" / "bam-amorphous-graph.json"
@@ -27,7 +27,7 @@ WEB_FIXTURE = PROJECT_ROOT / "web" / "tests" / "fixtures" / "bam-amorphous-graph
 
 @pytest.fixture(scope="module")
 def snapshot():
-    document = load_fixture("bam-masterdata")
+    document = load_fixture("bam-masterdata-v0")
     return convert_bam(document).schema, document
 
 

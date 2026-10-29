@@ -20,7 +20,8 @@ from extractor.contract import validate_document
 from extractor.runner import ExtractorError, run_script
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
-NS = "bam_masterdata.datamodel"
+NS = "bam_masterdata.datamodel.v0"
+V1 = "bam_masterdata.datamodel.v1"
 OBJECTS = f"{NS}.object_types"
 VOCABULARIES = f"{NS}.vocabulary_types"
 ENTITIES = "bam_masterdata.metadata.entities"
@@ -31,8 +32,10 @@ FILES = {
     "bam_masterdata-0.1.dist-info/METADATA": "Metadata-Version: 2.1\nName: bam-masterdata\nVersion: 0.1\n",
     "bam_masterdata/__init__.py": "",
     "bam_masterdata/metadata/__init__.py": "",
-    "bam_masterdata/datamodel/__init__.py": "",
-    "bam_masterdata/datamodel/lab/__init__.py": "",
+    # `datamodel` itself is a namespace package, as in bam-masterdata.
+    "bam_masterdata/datamodel/v0/__init__.py": "",
+    "bam_masterdata/datamodel/v0/lab/__init__.py": "",
+    "bam_masterdata/datamodel/v1/__init__.py": "",
     "bam_masterdata/metadata/entities.py": '''
 from bam_masterdata.metadata.definitions import DataType, PropertyTypeAssignment
 
@@ -112,7 +115,7 @@ class VocabularyTerm:
     label: str
     description: str = ""
 ''',
-    "bam_masterdata/datamodel/object_types.py": '''
+    "bam_masterdata/datamodel/v0/object_types.py": '''
 from bam_masterdata.metadata.definitions import DataType, ObjectTypeDef, PropertyTypeAssignment
 from bam_masterdata.metadata.entities import ObjectType
 
@@ -187,7 +190,7 @@ class Probe(BaseEntity):
 
 Instrument = Device
 ''',
-    "bam_masterdata/datamodel/vocabulary_types.py": '''
+    "bam_masterdata/datamodel/v0/vocabulary_types.py": '''
 from bam_masterdata.metadata.definitions import VocabularyTerm, VocabularyTypeDef
 from bam_masterdata.metadata.entities import VocabularyType
 
@@ -210,7 +213,7 @@ class Colour(VocabularyType):
 
     red = VocabularyTerm(code="RED", label="Red")
 ''',
-    "bam_masterdata/datamodel/collection_types.py": '''
+    "bam_masterdata/datamodel/v0/collection_types.py": '''
 from bam_masterdata.metadata.definitions import CollectionTypeDef
 from bam_masterdata.metadata.entities import CollectionType
 
@@ -219,7 +222,7 @@ class Campaign(CollectionType):
     defs = CollectionTypeDef(code="CAMPAIGN", description="Campaign")
 ''',
     # A second vocabulary with the code COLOUR; `lab` classes use their own.
-    "bam_masterdata/datamodel/lab/vocabularies.py": '''
+    "bam_masterdata/datamodel/v0/lab/vocabularies.py": '''
 from bam_masterdata.metadata.definitions import VocabularyTerm, VocabularyTypeDef
 from bam_masterdata.metadata.entities import VocabularyType
 
@@ -229,7 +232,7 @@ class Colour(VocabularyType):
 
     blue = VocabularyTerm(code="BLUE", label="Blue")
 ''',
-    "bam_masterdata/datamodel/lab/object_types.py": '''
+    "bam_masterdata/datamodel/v0/lab/object_types.py": '''
 from bam_masterdata.metadata.definitions import DataType, ObjectTypeDef, PropertyTypeAssignment
 from bam_masterdata.metadata.entities import ObjectType
 
@@ -241,6 +244,28 @@ class Sample(ObjectType):
         code="COLOUR", data_type="CONTROLLEDVOCABULARY", property_label="Colour", description="Colour",
         mandatory=False, vocabulary_code="COLOUR",
     )
+''',
+    # The next datamodel version; COLOUR and DEVICE are codes of v0 only.
+    "bam_masterdata/datamodel/v1/base_objects.py": '''
+from bam_masterdata.metadata.definitions import ObjectTypeDef, PropertyTypeAssignment
+from bam_masterdata.metadata.entities import ObjectType
+
+
+class Root(ObjectType):
+    defs = ObjectTypeDef(code="ROOT", description="Root")
+
+    colour = PropertyTypeAssignment(
+        code="COLOUR", data_type="CONTROLLEDVOCABULARY", property_label="Colour", description="Colour",
+        mandatory=False, vocabulary_code="COLOUR",
+    )
+    device = PropertyTypeAssignment(
+        code="DEVICE", data_type="OBJECT", property_label="Device", description="Device",
+        mandatory=False, object_code="DEVICE",
+    )
+
+
+class Entity(Root):
+    defs = ObjectTypeDef(code="ENTITY", description="Entity")
 ''',
 }
 
@@ -386,6 +411,36 @@ def test_entity_types_are_base_classes(fake_environment, package_root):
 def test_only_the_datamodel_is_read(fake_environment, package_root):
     with pytest.raises(ExtractorError, match="only modules within"):
         extract(fake_environment, package_root, "--module", "bam_masterdata.metadata.entities")
+    with pytest.raises(ExtractorError, match="only modules within"):
+        extract(fake_environment, package_root, "--base", "bam_masterdata.datamodel", "--discovery", "walk")
+
+
+def test_datamodel_versions_are_separate_schemas(fake_environment, package_root):
+    v0 = extract(fake_environment, package_root, "--base", NS, "--discovery", "walk")
+    assert not [record["id"] for record in v0["classes"] if record["id"].startswith(V1)]
+    v1 = extract(fake_environment, package_root, "--base", V1, "--discovery", "walk")
+    assert [module["classes"] for module in v1["modules"] if module["name"] == f"{V1}.base_objects"] == [
+        [f"{V1}.base_objects.Root", f"{V1}.base_objects.Entity"],
+    ]
+    assert {record["id"]: record["bases"] for record in v1["classes"]}[f"{V1}.base_objects.Entity"] == [f"{V1}.base_objects.Root"]
+    # Codes only v0 defines do not resolve in v1.
+    root = next(record for record in v1["classes"] if record["id"] == f"{V1}.base_objects.Root")
+    assert [item["range"]["kind"] for item in root["attributes"]] == ["datatype", "datatype"]
+    unresolved = sorted(row["reason"] for row in v1["report"] if row["path"].startswith(f"{V1}.base_objects.Root."))
+    assert unresolved == [
+        "unresolved object_code 'DEVICE' for OBJECT property",
+        "unresolved vocabulary_code 'COLOUR' for CONTROLLEDVOCABULARY property",
+    ]
+    with pytest.raises(ExtractorError, match="one datamodel version"):
+        extract(fake_environment, package_root, "--module", OBJECTS, "--module", f"{V1}.base_objects")
+
+
+def test_missing_datamodel_version_is_an_empty_schema(fake_environment, package_root):
+    document = extract(fake_environment, package_root, "--base", "bam_masterdata.datamodel.v2", "--discovery", "walk")
+    assert (document["modules"], document["classes"], document["enums"]) == ([], [], [])
+    assert document["report"] == [
+        {"path": "bam_masterdata.datamodel.v2", "status": "skipped", "reason": "not in this version of the package"},
+    ]
 
 
 @pytest.mark.parametrize("package,root", [

@@ -15,7 +15,7 @@ pytestmark = pytest.mark.slow
 MODULES = {
     "nomad-simulations": ["nomad_simulations.schema_packages.model_method", "nomad_simulations.schema_packages.general"],
     "nomad-measurements": ["nomad_measurements.xrd.schema", "nomad_measurements.general"],
-    "bam-masterdata": ["bam_masterdata.datamodel.object_types", "bam_masterdata.datamodel.creep_test.object_types"],
+    "bam-masterdata-v0": ["bam_masterdata.datamodel.v0.object_types", "bam_masterdata.datamodel.v0.creep_test.object_types"],
 }
 
 
@@ -56,9 +56,9 @@ def test_whole_bam_datamodel_exports_and_loads(studio_home):
     from api.sources.linkml_yaml import ANY_CLASS
     from api.sources.snapshots import get_snapshot, snapshot_yaml
 
-    profile = SCHEMA_PROFILES["bam-masterdata"]
+    profile = SCHEMA_PROFILES["bam-masterdata-v0"]
     if not schema_available(profile):
-        pytest.skip("environment for bam-masterdata is not set up")
+        pytest.skip("environment for bam-masterdata-v0 is not set up")
     snapshot = get_snapshot(profile)
     view = SchemaView(snapshot_yaml(snapshot))
     # The export adds the class `Any` as the range of attributes whose source type has no LinkML type.

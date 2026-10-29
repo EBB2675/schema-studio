@@ -82,19 +82,19 @@ async def test_workspace_branch_is_fixed_and_cannot_switch(client: httpx.AsyncCl
 async def test_workspace_update_accepts_json_body_and_switches_profile(client: httpx.AsyncClient):
     updated = await client.put(
         "/workspace",
-        json={"package": "bam_masterdata.datamodel.object_types", "base_namespace": "bam_masterdata.datamodel"},
+        json={"package": "bam_masterdata.datamodel.v0.object_types", "base_namespace": "bam_masterdata.datamodel.v0"},
     )
     assert updated.status_code == 200
     assert updated.json()["workspace"] == {
-        "profile": "bam-masterdata",
+        "profile": "bam-masterdata-v0",
         "branch": "main",
-        "package": "bam_masterdata.datamodel.object_types",
-        "base_namespace": "bam_masterdata.datamodel",
+        "package": "bam_masterdata.datamodel.v0.object_types",
+        "base_namespace": "bam_masterdata.datamodel.v0",
     }
 
     stored = await client.get("/workspace")
-    assert stored.json()["workspace"]["package"] == "bam_masterdata.datamodel.object_types"
-    assert stored.json()["schema_profile"] == "bam-masterdata"
+    assert stored.json()["workspace"]["package"] == "bam_masterdata.datamodel.v0.object_types"
+    assert stored.json()["schema_profile"] == "bam-masterdata-v0"
 
     # The branch sent along by the web app must match the profile of the new package.
     rejected = await client.put(
@@ -185,17 +185,17 @@ async def test_health_reports_light_mode_schema_metadata(client: httpx.AsyncClie
 
 
 @pytest.mark.anyio
-async def test_schema_profiles_reports_all_three_profiles(client: httpx.AsyncClient):
+async def test_schema_profiles_reports_every_profile(client: httpx.AsyncClient):
     resp = await client.get("/schema/profiles")
     assert resp.status_code == 200
     payload = resp.json()
     keys = [entry["key"] for entry in payload["profiles"]]
-    assert keys == ["nomad-simulations", "nomad-measurements", "bam-masterdata"]
+    assert keys == ["nomad-simulations", "nomad-measurements", "bam-masterdata-v0", "bam-masterdata-v1"]
     assert payload["current_profile"] == "nomad-simulations"
     assert all(entry["version"] == "deadbeef" for entry in payload["profiles"])
     rules = {entry["key"]: entry["edit_rules"] for entry in payload["profiles"]}
     assert [dtype["name"] for dtype in rules["nomad-simulations"]["dtypes"]][:3] == ["bool", "str", "datetime"]
-    assert rules["bam-masterdata"]["codes"] is True
+    assert rules["bam-masterdata-v0"]["codes"] is rules["bam-masterdata-v1"]["codes"] is True
     assert all(entry["editable"] for entry in payload["profiles"])
 
 
@@ -524,9 +524,9 @@ async def test_unavailable_schema_returns_503_and_never_installs(
     profiles = await client.get("/schema/profiles")
     assert all(entry["error"] for entry in profiles.json()["profiles"])
 
-    updated = await client.post("/schema/update", params={"profile": "bam-masterdata"})
+    updated = await client.post("/schema/update", params={"profile": "bam-masterdata-v1"})
     assert updated.status_code == 200
-    assert updated.json() == {"version": "feedbeef", "source": "remote-develop", "schema_profile": "bam-masterdata"}
+    assert updated.json() == {"version": "feedbeef", "source": "remote-develop", "schema_profile": "bam-masterdata-v1"}
     assert calls["update"] == 1
 
 

@@ -45,8 +45,8 @@ def test_bam_repo_is_selected_by_namespace(monkeypatch, tmp_path: Path):
         BAM_MASTERDATA_REPO=str(bam_repo),
     )
 
-    assert mod.repo_for_base_namespace("bam_masterdata.datamodel") == str(bam_repo)
-    assert mod.repo_for_base_namespace("bam_masterdata.datamodel.object_types") == str(bam_repo)
+    assert mod.repo_for_base_namespace("bam_masterdata.datamodel.v0") == str(bam_repo)
+    assert mod.repo_for_base_namespace("bam_masterdata.datamodel.v1.base_objects") == str(bam_repo)
     assert mod.repo_for_base_namespace("nomad_simulations.schema_packages") == str(default_repo)
 
 
@@ -64,17 +64,22 @@ def test_repo_map_overrides_default_namespace_mapping(monkeypatch, tmp_path: Pat
     )
 
     assert mod.repo_for_base_namespace("bam_masterdata.datamodel") == str(mapped_repo)
-    assert mod.repo_for_base_namespace("bam_masterdata.datamodel.vocabulary_types") == str(mapped_repo)
+    assert mod.repo_for_base_namespace("bam_masterdata.datamodel.v0.vocabulary_types") == str(mapped_repo)
 
 
 def test_default_package_for_bam_namespace(monkeypatch, tmp_path: Path):
-    """BAM base namespace should default to the object types module."""
+    """BAM base namespaces default to the object types of v0, or the base objects of v1."""
     default_repo = tmp_path / "default"
 
-    mod = _reload_settings(
-        monkeypatch,
-        SCHEMA_UML_REPO=str(default_repo),
-        SCHEMA_UML_BASE_PACKAGE="bam_masterdata.datamodel",
-    )
+    for base, package in [
+        ("bam_masterdata.datamodel", "bam_masterdata.datamodel.v0.object_types"),
+        ("bam_masterdata.datamodel.v0", "bam_masterdata.datamodel.v0.object_types"),
+        ("bam_masterdata.datamodel.v1", "bam_masterdata.datamodel.v1.base_objects"),
+    ]:
+        mod = _reload_settings(
+            monkeypatch,
+            SCHEMA_UML_REPO=str(default_repo),
+            SCHEMA_UML_BASE_PACKAGE=base,
+        )
 
-    assert mod.DEFAULT_PACKAGE == "bam_masterdata.datamodel.object_types"
+        assert mod.DEFAULT_PACKAGE == package

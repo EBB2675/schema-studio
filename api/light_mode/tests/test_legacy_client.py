@@ -48,16 +48,16 @@ def _record_calls(legacy, monkeypatch, result):
 def test_calls_run_in_the_environment_of_the_owning_profile(legacy, monkeypatch):
     calls = _record_calls(legacy, monkeypatch, ["SearchQuery"])
 
-    assert legacy.list_sections("bam_masterdata.datamodel.object_types") == ["SearchQuery"]
+    assert legacy.list_sections("bam_masterdata.datamodel.v0.object_types") == ["SearchQuery"]
     assert legacy.list_sections("nomad_measurements.xrd.schema") == ["SearchQuery"]
 
     assert [name for name, _ in calls] == ["bam-masterdata", "nomad-measurements"]
-    assert calls[0][1] == ("sections", '{"package": "bam_masterdata.datamodel.object_types"}')
+    assert calls[0][1] == ("sections", '{"package": "bam_masterdata.datamodel.v0.object_types"}')
 
 
 def test_results_are_cached_per_commit_command_and_arguments(legacy, monkeypatch):
     calls = _record_calls(legacy, monkeypatch, {"package": "p", "root": None, "nodes": [], "edges": []})
-    package = "bam_masterdata.datamodel.object_types"
+    package = "bam_masterdata.datamodel.v0.object_types"
 
     legacy.build_graph(package, root="SearchQuery")
     legacy.build_graph(package, root="SearchQuery")
@@ -69,7 +69,7 @@ def test_results_are_cached_per_commit_command_and_arguments(legacy, monkeypatch
     legacy.version["value"] = "commit-b"
     legacy.build_graph(package, root="SearchQuery")
     assert len(calls) == 3
-    assert sorted(p.name for p in (legacy.cache_root() / "bam-masterdata").iterdir()) == ["commit-a", "commit-b"]
+    assert sorted(p.name for p in (legacy.cache_root() / "bam-masterdata-v0").iterdir()) == ["commit-a", "commit-b"]
 
 
 def test_catalog_uses_the_discovery_method_of_the_profile(legacy, monkeypatch):
@@ -133,7 +133,7 @@ def test_script_errors_come_back_as_exceptions_and_are_not_cached(legacy, monkey
     monkeypatch.setattr(legacy, "run_script", failing)
 
     with pytest.raises(expected) as exc:
-        legacy.list_sections("bam_masterdata.datamodel.object_types")
+        legacy.list_sections("bam_masterdata.datamodel.v0.object_types")
 
     assert error["message"] in str(exc.value)
     if expected is ModuleNotFoundError:
@@ -150,6 +150,6 @@ def test_missing_environment_becomes_schema_unavailable(legacy, monkeypatch):
     monkeypatch.setattr(legacy, "run_script", missing)
 
     with pytest.raises(legacy.SchemaUnavailable) as exc:
-        legacy.list_sections("bam_masterdata.datamodel.object_types")
+        legacy.list_sections("bam_masterdata.datamodel.v0.object_types")
 
     assert "uv sync --project" in str(exc.value)

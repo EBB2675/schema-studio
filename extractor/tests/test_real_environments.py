@@ -12,7 +12,7 @@ import pytest
 
 pytestmark = pytest.mark.slow
 
-PROFILE_KEYS = ["nomad-simulations", "nomad-measurements", "bam-masterdata"]
+PROFILE_KEYS = ["nomad-simulations", "nomad-measurements", "bam-masterdata-v0"]
 
 
 @pytest.fixture()
@@ -83,14 +83,27 @@ def test_simulations_modules_beyond_the_entry_point_are_found(profile):
     assert {"general", "model_method", "model_system", "outputs"} <= {p.rsplit(".", 1)[-1] for p in packages}
 
 
-@pytest.mark.parametrize("profile", ["bam-masterdata"], indirect=True)
+@pytest.mark.parametrize("profile", ["bam-masterdata-v0"], indirect=True)
 def test_bam_datamodel_modules_and_subpackages_are_found(profile):
     from api.sources import legacy
 
-    packages = {m["package"].removeprefix("bam_masterdata.datamodel.") for m in legacy.list_schema_modules(profile.default_base_namespace)}
+    packages = {m["package"].removeprefix("bam_masterdata.datamodel.v0.") for m in legacy.list_schema_modules(profile.default_base_namespace)}
 
     assert {"object_types", "vocabulary_types", "collection_types", "dataset_types", "instruments", "activities"} <= packages
     assert any("." in package for package in packages), "subpackages such as welding.object_types are missing"
+
+
+@pytest.mark.parametrize("profile", ["bam-masterdata-v1"], indirect=True)
+def test_bam_v1_holds_root_activity_and_entity(profile):
+    from api.sources.snapshots import get_snapshot
+
+    snapshot = get_snapshot(profile)
+    if not snapshot["extraction"]["modules"]:
+        pytest.skip("the installed bam-masterdata has no datamodel v1 yet")
+    module = "bam_masterdata.datamodel.v1.base_objects"
+    classes = snapshot["linkml"]["classes"]
+    assert classes[f"{module}.Activity"]["is_a"] == classes[f"{module}.Entity"]["is_a"] == f"{module}.Root"
+    assert all(cid.startswith(("bam_masterdata.datamodel.v1.", "bam_masterdata.metadata.")) for cid in classes)
 
 
 @pytest.mark.parametrize("profile", ["nomad-simulations", "nomad-measurements"], indirect=True)

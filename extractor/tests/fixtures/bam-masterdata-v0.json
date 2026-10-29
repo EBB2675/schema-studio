@@ -63,7 +63,7 @@
      "name": "acting_person",
      "range": {
       "kind": "class",
-      "name": "bam_masterdata.datamodel.object_types.Bam"
+      "name": "bam_masterdata.datamodel.v0.object_types.Bam"
      }
     },
     {
@@ -110,32 +110,32 @@
    "description": "This Object allows to store information on an action by a user.//Dieses Objekt erlaubt eine Nutzer-Aktion zu beschreiben.",
    "effective_attributes": [
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Action",
      "kind": "property",
      "name": "name"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Action",
      "kind": "property",
      "name": "action_date"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Action",
      "kind": "property",
      "name": "acting_person"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Action",
      "kind": "property",
      "name": "xmlcomments"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Action",
      "kind": "property",
      "name": "annotations_state"
     }
    ],
-   "id": "bam_masterdata.datamodel.object_types.Action",
+   "id": "bam_masterdata.datamodel.v0.object_types.Action",
    "name": "Action"
   },
   {
@@ -163,7 +163,7 @@
      "name": "atom_short_rng_ord",
      "range": {
       "kind": "enum",
-      "name": "bam_masterdata.datamodel.vocabulary_types.ShortRngOrd.terms"
+      "name": "bam_masterdata.datamodel.v0.vocabulary_types.ShortRngOrd.terms"
      }
     },
     {
@@ -225,92 +225,92 @@
     }
    ],
    "bases": [
-    "bam_masterdata.datamodel.object_types.MatSimStructure"
+    "bam_masterdata.datamodel.v0.object_types.MatSimStructure"
    ],
    "description": "Material simulation structure - amorphous//Material-simulationsstruktur - amorph",
    "effective_attributes": [
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "name"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "description"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "workflow_manager"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "crystal_orientation"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "sim_cell_lengths_in_a"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "sim_cell_vectors"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "sim_cell_angles_in_deg"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "sim_cell_volume_in_a3"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "notes"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "conceptual_dictionary"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "xmlcomments"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "annotations_state"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Amorphous",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Amorphous",
      "kind": "property",
      "name": "atom_short_rng_ord"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Amorphous",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Amorphous",
      "kind": "property",
      "name": "chem_species_by_n_atoms"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Amorphous",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Amorphous",
      "kind": "property",
      "name": "n_atoms_total"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Amorphous",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Amorphous",
      "kind": "property",
      "name": "atom_sample_temp_in_k"
     }
    ],
-   "id": "bam_masterdata.datamodel.object_types.Amorphous",
+   "id": "bam_masterdata.datamodel.v0.object_types.Amorphous",
    "name": "Amorphous"
   },
   {
@@ -400,72 +400,72 @@
     }
    ],
    "bases": [
-    "bam_masterdata.datamodel.object_types.Person"
+    "bam_masterdata.datamodel.v0.object_types.Person"
    ],
    "description": "A BAM employee (is generated automatically)//Ein*e BAM-Mitarbeiter*in (wird automatisch generiert)",
    "effective_attributes": [
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Person",
      "kind": "property",
      "name": "name"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Person",
      "kind": "property",
      "name": "family_name"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Person",
      "kind": "property",
      "name": "given_name"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Person",
      "kind": "property",
      "name": "alias"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Person",
      "kind": "property",
      "name": "affiliation"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Person",
      "kind": "property",
      "name": "email"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Person",
      "kind": "property",
      "name": "telephone"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Person",
      "kind": "property",
      "name": "address"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Bam",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Bam",
      "kind": "property",
      "name": "bam_oe"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Bam",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Bam",
      "kind": "property",
      "name": "bam_username"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Bam",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Bam",
      "kind": "property",
      "name": "bam_userprofile"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Bam",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Bam",
      "kind": "property",
      "name": "bam_data_store_user_status"
     }
    ],
-   "id": "bam_masterdata.datamodel.object_types.Bam",
+   "id": "bam_masterdata.datamodel.v0.object_types.Bam",
    "name": "Bam"
   },
   {
@@ -551,7 +551,7 @@
      "name": "calibration_provider",
      "range": {
       "kind": "enum",
-      "name": "bam_masterdata.datamodel.vocabulary_types.CalibrationProvider.terms"
+      "name": "bam_masterdata.datamodel.v0.vocabulary_types.CalibrationProvider.terms"
      }
     },
     {
@@ -674,57 +674,57 @@
    "description": "Calibration//Kalibrierung",
    "effective_attributes": [
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Calibration",
      "kind": "property",
      "name": "name"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Calibration",
      "kind": "property",
      "name": "instrument"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Calibration",
      "kind": "property",
      "name": "calibration_date"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Calibration",
      "kind": "property",
      "name": "calibration_provider"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Calibration",
      "kind": "property",
      "name": "calibration_certificate_number"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Calibration",
      "kind": "property",
      "name": "accreditated_calibration_lab"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Calibration",
      "kind": "property",
      "name": "calibration_lab_accreditation_number"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Calibration",
      "kind": "property",
      "name": "notes"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Calibration",
      "kind": "property",
      "name": "xmlcomments"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Calibration",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Calibration",
      "kind": "property",
      "name": "annotations_state"
     }
    ],
-   "id": "bam_masterdata.datamodel.object_types.Calibration",
+   "id": "bam_masterdata.datamodel.v0.object_types.Calibration",
    "name": "Calibration"
   },
   {
@@ -752,47 +752,47 @@
      "name": "trained_person",
      "range": {
       "kind": "class",
-      "name": "bam_masterdata.datamodel.object_types.Bam"
+      "name": "bam_masterdata.datamodel.v0.object_types.Bam"
      }
     }
    ],
    "bases": [
-    "bam_masterdata.datamodel.object_types.Action"
+    "bam_masterdata.datamodel.v0.object_types.Action"
    ],
    "description": "This Object allows to document a device instruction.//Dieses Objekt erlaubt eine Geräte-Unterweisung zu dokumentieren.",
    "effective_attributes": [
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Action",
      "kind": "property",
      "name": "name"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Action",
      "kind": "property",
      "name": "action_date"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Action",
      "kind": "property",
      "name": "acting_person"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Action",
      "kind": "property",
      "name": "xmlcomments"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Action",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Action",
      "kind": "property",
      "name": "annotations_state"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.DeviceTraining",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.DeviceTraining",
      "kind": "property",
      "name": "trained_person"
     }
    ],
-   "id": "bam_masterdata.datamodel.object_types.DeviceTraining",
+   "id": "bam_masterdata.datamodel.v0.object_types.DeviceTraining",
    "name": "DeviceTraining"
   },
   {
@@ -1038,67 +1038,67 @@
    "description": "Material simulation structure // Material-Simulationsstruktur",
    "effective_attributes": [
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "name"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "description"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "workflow_manager"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "crystal_orientation"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "sim_cell_lengths_in_a"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "sim_cell_vectors"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "sim_cell_angles_in_deg"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "sim_cell_volume_in_a3"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "notes"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "conceptual_dictionary"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "xmlcomments"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
      "kind": "property",
      "name": "annotations_state"
     }
    ],
-   "id": "bam_masterdata.datamodel.object_types.MatSimStructure",
+   "id": "bam_masterdata.datamodel.v0.object_types.MatSimStructure",
    "name": "MatSimStructure"
   },
   {
@@ -1268,54 +1268,54 @@
    "description": "A natural person//Eine natürliche Person",
    "effective_attributes": [
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Person",
      "kind": "property",
      "name": "name"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Person",
      "kind": "property",
      "name": "family_name"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Person",
      "kind": "property",
      "name": "given_name"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Person",
      "kind": "property",
      "name": "alias"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Person",
      "kind": "property",
      "name": "affiliation"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Person",
      "kind": "property",
      "name": "email"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Person",
      "kind": "property",
      "name": "telephone"
     },
     {
-     "declaring_class_id": "bam_masterdata.datamodel.object_types.Person",
+     "declaring_class_id": "bam_masterdata.datamodel.v0.object_types.Person",
      "kind": "property",
      "name": "address"
     }
    ],
-   "id": "bam_masterdata.datamodel.object_types.Person",
+   "id": "bam_masterdata.datamodel.v0.object_types.Person",
    "name": "Person"
   },
   {
    "annotations": {
     "code": "CALIBRATION_PROVIDER",
     "entity_kind": "VocabularyTypeDef",
-    "vocabulary_enum": "bam_masterdata.datamodel.vocabulary_types.CalibrationProvider.terms"
+    "vocabulary_enum": "bam_masterdata.datamodel.v0.vocabulary_types.CalibrationProvider.terms"
    },
    "attributes": [],
    "bases": [
@@ -1323,14 +1323,14 @@
    ],
    "description": "Calibration provider//Kalibrierdienstleister",
    "effective_attributes": [],
-   "id": "bam_masterdata.datamodel.vocabulary_types.CalibrationProvider",
+   "id": "bam_masterdata.datamodel.v0.vocabulary_types.CalibrationProvider",
    "name": "CalibrationProvider"
   },
   {
    "annotations": {
     "code": "SHORT_RNG_ORD",
     "entity_kind": "VocabularyTypeDef",
-    "vocabulary_enum": "bam_masterdata.datamodel.vocabulary_types.ShortRngOrd.terms"
+    "vocabulary_enum": "bam_masterdata.datamodel.v0.vocabulary_types.ShortRngOrd.terms"
    },
    "attributes": [],
    "bases": [
@@ -1338,7 +1338,7 @@
    ],
    "description": "Short range ordering in amorphous materials//Kurzstreckenordnung in amorphen Materialien",
    "effective_attributes": [],
-   "id": "bam_masterdata.datamodel.vocabulary_types.ShortRngOrd",
+   "id": "bam_masterdata.datamodel.v0.vocabulary_types.ShortRngOrd",
    "name": "ShortRngOrd"
   },
   {
@@ -1361,7 +1361,7 @@
  "contract_version": "1.0",
  "enums": [
   {
-   "id": "bam_masterdata.datamodel.vocabulary_types.CalibrationProvider.terms",
+   "id": "bam_masterdata.datamodel.v0.vocabulary_types.CalibrationProvider.terms",
    "values": [
     {
      "annotations": {
@@ -1384,7 +1384,7 @@
    ]
   },
   {
-   "id": "bam_masterdata.datamodel.vocabulary_types.ShortRngOrd.terms",
+   "id": "bam_masterdata.datamodel.v0.vocabulary_types.ShortRngOrd.terms",
    "values": [
     {
      "annotations": {
@@ -1419,33 +1419,33 @@
  "modules": [
   {
    "classes": [
-    "bam_masterdata.datamodel.object_types.Amorphous",
-    "bam_masterdata.datamodel.object_types.DeviceTraining",
-    "bam_masterdata.datamodel.object_types.Calibration"
+    "bam_masterdata.datamodel.v0.object_types.Amorphous",
+    "bam_masterdata.datamodel.v0.object_types.DeviceTraining",
+    "bam_masterdata.datamodel.v0.object_types.Calibration"
    ],
-   "name": "bam_masterdata.datamodel.object_types"
+   "name": "bam_masterdata.datamodel.v0.object_types"
   }
  ],
  "report": [
   {
-   "path": "bam_masterdata.datamodel.object_types.Bam.bam_oe",
+   "path": "bam_masterdata.datamodel.v0.object_types.Bam.bam_oe",
    "reason": "unresolved vocabulary_code 'BAM_OE' for CONTROLLEDVOCABULARY property",
    "status": "partial"
   },
   {
-   "path": "bam_masterdata.datamodel.object_types.Calibration.instrument",
+   "path": "bam_masterdata.datamodel.v0.object_types.Calibration.instrument",
    "reason": "unresolved object_code '(ALL)' for OBJECT property",
    "status": "partial"
   }
  ],
  "source": {
-  "commit": "9e2b29a18c15f4e1f8898b52ae1d7d10a2992fef",
+  "commit": "4162906a1bc634b078ccd48c9cd72f4ccd2dc0af",
   "dependencies": {
    "pint": "0.26.1",
    "pydantic": "2.13.5"
   },
-  "module": "bam_masterdata.datamodel.object_types",
+  "module": "bam_masterdata.datamodel.v0.object_types",
   "name": "bam-masterdata",
-  "version": "0.14.0"
+  "version": "0.16.1"
  }
 }
