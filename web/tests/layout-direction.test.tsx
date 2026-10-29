@@ -85,4 +85,26 @@ describe('GraphView layout direction', () => {
     rerender(view({ onLayoutReady, layoutDirection: 'LEFT' }));
     expect(fakeCy.stats.layouts).toBe(2);
   });
+
+  it('keeps the selection when the direction changes again before the layout ends', () => {
+    const onLayoutReady = vi.fn();
+    const { rerender } = render(view({ onLayoutReady }));
+    act(() => fakeCy.finishLayout());
+    expect(onLayoutReady).toHaveBeenCalledTimes(1);
+
+    rerender(view({ onLayoutReady, layoutDirection: 'LEFT' }));
+    rerender(view({ onLayoutReady, layoutDirection: 'DOWN' }));
+    expect(fakeCy.stats.layouts).toBe(3);
+    expect(elkDirection()).toBe('DOWN');
+    act(() => fakeCy.finishLayout());
+    expect(onLayoutReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('still reports a new graph whose layout a new direction replaced', () => {
+    const onLayoutReady = vi.fn();
+    const { rerender } = render(view({ onLayoutReady }));
+    rerender(view({ onLayoutReady, layoutDirection: 'LEFT' }));
+    act(() => fakeCy.finishLayout());
+    expect(onLayoutReady).toHaveBeenCalledTimes(1);
+  });
 });

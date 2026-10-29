@@ -743,6 +743,9 @@ export default function GraphView({
   const layoutRef = useRef<cytoscape.Layouts | null>(null);
   // Bumped by every full layout; a layout that finishes after a newer one started is ignored.
   const layoutRunRef = useRef(0);
+  // Whether the running full layout calls onLayoutReady when it ends; a layout that
+  // replaces it before then takes this over.
+  const layoutNotifiesRef = useRef(false);
   // Bumped whenever the view must stay put, which cancels a fit still waiting to happen.
   const fitTicketRef = useRef(0);
   const laidOutKeyRef = useRef<unknown>(NOT_LAID_OUT);
@@ -998,7 +1001,8 @@ export default function GraphView({
     const layoutRunning = layoutRef.current !== null;
     if ((newGraph || newDirection || !hadNodes || layoutRunning) && cy.nodes().length > 0) {
       // A new direction for the same graph moves the classes, not the selection.
-      const turnedOnly = newDirection && !newGraph && hadNodes && !layoutRunning;
+      const notifies = newGraph || !hadNodes || (layoutRunning && layoutNotifiesRef.current);
+      layoutNotifiesRef.current = notifies;
       layoutRef.current?.stop();
       const run = ++layoutRunRef.current;
       const fitTicket = ++fitTicketRef.current;
@@ -1020,7 +1024,7 @@ export default function GraphView({
         requestAnimationFrame(() => {
           if (fitTicket === fitTicketRef.current && cyRef.current === cy) fitView(cy);
         });
-        if (handleRef.current && !turnedOnly) latestRef.current.onLayoutReady?.(handleRef.current);
+        if (handleRef.current && notifies) latestRef.current.onLayoutReady?.(handleRef.current);
       });
       layout.run();
       return;
