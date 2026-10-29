@@ -44,7 +44,8 @@ type Props = {
   // A new value means a new graph: the canvas lays it out and fits it once. Other
   // changes keep the classes where they are and place only the ones that join.
   layoutKey?: string | number;
-  // Called after that layout and fit, but not after a layout for a new layoutDirection.
+  // Called when that layout ends, also when its fit was cancelled, but not after a
+  // layout for a new layoutDirection.
   onLayoutReady?: (handle: GraphExportHandle) => void;
   showQuantityMetadata?: boolean;
   showInheritance?: boolean;
@@ -1018,12 +1019,13 @@ export default function GraphView({
         layoutRef.current = null;
         syncAllCardBoxes();
         // Anything that happened since the layout started (an expansion, an explicit fit) keeps its view.
-        if (fitTicket !== fitTicketRef.current) return;
-        fitView(cy);
-        // The container may still settle in the next frame; fit once more unless something moved on.
-        requestAnimationFrame(() => {
-          if (fitTicket === fitTicketRef.current && cyRef.current === cy) fitView(cy);
-        });
+        if (fitTicket === fitTicketRef.current) {
+          fitView(cy);
+          // The container may still settle in the next frame; fit once more unless something moved on.
+          requestAnimationFrame(() => {
+            if (fitTicket === fitTicketRef.current && cyRef.current === cy) fitView(cy);
+          });
+        }
         if (handleRef.current && notifies) latestRef.current.onLayoutReady?.(handleRef.current);
       });
       layout.run();
