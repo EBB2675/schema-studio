@@ -837,7 +837,8 @@ export default function App() {
   const helpSummary = useMemo(
     () => {
       const lines = [
-        "Workspace (left): pick a database, then a class in its bird's-eye view.",
+        "Start page (center): pick a database, then a class in its bird's-eye view.",
+        "Workspace (left): diagram options, Build graph, import and export.",
         "Graph canvas (center): pan/zoom, select classes, toggle UML/Edit.",
         "Documentation (right): class and quantity docs; edit quantities in Edit mode.",
         "Under the hood (right, below Documentation): where the selected class is used in code.",
@@ -2725,73 +2726,11 @@ export default function App() {
           onToggle={setOpenWorkspace}
         >
           <div className="action-stack">
-            <div className="row" style={{ gap: 10 }}>
-              <button
-                className="btn"
-                onClick={() => setMode((m) => (m === "overview" ? "graph" : "overview"))}
-                title="Toggle bird's-eye view"
-              >
-                {mode === "overview" ? "Back to diagram" : "Bird's-eye view"}
-              </button>
-            </div>
             {STATIC_MODE ? (
               <Suspense fallback={null}>
                 <StaticSitePanel onEditsChanged={() => void loadGraph({ keepView: true })} />
               </Suspense>
             ) : null}
-            <div className="card" style={{ padding: 12, border: "1px solid var(--border)", borderRadius: 8, display: "grid", gap: 10 }}>
-              <div style={{ display: "grid", gap: 8 }}>
-                {databases.map((profile) => {
-                  const isSelected = selectedDatabaseKey === profile.key;
-                  return (
-                    <button
-                      key={profile.key}
-                      type="button"
-                      className={`btn ${isSelected ? "" : "secondary"}`}
-                      onClick={() => void openDatabase(profile.key)}
-                      disabled={profile.empty}
-                      style={{ justifyContent: "space-between", textAlign: "left" }}
-                      title={
-                        profile.empty
-                          ? EMPTY_DATABASE_NOTE
-                          : STATIC_MODE && profile.version
-                            ? `Schema as of commit ${profile.version.slice(0, 9)}`
-                            : undefined
-                      }
-                    >
-                      <span>{profile.label}</span>
-                      {STATIC_MODE || !isLightMode ? null : (
-                        <span className="small" style={{ color: isSelected ? "inherit" : "var(--muted)" }}>
-                          {profile.available
-                            ? profile.source === "bundled"
-                              ? "bundled"
-                              : profile.version?.slice(0, 9) || "ready"
-                            : "not loaded"}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-              {databases.some((profile) => profile.empty) ? (
-                <div className="small" style={{ color: "var(--muted)" }}>
-                  {databases.filter((profile) => profile.empty).map((profile) => profile.label).join(", ")}: {EMPTY_DATABASE_NOTE}
-                </div>
-              ) : null}
-              {currentSchemaProfile && !currentSchemaProfile.available ? (
-                <div className="small" style={{ color: "#fca5a5" }}>
-                  {currentSchemaProfile.error || "This schema is not available yet. Load it while online to continue."}
-                </div>
-              ) : null}
-              {schemaProfileError ? (
-                <div className="small" style={{ color: "#fca5a5" }}>{schemaProfileError}</div>
-              ) : null}
-              {currentSchemaProfile && !currentSchemaProfile.available ? (
-                <button className="btn secondary" type="button" onClick={loadSelectedSchemaProfile} disabled={schemaUpdating}>
-                  {schemaUpdating ? "Loading schema…" : `Load ${currentSchemaProfile.label}`}
-                </button>
-              ) : null}
-            </div>
             {isLightMode ? null : (
               <div>
                 <label className="label">Choose from branch</label>
@@ -3188,7 +3127,12 @@ export default function App() {
           }}
         >
           {mode === "overview" ? (
-            <div style={{ flex: 1, minHeight: 0 }}>
+            <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 12 }}>
+              <div className="workspace-toolbar">
+                <button className="btn secondary" type="button" onClick={returnToHome}>
+                  Back to home
+                </button>
+              </div>
               <OverviewGrid
                 apiBase={apiBase}
                 branch={overviewBranch}
@@ -3350,29 +3294,82 @@ export default function App() {
             </>
           ) : (
             <div className="empty-state">
-              <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 16 }}>
-                Build a diagram to get started
+              <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>
+                Pick a database to get started
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                Its bird's-eye view lists every module with its classes; click a class to open its diagram.
+              </div>
+              <div style={{ display: "grid", gap: 10, maxWidth: 520, margin: "0 auto 24px", textAlign: "left" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
+                  {databases.map((profile) => {
+                    const isSelected = selectedDatabaseKey === profile.key;
+                    return (
+                      <button
+                        key={profile.key}
+                        type="button"
+                        className={`btn ${isSelected ? "" : "secondary"}`}
+                        onClick={() => void openDatabase(profile.key)}
+                        disabled={profile.empty}
+                        style={{ justifyContent: "space-between", textAlign: "left" }}
+                        title={
+                          profile.empty
+                            ? EMPTY_DATABASE_NOTE
+                            : STATIC_MODE && profile.version
+                              ? `Schema as of commit ${profile.version.slice(0, 9)}`
+                              : undefined
+                        }
+                      >
+                        <span>{profile.label}</span>
+                        {STATIC_MODE || !isLightMode ? null : (
+                          <span className="small" style={{ color: isSelected ? "inherit" : "var(--muted)" }}>
+                            {profile.available
+                              ? profile.source === "bundled"
+                                ? "bundled"
+                                : profile.version?.slice(0, 9) || "ready"
+                              : "not loaded"}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {databases.some((profile) => profile.empty) ? (
+                  <div className="small" style={{ color: "var(--muted)" }}>
+                    {databases.filter((profile) => profile.empty).map((profile) => profile.label).join(", ")}: {EMPTY_DATABASE_NOTE}
+                  </div>
+                ) : null}
+                {currentSchemaProfile && !currentSchemaProfile.available ? (
+                  <div className="small" style={{ color: "#fca5a5" }}>
+                    {currentSchemaProfile.error || "This schema is not available yet. Load it while online to continue."}
+                  </div>
+                ) : null}
+                {schemaProfileError ? (
+                  <div className="small" style={{ color: "#fca5a5" }}>{schemaProfileError}</div>
+                ) : null}
+                {currentSchemaProfile && !currentSchemaProfile.available ? (
+                  <button className="btn secondary" type="button" onClick={loadSelectedSchemaProfile} disabled={schemaUpdating}>
+                    {schemaUpdating ? "Loading schema…" : `Load ${currentSchemaProfile.label}`}
+                  </button>
+                ) : null}
               </div>
               <div style={{ lineHeight: 1.5, display: "grid", gap: 10 }}>
                 <div>
-                  1) Go to <button className="link-button" type="button" onClick={() => focusAndOpen("workspace")}>Workspace 👈</button>, pick a database, then click a class in its bird's-eye view.
+                  1) See the <button className="link-button" type="button" onClick={() => focusAndOpen("documentation")}>Documentation 👉</button> panel to read class/quantity details as you browse.
                 </div>
                 <div>
-                  2) See the <button className="link-button" type="button" onClick={() => focusAndOpen("documentation")}>Documentation 👉</button> panel to read class/quantity details as you browse.
+                  2) Switch to <strong>Editable mode</strong> to add, rename, or remove classes and quantities.
                 </div>
                 <div>
-                  3) Switch to <strong>Editable mode</strong> to add, rename, or remove classes and quantities.
-                </div>
-                <div>
-                  4) Prefer to sketch your own? Turn on “Start from empty canvas” to drop in custom classes/quantities without loading existing schema.
+                  3) Prefer to sketch your own? Turn on “Start from empty canvas” to drop in custom classes/quantities without loading existing schema.
                 </div>
                 {!isLightMode ? (
                   <div>
-                    5) <button className="link-button" type="button" onClick={() => focusAndOpen("compare")}>Compare branches 👈</button> to see how two git branches differ in structure.
+                    4) <button className="link-button" type="button" onClick={() => focusAndOpen("compare")}>Compare branches 👈</button> to see how two git branches differ in structure.
                   </div>
                 ) : null}
                 <div>
-                  {isLightMode ? "5)" : "6)"} Communicate your edits via <button className="link-button" type="button" onClick={() => focusAndOpen("audit")}>Audit trail 👈</button> - export or clear the log anytime.
+                  {isLightMode ? "4)" : "5)"} Communicate your edits via <button className="link-button" type="button" onClick={() => focusAndOpen("audit")}>Audit trail 👈</button> - export or clear the log anytime.
                 </div>
               </div>
               <div style={{ marginTop: 14 }}>

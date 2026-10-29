@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { useWorkspaceStore } from '../src/store/workspace';
 
-// The Workspace panel offers one button per database; a button opens that
+// The start page offers one button per database; a button opens that
 // database's bird's-eye view, and a class there opens its diagram.
 const mockGet = vi.fn();
 const mockPut = vi.fn();
@@ -72,11 +72,7 @@ const answer = (profiles: { key: string; default_base_namespace: string }[] | nu
 // A button's name also holds the schema's state ("ready") where the server reports it.
 const database = (label: string) => new RegExp(`^${label}`);
 
-const openWorkspace = async (user: ReturnType<typeof userEvent.setup>) => {
-  await user.click(await screen.findByRole('button', { name: /Explore the data model/ }));
-};
-
-describe('Workspace databases', () => {
+describe('Start page databases', () => {
   beforeEach(() => {
     mockGet.mockReset();
     mockPut.mockReset();
@@ -94,28 +90,34 @@ describe('Workspace databases', () => {
 
   afterEach(() => cleanup());
 
-  it('shows one button per database and no package or root dropdowns', async () => {
+  it('shows one button per database, and the Workspace panel no dropdowns or view toggle', async () => {
     answer(PROFILES);
     const user = userEvent.setup();
     render(<App />);
-    await openWorkspace(user);
     const selected = await screen.findByRole('button', { name: database('nomad-simulations') });
     expect(selected.className).toBe('btn ');
     expect(screen.getByRole('button', { name: database('bam-masterdata v1') }).className).toBe('btn secondary');
     expect(screen.queryByText('Choose package')).toBeNull();
     expect(screen.queryByText('Root section')).toBeNull();
     expect(screen.queryByText('Custom package...')).toBeNull();
+    await user.click(screen.getByRole('button', { name: /Explore the data model/ }));
+    expect(screen.queryByRole('button', { name: "Bird's-eye view" })).toBeNull();
   });
 
   it('opens the bird\'s-eye view of the clicked database, and a class there opens its diagram', async () => {
     answer(PROFILES);
     const user = userEvent.setup();
     render(<App />);
-    await openWorkspace(user);
     await user.click(await screen.findByRole('button', { name: database('bam-masterdata v1') }));
     expect(await screen.findByText(`overview of ${V1}`)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: database('bam-masterdata v1') }).className).toBe('btn ');
     expect(mockPut).toHaveBeenCalledWith('/workspace', expect.objectContaining({ base_namespace: V1 }));
+    // The buttons are on the start page only; Back to home shows them again, with v1 selected.
+    expect(screen.queryByRole('button', { name: database('bam-masterdata v0') })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Back to home' }));
+    expect((await screen.findByRole('button', { name: database('bam-masterdata v1') })).className).toBe('btn ');
+
+    await user.click(screen.getByRole('button', { name: database('bam-masterdata v1') }));
+    expect(await screen.findByText(`overview of ${V1}`)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Entity' }));
     expect(await screen.findByText('graph view')).toBeInTheDocument();
@@ -126,9 +128,7 @@ describe('Workspace databases', () => {
 
   it('disables a database that has no classes yet, with a note', async () => {
     answer([...PROFILES.slice(0, 2), { ...PROFILES[2], empty: true }]);
-    const user = userEvent.setup();
     render(<App />);
-    await openWorkspace(user);
     expect(await screen.findByRole('button', { name: database('bam-masterdata v1') })).toBeDisabled();
     expect(screen.getByRole('button', { name: database('bam-masterdata v0') })).toBeEnabled();
     expect(screen.getByText(/bam-masterdata v1: not released on the tracked branch yet/)).toBeInTheDocument();
@@ -136,9 +136,7 @@ describe('Workspace databases', () => {
 
   it('offers the four databases when the server lists no profiles, as in Dev Mode', async () => {
     answer(null);
-    const user = userEvent.setup();
     render(<App />);
-    await openWorkspace(user);
     for (const label of ['nomad-simulations', 'nomad-measurements', 'bam-masterdata v0', 'bam-masterdata v1']) {
       expect(await screen.findByRole('button', { name: database(label) })).toBeEnabled();
     }
