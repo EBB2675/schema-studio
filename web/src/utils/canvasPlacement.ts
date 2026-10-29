@@ -1,3 +1,5 @@
+import { DEFAULT_LAYOUT_DIRECTION, type LayoutDirection } from "./layoutDirection";
+
 // Positions are node centres in Cytoscape model coordinates.
 export type Point = { x: number; y: number };
 export type PlacedBox = Point & { w: number; h: number };
@@ -16,10 +18,18 @@ const MAX_STEPS = 400;
 const overlaps = (a: PlacedBox, b: PlacedBox) =>
   Math.abs(a.x - b.x) * 2 < a.w + b.w + GAP_X && Math.abs(a.y - b.y) * 2 < a.h + b.h + GAP_Y;
 
-// Which side of a linked class a new class goes: subclasses under their parent (where
-// its + is), a parent over its subclass, a subsection right of the class holding it.
-function sideOf(node: string, link: Link): Side {
-  if (link.type === "inherits") return link.source === node ? "below" : "above";
+// The side of its parent a subclass goes, away from the root as the full layout has it.
+const SUBCLASS_SIDE: Record<LayoutDirection, Side> = { UP: "below", DOWN: "above", LEFT: "right", RIGHT: "left" };
+const OPPOSITE: Record<Side, Side> = { below: "above", above: "below", right: "left", left: "right" };
+
+// Which side of a linked class a new class goes: subclasses on their parent's side away
+// from the root, a parent on the other side of its subclass, a subsection right of the
+// class holding it.
+function sideOf(node: string, link: Link, direction: LayoutDirection): Side {
+  if (link.type === "inherits") {
+    const side = SUBCLASS_SIDE[direction];
+    return link.source === node ? side : OPPOSITE[side];
+  }
   return link.target === node ? "right" : "left";
 }
 
@@ -28,16 +38,17 @@ function sideOf(node: string, link: Link): Side {
  *
  * A class that was on the canvas before goes back where it was, if that spot is
  * still free. Every other class goes beside a class it is linked to, as `sideOf`
- * says: subclasses in rows of up to four, centred under their parent; other
- * classes in a column. A group that would cover a class moves further the same
- * way (further down, for subclasses) until it is free. Classes linked to nothing
- * on the canvas go right of everything.
+ * says for the canvas's layout direction: classes above or below in rows of up
+ * to four, centred on the class they link to; classes left or right in a column.
+ * A group that would cover a class moves further the same way until it is free.
+ * Classes linked to nothing on the canvas go right of everything.
  */
 export function placeNewNodes(
   existing: Map<string, PlacedBox>,
   added: NewNode[],
   links: Link[],
-  remembered: Map<string, Point> = new Map()
+  remembered: Map<string, Point> = new Map(),
+  direction: LayoutDirection = DEFAULT_LAYOUT_DIRECTION
 ): Map<string, Point> {
   const placed = new Map(existing);
   const occupied = [...existing.values()];
@@ -118,7 +129,7 @@ export function placeNewNodes(
         continue;
       }
       const anchorId = link.source === node.id ? link.target : link.source;
-      const side = sideOf(node.id, link);
+      const side = sideOf(node.id, link, direction);
       const key = `${anchorId}|${side}`;
       const group = groups.get(key) ?? { anchor: placed.get(anchorId)!, side, nodes: [] };
       group.nodes.push(node);
