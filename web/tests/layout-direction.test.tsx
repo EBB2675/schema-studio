@@ -107,4 +107,15 @@ describe('GraphView layout direction', () => {
     act(() => fakeCy.finishLayout());
     expect(onLayoutReady).toHaveBeenCalledTimes(1);
   });
+
+  it('reports a finished layout even when a fit to view during it cancelled the automatic fit', () => {
+    const onLayoutReady = vi.fn();
+    let handle: { refit: () => void } | null = null;
+    render(view({ onLayoutReady, onReady: (h) => { handle = h; } }));
+    act(() => handle!.refit());
+    const fits = fakeCy.stats.fits;
+    act(() => fakeCy.finishLayout());
+    expect(fakeCy.stats.fits).toBe(fits);
+    expect(onLayoutReady).toHaveBeenCalledTimes(1);
+  });
 });
