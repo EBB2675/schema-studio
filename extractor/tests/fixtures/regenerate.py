@@ -16,11 +16,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from api.light_mode.schema_source import SCHEMA_PROFILES  # noqa: E402
 from extractor.contract import validate_document  # noqa: E402
-from extractor.runner import ExtractorEnvironment, run_script  # noqa: E402
+from extractor.runner import run_script  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent
-SCRIPTS = PROJECT_ROOT / "extractor" / "scripts"
 
 # A few modules per profile, not whole packages, to keep the files small. For
 # bam-masterdata, a few classes of one module (and what they refer to):
@@ -34,22 +34,21 @@ MODULES = {
         "nomad_measurements.general",
         "nomad_measurements.transmission.schema",
     ],
-    "bam-masterdata": ["bam_masterdata.datamodel.object_types"],
+    "bam-masterdata-v0": ["bam_masterdata.datamodel.v0.object_types"],
 }
-ROOTS = {"bam-masterdata": ["Amorphous", "DeviceTraining", "Calibration"]}
-SCRIPT = {"bam-masterdata": "bam.py"}
+ROOTS = {"bam-masterdata-v0": ["Amorphous", "DeviceTraining", "Calibration"]}
 
 
-def regenerate(profile: str) -> Path:
-    environment = ExtractorEnvironment(name=profile, directory=PROJECT_ROOT / "environments" / profile)
-    arguments = ["--dist", profile]
-    for module in MODULES[profile]:
+def regenerate(key: str) -> Path:
+    profile = SCHEMA_PROFILES[key]
+    arguments = ["--dist", profile.package_dist]
+    for module in MODULES[key]:
         arguments += ["--module", module]
-    for root in ROOTS.get(profile, []):
+    for root in ROOTS.get(key, []):
         arguments += ["--root", root]
-    payload = run_script(environment, SCRIPTS / SCRIPT.get(profile, "nomad.py"), arguments=tuple(arguments))
+    payload = run_script(profile.environment, profile.contract_script, arguments=tuple(arguments))
     document = validate_document(payload["result"])
-    path = FIXTURES / f"{profile}.json"
+    path = FIXTURES / f"{key}.json"
     path.write_text(json.dumps(document, indent=1, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
     return path
 

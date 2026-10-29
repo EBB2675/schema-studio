@@ -15,8 +15,8 @@ from api.sources.to_linkml.common import Report
 
 from .conftest import load_fixture
 
-M = "bam_masterdata.datamodel.object_types"
-V = "bam_masterdata.datamodel.vocabulary_types"
+M = "bam_masterdata.datamodel.v0.object_types"
+V = "bam_masterdata.datamodel.v0.vocabulary_types"
 
 
 def prop(name: str, data_type: str = "VARCHAR", *, range_: dict | None = None, **extra: Any) -> dict[str, Any]:
@@ -202,7 +202,7 @@ def test_wrong_prefix_and_cycles_are_errors():
 
 
 def test_stored_fixture_converts_without_inheritance_mismatch():
-    document = load_fixture("bam-masterdata")
+    document = load_fixture("bam-masterdata-v0")
     result = convert_bam(document)
     assert not [row for row in result.report if row["reason"].startswith("inheritance mismatch")]
     schema_view = view(result.schema)

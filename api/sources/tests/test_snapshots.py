@@ -98,21 +98,21 @@ def test_whole_profile_scope_is_the_base_namespace(snapshots):
 
 
 def test_profile_without_converter_is_refused(snapshots):
-    without = dataclasses.replace(profile("bam-masterdata"), contract_script=None)
+    without = dataclasses.replace(profile("bam-masterdata-v0"), contract_script=None)
     with pytest.raises(snapshots.LinkMLUnavailable):
         snapshots.get_snapshot(without)
     assert snapshots.calls == []
 
 
 def test_bam_snapshot_uses_the_bam_converter(snapshots):
-    snapshot = snapshots.get_snapshot(profile("bam-masterdata"), "bam_masterdata.datamodel.object_types")
+    snapshot = snapshots.get_snapshot(profile("bam-masterdata-v0"), "bam_masterdata.datamodel.v0.object_types")
     assert snapshot["linkml"]["default_prefix"] == "bammd"
-    assert snapshot["source"]["commit"] == load_fixture("bam-masterdata")["source"]["commit"]
+    assert snapshot["source"]["commit"] == load_fixture("bam-masterdata-v0")["source"]["commit"]
     # The schema is named after the module it holds, not after the whole datamodel.
     schema = snapshot["linkml"]
-    assert schema["name"] == "bam_masterdata.datamodel.object_types"
-    assert schema["id"].endswith("/bam-masterdata/bam_masterdata.datamodel.object_types")
-    assert schema["annotations"]["source_module"] == "bam_masterdata.datamodel.object_types"
+    assert schema["name"] == "bam_masterdata.datamodel.v0.object_types"
+    assert schema["id"].endswith("/bam-masterdata/bam_masterdata.datamodel.v0.object_types")
+    assert schema["annotations"]["source_module"] == "bam_masterdata.datamodel.v0.object_types"
 
 
 @pytest.fixture()
@@ -151,34 +151,35 @@ async def test_linkml_download_endpoint(client):
 async def test_linkml_download_for_profile_without_converter(client, monkeypatch):
     import api.sources.editing as editing
 
-    without = dataclasses.replace(profile("bam-masterdata"), contract_script=None)
+    without = dataclasses.replace(profile("bam-masterdata-v0"), contract_script=None)
     monkeypatch.setattr(editing, "schema_profile_for_package", lambda package, *_: without)
-    response = await client.get("/schema/linkml", params={"package": "bam_masterdata.datamodel.object_types"})
+    response = await client.get("/schema/linkml", params={"package": "bam_masterdata.datamodel.v0.object_types"})
     assert response.status_code == 400
     assert "not available for bam-masterdata" in response.json()["detail"]
 
 
 @pytest.mark.anyio
 async def test_linkml_download_for_bam(client):
-    response = await client.get("/schema/linkml", params={"package": "bam_masterdata.datamodel.object_types"})
+    response = await client.get("/schema/linkml", params={"package": "bam_masterdata.datamodel.v0.object_types"})
     assert response.status_code == 200
-    assert response.text.startswith("# LinkML schema exported by schema-studio\n# profile: bam-masterdata\n")
+    assert response.text.startswith("# LinkML schema exported by schema-studio\n# profile: bam-masterdata-v0\n")
     schema = yaml.safe_load(response.text)
     assert schema["default_prefix"] == "bammd"
-    assert schema["name"] == "bam_masterdata.datamodel.object_types"
-    assert schema["title"] == "bam-masterdata bam_masterdata.datamodel.object_types"
-    assert schema["id"].endswith("/bam-masterdata/bam_masterdata.datamodel.object_types")
-    assert schema["annotations"]["source_module"] == "bam_masterdata.datamodel.object_types"
+    assert schema["name"] == "bam_masterdata.datamodel.v0.object_types"
+    assert schema["title"] == "bam-masterdata bam_masterdata.datamodel.v0.object_types"
+    assert schema["id"].endswith("/bam-masterdata/bam_masterdata.datamodel.v0.object_types")
+    assert schema["annotations"]["source_module"] == "bam_masterdata.datamodel.v0.object_types"
 
 
 @pytest.mark.anyio
 async def test_profiles_say_which_ones_export_linkml(client):
     profiles = (await client.get("/schema/profiles")).json()["profiles"]
     assert {entry["key"]: entry["linkml_export"] for entry in profiles} == {
-        "nomad-simulations": True, "nomad-measurements": True, "bam-masterdata": True,
+        "nomad-simulations": True, "nomad-measurements": True, "bam-masterdata-v0": True, "bam-masterdata-v1": True,
     }
     assert {entry["key"]: entry["capabilities"] for entry in profiles} == {
-        "nomad-simulations": ["methods", "usage"], "nomad-measurements": ["methods", "usage"], "bam-masterdata": [],
+        "nomad-simulations": ["methods", "usage"], "nomad-measurements": ["methods", "usage"],
+        "bam-masterdata-v0": [], "bam-masterdata-v1": [],
     }
 
 
@@ -193,7 +194,7 @@ def test_parallel_requests_extract_a_snapshot_once(studio_home, monkeypatch):
     def slow_extract(profile, scope, source_root=None):
         calls.append(scope)
         time.sleep(0.2)
-        return load_fixture("bam-masterdata")
+        return load_fixture("bam-masterdata-v0")
 
     monkeypatch.setattr(snapshots, "_extract", slow_extract)
     monkeypatch.setattr(snapshots, "current_schema_info", lambda _profile: type("Info", (), {"version": "v1"})())
@@ -201,7 +202,7 @@ def test_parallel_requests_extract_a_snapshot_once(studio_home, monkeypatch):
 
     def fetch():
         try:
-            results.append(snapshots.get_snapshot(profile("bam-masterdata"), "bam_masterdata.datamodel.object_types"))
+            results.append(snapshots.get_snapshot(profile("bam-masterdata-v0"), "bam_masterdata.datamodel.v0.object_types"))
         except Exception as error:  # pragma: no cover - reported below
             errors.append(error)
 
@@ -211,6 +212,6 @@ def test_parallel_requests_extract_a_snapshot_once(studio_home, monkeypatch):
     for thread in threads:
         thread.join()
     assert errors == [] and len(results) == 5
-    assert calls == ["bam_masterdata.datamodel.object_types"]
+    assert calls == ["bam_masterdata.datamodel.v0.object_types"]
     assert len(list((studio_home / "cache" / "snapshots").rglob("*.json"))) == 1
     assert list((studio_home / "cache" / "snapshots").rglob("*.tmp")) == []

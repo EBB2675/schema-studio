@@ -16,10 +16,10 @@ from .conftest import load_fixture
 
 SIM = "nomad_simulations.schema_packages.model_method"
 MEAS = "nomad_measurements.transmission.schema"
-BAM = "bam_masterdata.datamodel.object_types"
-VOCABULARIES = "bam_masterdata.datamodel.vocabulary_types"
-RULES = {"nomad-simulations": "nomad", "nomad-measurements": "nomad", "bam-masterdata": "bam-masterdata"}
-PACKAGE = {"nomad-simulations": SIM, "nomad-measurements": MEAS, "bam-masterdata": BAM}
+BAM = "bam_masterdata.datamodel.v0.object_types"
+VOCABULARIES = "bam_masterdata.datamodel.v0.vocabulary_types"
+RULES = {"nomad-simulations": "nomad", "nomad-measurements": "nomad", "bam-masterdata-v0": "bam-masterdata"}
+PACKAGE = {"nomad-simulations": SIM, "nomad-measurements": MEAS, "bam-masterdata-v0": BAM}
 
 
 @pytest.fixture(scope="module")
@@ -234,7 +234,7 @@ def test_nomad_validation_errors(converted):
 # -------- bam-masterdata --------
 
 def test_bam_object_type_codes(converted):
-    session = Session(converted, "bam-masterdata")
+    session = Session(converted, "bam-masterdata-v0")
     structure = f"{BAM}.MatSimStructure"
     # Code rules: upper case segments; a child's code extends its parent's by one segment.
     assert session.refuse("add_class", code="crystal").reason == "invalid"
@@ -260,7 +260,7 @@ def test_bam_object_type_codes(converted):
 
 
 def test_bam_properties(converted):
-    session = Session(converted, "bam-masterdata")
+    session = Session(converted, "bam-masterdata-v0")
     owner = f"{BAM}.Calibration"
     session.edit("add_attribute", owner, code="CALIBRATION_NOTE", data_type="MULTILINE_VARCHAR", label="Note",
                  description="A note.", description_de="Eine Notiz.", section="General Information")
@@ -292,7 +292,7 @@ def test_bam_properties(converted):
 
 
 def test_bam_property_rules(converted):
-    session = Session(converted, "bam-masterdata")
+    session = Session(converted, "bam-masterdata-v0")
     owner = f"{BAM}.Calibration"
     for payload, reason, words in (
         ({"code": "lower", "data_type": "VARCHAR"}, "invalid", "upper case"),
@@ -318,7 +318,7 @@ def test_bam_property_rules(converted):
 
 
 def test_bam_vocabulary_terms(converted):
-    session = Session(converted, "bam-masterdata")
+    session = Session(converted, "bam-masterdata-v0")
     vocabulary = f"{VOCABULARIES}.ShortRngOrd"
     session.edit("add_enum_value", vocabulary, value="CHAIN_LIKE", label="Chain-like", description="Chains.",
                  description_de="Ketten.")
@@ -379,12 +379,12 @@ def test_replay_gives_the_same_schema_and_reports_conflicts_across_commits(conve
 
 
 def test_prepare_is_checked_and_complete(converted):
-    session = Session(converted, "bam-masterdata")
+    session = Session(converted, "bam-masterdata-v0")
     edit = session.edit("add_attribute", f"{BAM}.Calibration", code="CALIBRATION_NOTE", data_type="VARCHAR")
     assert edit == {
         "op": "add_attribute", "target": f"{BAM}.Calibration",
         "payload": {"code": "CALIBRATION_NOTE", "data_type": "VARCHAR", "name": "calibration_note"},
-        "profile": "bam-masterdata", "commit": "c1",
+        "profile": "bam-masterdata-v0", "commit": "c1",
     }
     json.dumps(edit)  # plain data, ready for any store
 
@@ -404,7 +404,7 @@ def test_export_round_trip(converted, profile):
     from linkml_runtime.utils.schemaview import SchemaView
 
     session = Session(converted, profile)
-    if profile == "bam-masterdata":
+    if profile == "bam-masterdata-v0":
         session.edit("add_class", code="CALIBRATION.FIELD", is_a=f"{BAM}.Calibration")
         session.edit("add_attribute", f"{BAM}.Field", code="FIELD_NOTE", data_type="VARCHAR", mandatory=True)
         session.edit("add_enum_value", f"{VOCABULARIES}.ShortRngOrd", value="CHAIN_LIKE")
@@ -423,9 +423,9 @@ def test_export_round_trip(converted, profile):
     assert view.get_class(added) is not None
     induced = {str(slot.name): slot for slot in view.class_induced_slots(added)}
     assert attribute in induced
-    if profile == "bam-masterdata":
+    if profile == "bam-masterdata-v0":
         assert induced[attribute].required is True
-    assert ("CHAIN_LIKE" if profile == "bam-masterdata" else "added_value") in view.get_enum(enum).permissible_values
+    assert ("CHAIN_LIKE" if profile == "bam-masterdata-v0" else "added_value") in view.get_enum(enum).permissible_values
 
 
 def test_remove_class_sees_uses_by_a_class_with_the_same_title():
