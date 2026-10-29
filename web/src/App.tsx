@@ -89,7 +89,14 @@ type SchemaProfileSummary = {
   // Whether the schema can be edited (the LinkML path is on) and with which rules.
   editable?: boolean;
   edit_rules?: EditRules;
+  // The schema has no modules in this build (the static site knows it; servers do not say).
+  empty?: boolean;
 };
+
+// One button per database in the Workspace panel.
+type DatabaseButton = Pick<SchemaProfileSummary, "key" | "label" | "available" | "version" | "source" | "empty">;
+
+const EMPTY_DATABASE_NOTE = "not released on the tracked branch yet";
 
 type TaskEnqueueResponse = WorkspaceEnvelope & {
   result?: unknown;
@@ -130,8 +137,6 @@ export default function App() {
     setStartEmpty,
     applyWorkspace: applyWorkspaceInStore,
   } = useWorkspaceStore();
-  const [availablePkgs, setAvailablePkgs] = useState<string[]>([]);
-  const [roots, setRoots] = useState<string[]>([]);
   const [root, setRoot] = useState<string>(DEFAULT_ROOT);
 
   const [includeQuantities, setIncludeQuantities] = useState<boolean>(true);
@@ -657,6 +662,7 @@ export default function App() {
             : undefined,
           editable: typeof entry.editable === "boolean" ? entry.editable : undefined,
           edit_rules: parseEditRules(entry.edit_rules),
+          empty: entry.empty === true,
         }))
         .filter((entry: SchemaProfileSummary) => Boolean(entry.key));
       setSchemaProfiles(parsed);
@@ -831,7 +837,7 @@ export default function App() {
   const helpSummary = useMemo(
     () => {
       const lines = [
-        "Workspace (left): pick package, root, toggles; then Build graph.",
+        "Workspace (left): pick a database, then a class in its bird's-eye view.",
         "Graph canvas (center): pan/zoom, select classes, toggle UML/Edit.",
         "Documentation (right): class and quantity docs; edit quantities in Edit mode.",
         "Under the hood (right, below Documentation): where the selected class is used in code.",
@@ -894,11 +900,10 @@ export default function App() {
     window.addEventListener("mouseup", stop);
   };
 
-  // roots for selected package
+  // Keeps the root a section of the selected package.
   const loadRoots = useCallback(async () => {
     if (!token) return;
     if (startEmpty) {
-      setRoots([]);
       setRoot("");
       return;
     }
@@ -907,12 +912,10 @@ export default function App() {
       // Dev Mode reads the branch it draws; Light Mode has a single, fixed one.
       const r = await api.get("/roots", { params: { package: pkg, branch: isLightMode ? undefined : workspaceBranch || undefined } });
       const list = r.data.sections || [];
-      setRoots(list);
       if (list.length > 0 && !list.includes(root)) setRoot(list[0]);
       syncWorkspaceFromResponse(r.data);
     } catch (e: unknown) {
       setErr(formatApiError(e));
-      setRoots([]);
     }
   }, [api, isLightMode, pkg, root, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
 
@@ -1135,7 +1138,22 @@ export default function App() {
     });
   }, [applyWorkspace, isLightMode, schemaProfiles, setPkg, setWorkspaceBranch, updateWorkspaceOnServer]);
 
-  // fetch available schema packages from develop branch
+  // Dev Mode lists no profiles; its buttons come from the presets.
+  const databases = useMemo<DatabaseButton[]>(
+    () => (schemaProfiles.length
+      ? schemaProfiles
+      : WORKSPACE_PRESETS.map((preset) => ({ key: preset.key, label: preset.label, available: true }))),
+    [schemaProfiles]
+  );
+  const selectedDatabaseKey = schemaProfileKey ?? inferProfileKey(pkg);
+
+  // A database button opens the bird's-eye view of that schema; a class there opens its diagram.
+  const openDatabase = useCallback(async (profileKey: string) => {
+    setMode("overview");
+    await applySchemaProfile(profileKey);
+  }, [applySchemaProfile]);
+
+  // Keeps the package one of the schema's modules on the selected branch.
   const loadPackages = useCallback(async () => {
     if (!token) return;
     setErr(null);
@@ -1157,7 +1175,6 @@ export default function App() {
         seen.add(p);
         return true;
       });
-      setAvailablePkgs(unique);
       syncWorkspaceFromResponse(r.data);
 
       // if current pkg is not in the list, default to the first entry (keep scratch when empty)
@@ -1165,9 +1182,7 @@ export default function App() {
         setPkg(startEmpty && scratchPackage ? scratchPackage : unique[0]);
       }
     } catch (e) {
-      // silent failure is fine; user can still type manually
       console.error("Failed to load packages", e);
-      // surface the error so users know why the dropdown is empty
       setErr(formatApiError(e));
     }
   }, [api, isLightMode, normalizedNamespace, packageBranch, pkg, scratchPackage, setPkg, startEmpty, syncWorkspaceFromResponse, token]);
@@ -2041,11 +2056,6 @@ export default function App() {
     updateWorkspaceOnServer({ branch: value });
   };
 
-  const handlePackageSelect = (value: string) => {
-    setPkg(value);
-    updateWorkspaceOnServer({ package: value });
-  };
-
   const handleCanvasClassSelect = useCallback((cls: UmlClassNode) => {
     setSelectedClassId(cls.id);
     setSelectedQuantityId(null);
@@ -2110,7 +2120,6 @@ export default function App() {
     setPkg(pkgName);
     setRoot(className);
     setPackageBranch((prev) => prev || overviewBranch);
-    setRoots((prev) => (prev.includes(className) ? prev : [className, ...prev]));
     loadGraph({
       pkg: pkgName,
       root: className,
@@ -2730,104 +2739,75 @@ export default function App() {
                 <StaticSitePanel onEditsChanged={() => void loadGraph({ keepView: true })} />
               </Suspense>
             ) : null}
-            {isLightMode ? (
-              <div className="card" style={{ padding: 12, border: "1px solid var(--border)", borderRadius: 8, display: "grid", gap: 10 }}>
-                <div style={{ display: "grid", gap: 8 }}>
-                  {schemaProfiles.map((profile) => {
-                    const isSelected = schemaProfileKey === profile.key;
-                    return (
-                      <button
-                        key={profile.key}
-                        type="button"
-                        className={`btn ${isSelected ? "" : "secondary"}`}
-                        onClick={() => applySchemaProfile(profile.key)}
-                        style={{ justifyContent: "space-between", textAlign: "left" }}
-                        title={STATIC_MODE && profile.version ? `Schema as of commit ${profile.version.slice(0, 9)}` : undefined}
-                      >
-                        <span>{profile.label}</span>
-                        {STATIC_MODE ? null : (
-                          <span className="small" style={{ color: isSelected ? "inherit" : "var(--muted)" }}>
-                            {profile.available
-                              ? profile.source === "bundled"
-                                ? "bundled"
-                                : profile.version?.slice(0, 9) || "ready"
-                              : "not loaded"}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-                {currentSchemaProfile && !currentSchemaProfile.available ? (
-                  <div className="small" style={{ color: "#fca5a5" }}>
-                    {currentSchemaProfile.error || "This schema is not available yet. Load it while online to continue."}
-                  </div>
-                ) : null}
-                {schemaProfileError ? (
-                  <div className="small" style={{ color: "#fca5a5" }}>{schemaProfileError}</div>
-                ) : null}
-                {currentSchemaProfile && !currentSchemaProfile.available ? (
-                  <button className="btn secondary" type="button" onClick={loadSelectedSchemaProfile} disabled={schemaUpdating}>
-                    {schemaUpdating ? "Loading schema…" : `Load ${currentSchemaProfile.label}`}
-                  </button>
-                ) : null}
+            <div className="card" style={{ padding: 12, border: "1px solid var(--border)", borderRadius: 8, display: "grid", gap: 10 }}>
+              <div style={{ display: "grid", gap: 8 }}>
+                {databases.map((profile) => {
+                  const isSelected = selectedDatabaseKey === profile.key;
+                  return (
+                    <button
+                      key={profile.key}
+                      type="button"
+                      className={`btn ${isSelected ? "" : "secondary"}`}
+                      onClick={() => void openDatabase(profile.key)}
+                      disabled={profile.empty}
+                      style={{ justifyContent: "space-between", textAlign: "left" }}
+                      title={
+                        profile.empty
+                          ? EMPTY_DATABASE_NOTE
+                          : STATIC_MODE && profile.version
+                            ? `Schema as of commit ${profile.version.slice(0, 9)}`
+                            : undefined
+                      }
+                    >
+                      <span>{profile.label}</span>
+                      {STATIC_MODE || !isLightMode ? null : (
+                        <span className="small" style={{ color: isSelected ? "inherit" : "var(--muted)" }}>
+                          {profile.available
+                            ? profile.source === "bundled"
+                              ? "bundled"
+                              : profile.version?.slice(0, 9) || "ready"
+                            : "not loaded"}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
-            ) : null}
-            {STATIC_MODE ? null : (
-              <div className="row" style={{ gap: 10, alignItems: "flex-end" }}>
-                <div style={{ flex: 1 }}>
-                  {isLightMode ? null : (
-                    <>
-                      <label className="label">Choose from branch</label>
-                      <select
-                        className="select"
-                        value={packageBranch}
-                        onChange={(e) => handleBranchSelect(e.target.value)}
-                      >
-                        {[packageBranch || DEFAULT_BRANCH, ...branches.filter((b) => b !== packageBranch)].map((b) => (
-                          <option key={b} value={b}>
-                            {b}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  )}
+              {databases.some((profile) => profile.empty) ? (
+                <div className="small" style={{ color: "var(--muted)" }}>
+                  {databases.filter((profile) => profile.empty).map((profile) => profile.label).join(", ")}: {EMPTY_DATABASE_NOTE}
                 </div>
-                <button className="btn secondary" onClick={loadPackages} style={{ whiteSpace: "nowrap" }}>
-                  Refresh packages
+              ) : null}
+              {currentSchemaProfile && !currentSchemaProfile.available ? (
+                <div className="small" style={{ color: "#fca5a5" }}>
+                  {currentSchemaProfile.error || "This schema is not available yet. Load it while online to continue."}
+                </div>
+              ) : null}
+              {schemaProfileError ? (
+                <div className="small" style={{ color: "#fca5a5" }}>{schemaProfileError}</div>
+              ) : null}
+              {currentSchemaProfile && !currentSchemaProfile.available ? (
+                <button className="btn secondary" type="button" onClick={loadSelectedSchemaProfile} disabled={schemaUpdating}>
+                  {schemaUpdating ? "Loading schema…" : `Load ${currentSchemaProfile.label}`}
                 </button>
+              ) : null}
+            </div>
+            {isLightMode ? null : (
+              <div>
+                <label className="label">Choose from branch</label>
+                <select
+                  className="select"
+                  value={packageBranch}
+                  onChange={(e) => handleBranchSelect(e.target.value)}
+                >
+                  {[packageBranch || DEFAULT_BRANCH, ...branches.filter((b) => b !== packageBranch)].map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
-
-            <div>
-              <label className="label">{isLightMode ? "Choose package" : `Choose from ${packageBranch || DEFAULT_BRANCH}`}</label>
-              <select
-                className="select"
-                value={availablePkgs.includes(pkg) ? pkg : ""}
-                onChange={(e) => handlePackageSelect(e.target.value)}
-              >
-                <option value="">Custom package...</option>
-                {availablePkgs.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="label">Root section</label>
-              <select className="select" value={root} onChange={(e) => setRoot(e.target.value)}>
-                {roots.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-              <div className="small" style={{ marginTop: 4 }}>
-                {roots.length ? `${roots.length} sections` : ""}
-              </div>
-            </div>
 
             <div className="control-grid" style={{ marginTop: 4 }}>
               <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -3375,7 +3355,7 @@ export default function App() {
               </div>
               <div style={{ lineHeight: 1.5, display: "grid", gap: 10 }}>
                 <div>
-                  1) Go to <button className="link-button" type="button" onClick={() => focusAndOpen("workspace")}>Workspace 👈</button>, choose a schema family, then pick a root and hit “Build graph”.
+                  1) Go to <button className="link-button" type="button" onClick={() => focusAndOpen("workspace")}>Workspace 👈</button>, pick a database, then click a class in its bird's-eye view.
                 </div>
                 <div>
                   2) See the <button className="link-button" type="button" onClick={() => focusAndOpen("documentation")}>Documentation 👉</button> panel to read class/quantity details as you browse.

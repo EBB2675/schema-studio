@@ -29,6 +29,23 @@ const SITE: SiteIndex = {
       snapshot: "snapshots/nomad-simulations/ns.pkg.a.json",
       graphs: { Root: "graphs/nomad-simulations/ns.pkg.a/Root.json" },
     }],
+  }, {
+    // A namespace the package does not have yet: no modules.
+    key: "later",
+    label: "later",
+    default_branch: "main",
+    default_package: "later.pkg.a",
+    default_base_namespace: "later.pkg",
+    default_root: "Root",
+    version: "abc1234def",
+    source: "remote-main",
+    commit: "abc1234def",
+    capabilities: [],
+    edit_rule_set: "nomad",
+    edit_rules: { rules: "nomad" },
+    snapshot: "snapshots/later/later.pkg.json",
+    overview: [],
+    modules: [],
   }],
 };
 
@@ -97,7 +114,8 @@ describe("static backend", () => {
     const { backend } = setup();
     const profiles = (await backend.request("GET", "/schema/profiles")).data as { static: boolean; profiles: { version: string; available: boolean }[] };
     expect(profiles.static).toBe(true);
-    expect(profiles.profiles[0]).toMatchObject({ version: "abc1234def", available: true, editable: true });
+    expect(profiles.profiles[0]).toMatchObject({ version: "abc1234def", available: true, editable: true, empty: false });
+    expect(profiles.profiles[1]).toMatchObject({ key: "later", empty: true });
     const packages = await backend.request("GET", "/git/packages", { base_package: "ns.pkg" });
     expect(packages.data).toMatchObject({ packages: ["ns.pkg.a"], branch: "develop" });
     const overview = await backend.request("GET", "/overview", { base: "ns.pkg" });
