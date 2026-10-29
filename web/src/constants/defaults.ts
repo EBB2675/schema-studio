@@ -5,7 +5,7 @@ export const DEFAULT_NAMESPACE =
   "nomad_simulations.schema_packages";
 export const DEFAULT_OVERVIEW_NAMESPACE =
   import.meta.env.VITE_DEFAULT_OVERVIEW_NAMESPACE ??
-  "nomad_simulations.schema_packages,nomad_measurements,bam_masterdata.datamodel";
+  "nomad_simulations.schema_packages,nomad_measurements,bam_masterdata.datamodel.v0,bam_masterdata.datamodel.v1";
 export const DEFAULT_ROOT = import.meta.env.VITE_DEFAULT_ROOT ?? "ModelMethod";
 // The static site (GitHub Pages): no server; it behaves like Light Mode.
 // A plain comparison, so other builds can drop the static site's code entirely.
@@ -30,12 +30,21 @@ export const WORKSPACE_PRESETS = [
     pkg: "nomad_measurements.xrd.schema",
     root: "ELNXRayDiffraction",
   },
+  // bam-masterdata's two datamodels are separate schemas from one package.
   {
-    key: "bam-masterdata",
-    label: "bam-masterdata",
-    namespace: "bam_masterdata.datamodel",
+    key: "bam-masterdata-v0",
+    label: "bam-masterdata v0",
+    namespace: "bam_masterdata.datamodel.v0",
     branch: "main",
-    pkg: "bam_masterdata.datamodel.object_types",
+    pkg: "bam_masterdata.datamodel.v0.object_types",
     root: "SearchQuery",
+  },
+  {
+    key: "bam-masterdata-v1",
+    label: "bam-masterdata v1",
+    namespace: "bam_masterdata.datamodel.v1",
+    branch: "main",
+    pkg: "bam_masterdata.datamodel.v1.base_objects",
+    root: "Root",
   },
 ];

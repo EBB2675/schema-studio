@@ -540,10 +540,10 @@ export default function App() {
 
   const inferProfileKey = useCallback((value?: string | null) => {
     const normalized = normalizePackageName(value);
-    const preset = WORKSPACE_PRESETS.find((entry) => {
-      const top = entry.namespace.split(".")[0];
-      return normalized === top || normalized.startsWith(`${top}.`);
-    });
+    const within = (namespace: string) => normalized === namespace || normalized.startsWith(`${namespace}.`);
+    // The preset whose namespace holds the package, else the first one of its top-level package.
+    const preset = WORKSPACE_PRESETS.find((entry) => within(entry.namespace))
+      ?? WORKSPACE_PRESETS.find((entry) => within(entry.namespace.split(".")[0]));
     return preset?.key ?? null;
   }, [normalizePackageName]);
 

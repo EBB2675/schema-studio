@@ -57,11 +57,15 @@ class SchemaProfile:
     # Which edits the schema allows and how new elements are described: a rule
     # set of `api/sources/edits.py` ("nomad" or "bam-masterdata").
     edit_rules: str = "nomad"
+    # Folder under `environments/` when it is not named after the key: profiles
+    # that read one package at different namespaces share its environment.
+    environment_key: str | None = None
 
     @property
     def environment(self) -> ExtractorEnvironment:
         """The uv project that holds this profile's schema package."""
-        return ExtractorEnvironment(name=self.key, directory=environments_root() / self.key)
+        key = self.environment_key or self.key
+        return ExtractorEnvironment(name=key, directory=environments_root() / key)
 
 
 @dataclass
@@ -114,37 +118,61 @@ SCHEMA_PROFILES: dict[str, SchemaProfile] = {
         contract_script=NOMAD_SCRIPT,
         capabilities=frozenset({"usage", "methods"}),
     ),
-    "bam-masterdata": SchemaProfile(
-        key="bam-masterdata",
-        label="bam-masterdata",
+    # bam-masterdata holds two datamodels, read as two schemas from one environment.
+    "bam-masterdata-v0": SchemaProfile(
+        key="bam-masterdata-v0",
+        label="bam-masterdata v0",
         package_import="bam_masterdata",
         package_dist="bam-masterdata",
         default_branch="main",
         default_remote_repo="https://github.com/BAMresearch/bam-masterdata.git",
-        default_base_namespace="bam_masterdata.datamodel",
-        default_package="bam_masterdata.datamodel.object_types",
+        default_base_namespace="bam_masterdata.datamodel.v0",
+        default_package="bam_masterdata.datamodel.v0.object_types",
         default_root="SearchQuery",
         # bam-masterdata declares no schema entry point yet.
         discovery=("walk",),
         linkml_prefix="bammd",
         contract_script=BAM_SCRIPT,
         edit_rules="bam-masterdata",
+        environment_key="bam-masterdata",
+    ),
+    "bam-masterdata-v1": SchemaProfile(
+        key="bam-masterdata-v1",
+        label="bam-masterdata v1",
+        package_import="bam_masterdata",
+        package_dist="bam-masterdata",
+        default_branch="main",
+        default_remote_repo="https://github.com/BAMresearch/bam-masterdata.git",
+        default_base_namespace="bam_masterdata.datamodel.v1",
+        default_package="bam_masterdata.datamodel.v1.base_objects",
+        default_root="Root",
+        discovery=("walk",),
+        linkml_prefix="bammd",
+        contract_script=BAM_SCRIPT,
+        edit_rules="bam-masterdata",
+        environment_key="bam-masterdata",
     ),
 }
 DEFAULT_PROFILE_KEY = "nomad-simulations"
 
 
 def environments_root() -> Path:
-    """Folder that holds one uv project per profile."""
+    """Folder that holds the uv projects of the profiles."""
     override = os.getenv("SCHEMA_STUDIO_ENVIRONMENTS_DIR")
     return Path(override) if override else REPO_ROOT / "environments"
 
 
 def _profile_for_hint(hint: str) -> SchemaProfile | None:
-    """Match a package or namespace name to the profile that owns it."""
-    for profile in SCHEMA_PROFILES.values():
-        if hint == profile.package_import or hint.startswith(f"{profile.package_import}."):
-            return profile
+    """Match a package or namespace name to the profile that owns it.
+
+    The profile whose base namespace holds the name wins; otherwise the first
+    profile of its package, as for `bam_masterdata`, which two profiles read.
+    """
+    for field in ("default_base_namespace", "package_import"):
+        for profile in SCHEMA_PROFILES.values():
+            namespace = getattr(profile, field)
+            if hint == namespace or hint.startswith(f"{namespace}."):
+                return profile
     return None
 
 
