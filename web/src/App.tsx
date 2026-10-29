@@ -34,6 +34,7 @@ import { fqidFromParts, normalizeId, normalizeLabel, normalizeModule } from "./u
 import { formatApiError } from "./utils/errors";
 import { buildUmlStateFromGraph } from "./utils/umlState";
 import { initialTheme } from "./utils/theme";
+import { initialLayoutDirection, LAYOUT_DIRECTION_STORAGE_KEY, LAYOUT_DIRECTIONS, type LayoutDirection } from "./utils/layoutDirection";
 
 // Only static builds show it; loaded on demand so other builds do not carry it.
 const StaticSitePanel = STATIC_MODE ? lazy(() => import("./components/StaticSitePanel")) : () => null;
@@ -166,6 +167,9 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", initial);
     return initial;
   });
+  const [layoutDirection, setLayoutDirection] = useState<LayoutDirection>(() =>
+    typeof window === "undefined" ? initialLayoutDirection(null) : initialLayoutDirection(window.localStorage.getItem(LAYOUT_DIRECTION_STORAGE_KEY))
+  );
 
   const appShellRef = useRef<HTMLElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
@@ -1306,6 +1310,10 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", theme);
     window.localStorage.setItem("schema-uml-theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    window.localStorage.setItem(LAYOUT_DIRECTION_STORAGE_KEY, layoutDirection);
+  }, [layoutDirection]);
 
   useEffect(() => {
     expandedRef.current = [];
@@ -3219,6 +3227,18 @@ export default function App() {
                   <button className="btn secondary" type="button" onClick={() => graphHandle?.refit()} disabled={!graphHandle}>
                     Fit to view
                   </button>
+                  <select
+                    className="select"
+                    value={layoutDirection}
+                    onChange={(e) => setLayoutDirection(e.target.value as LayoutDirection)}
+                    aria-label="Layout direction"
+                    title="Where the most general class goes; the diagram is laid out again"
+                    style={{ width: "auto" }}
+                  >
+                    {LAYOUT_DIRECTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
                   <div>
                     Base: {diffData.base.branch} ({diffData.base.sha.slice(0, 7)}) → Head: {diffData.head.branch} ({diffData.head.sha.slice(0, 7)})
                   </div>
@@ -3239,6 +3259,7 @@ export default function App() {
                 showQuantityMetadata={showQuantityMetadata}
                 showInheritance={includeInheritance}
                 theme={theme}
+                layoutDirection={layoutDirection}
                 onReady={setGraphHandle}
                 layoutKey={canvasKey}
                 onLayoutReady={focusRootSection}
@@ -3261,6 +3282,18 @@ export default function App() {
                   >
                     Fit to view
                   </button>
+                  <select
+                    className="select"
+                    value={layoutDirection}
+                    onChange={(e) => setLayoutDirection(e.target.value as LayoutDirection)}
+                    aria-label="Layout direction"
+                    title="Where the most general class goes; the diagram is laid out again"
+                    style={{ width: "auto", alignSelf: "flex-start" }}
+                  >
+                    {LAYOUT_DIRECTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
                   <div className="label" style={{ marginBottom: 4 }}>Canvas mode</div>
                   <div className="toggle-group">
                     <button
@@ -3318,6 +3351,7 @@ export default function App() {
                   showQuantityMetadata={showQuantityMetadata}
                   showInheritance={includeInheritance}
                   theme={theme}
+                  layoutDirection={layoutDirection}
                   onReady={setGraphHandle}
                   layoutKey={canvasKey}
                   onLayoutReady={focusRootSection}
