@@ -29,7 +29,7 @@ const SIZE = { w: 120, h: 60 };
 export function makeFakeCy() {
   const listeners: Record<string, Array<{ selector?: string; cb: Listener }>> = {};
   const elements = new Map<string, FakeElement>();
-  const stats = { layouts: 0, layoutStops: 0, fits: 0, animations: 0, resizes: 0, destroyed: false, boundingBoxCalls: [] as string[] };
+  const stats = { layouts: 0, layoutStops: 0, fits: 0, animations: 0, resizes: 0, destroyed: false, boundingBoxCalls: [] as string[], layoutOptions: [] as unknown[] };
 
   const make = (group: 'nodes' | 'edges', initial: Data, position: Point): FakeElement => {
     let data: Data = { ...initial };
@@ -139,6 +139,7 @@ export function makeFakeCy() {
     // stopped, and runs its result through the `transform` option.
     layout(options: { transform?: (node: FakeElement, pos: Point) => Point } = {}) {
       stats.layouts += 1;
+      stats.layoutOptions.push(options);
       const own: Listener[] = [];
       const laidOut = nodes();
       const layout = {

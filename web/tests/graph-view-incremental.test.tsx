@@ -269,4 +269,12 @@ describe('GraphView updates the canvas in place', () => {
     unmount();
     expect(onReady).toHaveBeenLastCalledWith(null);
   });
+
+  it('places subclasses that join later on the side away from the root', () => {
+    const { rerender } = renderLaidOut({ layoutDirection: 'RIGHT' });
+    const parent = pos(PARENT);
+    rerender(view({ layoutDirection: 'RIGHT', umlState: expanded, expandedClassIds: [PARENT] }));
+    expect(fakeCy.stats.layouts).toBe(1);
+    [CHILD_1, CHILD_2].forEach((id) => expect(pos(id).x).toBeLessThan(parent.x));
+  });
 });

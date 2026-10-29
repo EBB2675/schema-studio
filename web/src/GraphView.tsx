@@ -10,6 +10,7 @@ import type { QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
 import { fqidFromParts } from "./utils/identifier";
 import { canvasEdges } from "./utils/canvasEdges";
 import { placeNewNodes, type PlacedBox, type Point } from "./utils/canvasPlacement";
+import { DEFAULT_LAYOUT_DIRECTION, type LayoutDirection } from "./utils/layoutDirection";
 
 type QtyDiffState = "added" | "removed" | "changed" | undefined;
 
@@ -43,11 +44,13 @@ type Props = {
   // A new value means a new graph: the canvas lays it out and fits it once. Other
   // changes keep the classes where they are and place only the ones that join.
   layoutKey?: string | number;
-  // Called after that layout and fit.
+  // Called after that layout and fit, but not after a layout for a new layoutDirection.
   onLayoutReady?: (handle: GraphExportHandle) => void;
   showQuantityMetadata?: boolean;
   showInheritance?: boolean;
   theme?: "dark" | "light";
+  // A change lays the canvas out again and fits it.
+  layoutDirection?: LayoutDirection;
   umlState?: UmlGraphState | null;
   baseNamespaces?: string[];
   showBaseSections?: boolean;
@@ -187,19 +190,19 @@ const stylesheet = (palette: Palette) => [
   { selector: "edge.diff-removed", style: { "line-color": "#dc2626", "target-arrow-color": "#dc2626", "source-arrow-color": "#dc2626", width: 3, "line-style": "dashed" } }
 ] as unknown as cytoscape.StylesheetJson;
 
-const FULL_LAYOUT = {
+const fullLayout = (direction: LayoutDirection) => ({
   name: "elk",
   nodeDimensionsIncludeLabels: true,
   elk: {
     algorithm: "layered",
-    "elk.direction": "RIGHT",
+    "elk.direction": direction,
     "elk.layered.spacing.nodeNodeBetweenLayers": 90,
     "elk.spacing.nodeNode": 26,
     "elk.layered.nodePlacement.bk.fixedAlignment": "BALANCED",
     "elk.layered.mergeEdges": true,
     "elk.edgeRouting": "ORTHOGONAL"
   }
-} as unknown as cytoscape.LayoutOptions;
+}) as unknown as cytoscape.LayoutOptions;
 
 const FIT_PADDING = 32;
 const NOT_LAID_OUT = Symbol("not laid out");
@@ -284,6 +287,7 @@ export default function GraphView({
   showQuantityMetadata = true,
   showInheritance = true,
   theme = "dark",
+  layoutDirection = DEFAULT_LAYOUT_DIRECTION,
   umlState,
   baseNamespaces = [],
   showBaseSections = false,
@@ -742,6 +746,7 @@ export default function GraphView({
   // Bumped whenever the view must stay put, which cancels a fit still waiting to happen.
   const fitTicketRef = useRef(0);
   const laidOutKeyRef = useRef<unknown>(NOT_LAID_OUT);
+  const laidOutDirectionRef = useRef<LayoutDirection | null>(null);
   // Where classes were when they left the canvas, so they come back to the same spot.
   const leftAtRef = useRef(new Map<string, Point>());
 
@@ -918,14 +923,15 @@ export default function GraphView({
   }, [palette]);
 
   // Brings the canvas to canvasElements: classes and edges that left are removed, those
-  // that joined are added, the rest stay where they are. Only a new layoutKey, or a
-  // canvas that was empty, gets a full layout and fit.
+  // that joined are added, the rest stay where they are. Only a new layoutKey or
+  // layoutDirection, or a canvas that was empty, gets a full layout and fit.
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
 
     const newGraph = laidOutKeyRef.current !== layoutKey;
-    if (newGraph) leftAtRef.current = new Map();
+    const newDirection = laidOutDirectionRef.current !== layoutDirection;
+    if (newGraph || newDirection) leftAtRef.current = new Map();
     const leftAt = leftAtRef.current;
     const wantedNodes = new Set(canvasElements.nodes.map((n) => n.id));
     const wantedEdges = new Set(canvasElements.edges.map((e) => e.id));
@@ -984,19 +990,22 @@ export default function GraphView({
     }
 
     laidOutKeyRef.current = layoutKey;
+    laidOutDirectionRef.current = layoutDirection;
     syncAllCardBoxes();
 
     // Classes that come while the first layout still runs join that layout rather than
     // being placed beside classes that have not got their place yet.
     const layoutRunning = layoutRef.current !== null;
-    if ((newGraph || !hadNodes || layoutRunning) && cy.nodes().length > 0) {
+    if ((newGraph || newDirection || !hadNodes || layoutRunning) && cy.nodes().length > 0) {
+      // A new direction for the same graph moves the classes, not the selection.
+      const turnedOnly = newDirection && !newGraph && hadNodes && !layoutRunning;
       layoutRef.current?.stop();
       const run = ++layoutRunRef.current;
       const fitTicket = ++fitTicketRef.current;
       // ELK cannot be stopped: a layout that is no longer the latest finishes anyway,
       // so its positions are turned into no-ops here.
       const layout = cy.layout({
-        ...FULL_LAYOUT,
+        ...fullLayout(layoutDirection),
         transform: (node: NodeSingular, position: Point) => (run === layoutRunRef.current ? position : node.position()),
       } as cytoscape.LayoutOptions);
       layoutRef.current = layout;
@@ -1011,7 +1020,7 @@ export default function GraphView({
         requestAnimationFrame(() => {
           if (fitTicket === fitTicketRef.current && cyRef.current === cy) fitView(cy);
         });
-        if (handleRef.current) latestRef.current.onLayoutReady?.(handleRef.current);
+        if (handleRef.current && !turnedOnly) latestRef.current.onLayoutReady?.(handleRef.current);
       });
       layout.run();
       return;
@@ -1028,7 +1037,7 @@ export default function GraphView({
         const { w, h } = placedBox(cy.getElementById(id) as NodeSingular);
         return { id, w, h };
       });
-      const positions = placeNewNodes(existing, joining, canvasElements.edges, leftAt);
+      const positions = placeNewNodes(existing, joining, canvasElements.edges, leftAt, layoutDirection);
       cy.batch(() => {
         positions.forEach((position, id) => {
           cy.getElementById(id).position(position);
@@ -1037,7 +1046,7 @@ export default function GraphView({
       });
     }
     syncAllCardBoxes();
-  }, [canvasElements, diff, layoutKey, syncAllCardBoxes]);
+  }, [canvasElements, diff, layoutKey, layoutDirection, syncAllCardBoxes]);
 
   const cardViews = useMemo(
     () =>
