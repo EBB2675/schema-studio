@@ -262,6 +262,8 @@ export function createStaticBackend(options: StaticBackendOptions) {
           edit_rules: profile.edit_rules,
           package_version: profile.package_version ?? null,
           commit: profile.commit ?? null,
+          // A namespace the package does not have yet (bam-masterdata v1 before its release).
+          empty: profile.modules.length === 0,
         })),
         workspace: workspacePayload(ws),
         current_profile: current.key,
