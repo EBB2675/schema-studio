@@ -104,6 +104,17 @@ describe('Start page databases', () => {
     expect(screen.queryByRole('button', { name: "Bird's-eye view" })).toBeNull();
   });
 
+  it('names schemas in the title, puts the empty canvas below them, and keeps the instructions in Help', async () => {
+    answer(PROFILES);
+    render(<App />);
+    const schema = await screen.findByRole('button', { name: database('bam-masterdata v1') });
+    expect(screen.getByRole('heading', { name: 'Pick a schema to get started' })).toBeInTheDocument();
+    const emptyCanvas = screen.getByRole('button', { name: '+ Start from empty canvas' });
+    expect(schema.compareDocumentPosition(emptyCanvas) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(document.querySelector('.start-page')?.textContent).not.toMatch(/Audit trail|Editable mode/);
+    expect(document.querySelector('.floating-help')?.textContent).toMatch(/Empty canvas: sketch your own/);
+  });
+
   it('opens the bird\'s-eye view of the clicked database, and a class there opens its diagram', async () => {
     answer(PROFILES);
     const user = userEvent.setup();

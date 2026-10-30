@@ -15,6 +15,7 @@ import {
   type QuantityFormData,
 } from "./components/quantityShared";
 import CollapsibleSection from "./components/CollapsibleSection";
+import HomeButton from "./components/HomeButton";
 import { useSelection } from "./store/selection";
 import { jsPDF } from "jspdf";
 import type { AuditTrailEntry, QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
@@ -837,15 +838,15 @@ export default function App() {
   const helpSummary = useMemo(
     () => {
       const lines = [
-        "Start page (center): pick a database, then a class in its bird's-eye view.",
+        "Start page (center): pick a schema; its bird's-eye view lists every module with its classes, and a class opens its diagram.",
         "Workspace (left): diagram options, Build graph, import and export.",
-        "Graph canvas (center): pan/zoom, select classes, toggle UML/Edit.",
+        "Graph canvas (center): pan/zoom, select classes; switch from UML to Edit to add, rename or remove classes and quantities.",
         "Documentation (right): class and quantity docs; edit quantities in Edit mode.",
         "Under the hood (right, below Documentation): where the selected class is used in code.",
-        "Audit trail (left): log of edits; export/reset.",
+        "Audit trail (left): log of your edits to communicate them; export or clear it anytime.",
       ];
       if (!isLightMode) lines.push("Compare branches (left): diff two git branches.");
-      lines.push("Empty canvas: start custom schema without loading existing graph.");
+      lines.push("Empty canvas: sketch your own classes and quantities without loading an existing schema.");
       return lines;
     },
     [isLightMode]
@@ -3086,7 +3087,7 @@ export default function App() {
             open={helpOpen}
             onToggle={(e: SyntheticEvent<HTMLDetailsElement>) => setHelpOpen(e.currentTarget.open)}
           >
-            <summary aria-label="Help">❔ Help</summary>
+            <summary aria-label="Help"><span className="help-mark" aria-hidden>?</span> Help</summary>
             <div className="help-body">
               <div className="help-close-row">
                 <button
@@ -3129,9 +3130,7 @@ export default function App() {
           {mode === "overview" ? (
             <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 12 }}>
               <div className="workspace-toolbar">
-                <button className="btn secondary" type="button" onClick={returnToHome}>
-                  Back to home
-                </button>
+                <HomeButton onClick={returnToHome} />
               </div>
               <OverviewGrid
                 apiBase={apiBase}
@@ -3145,9 +3144,7 @@ export default function App() {
             <>
               <div className="workspace-toolbar" style={{ justifyContent: "space-between" }}>
                 <div className="row" style={{ alignItems: "center" }}>
-                  <button className="btn secondary" type="button" onClick={returnToHome}>
-                    Back to home
-                  </button>
+                  <HomeButton onClick={returnToHome} />
                   <button className="btn secondary" type="button" onClick={() => graphHandle?.refit()} disabled={!graphHandle}>
                     Fit to view
                   </button>
@@ -3193,9 +3190,7 @@ export default function App() {
             <>
               <div style={{ position: "relative", flex: 1 }}>
                 <div className="graph-toolbar">
-                  <button className="btn secondary" type="button" onClick={returnToHome} style={{ alignSelf: "flex-start" }}>
-                    Back to home
-                  </button>
+                  <HomeButton onClick={returnToHome} />
                   <button
                     className="btn secondary"
                     type="button"
@@ -3293,15 +3288,10 @@ export default function App() {
               </div>
             </>
           ) : (
-            <div className="empty-state">
-              <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>
-                Pick a database to get started
-              </div>
-              <div style={{ marginBottom: 16 }}>
-                Its bird's-eye view lists every module with its classes; click a class to open its diagram.
-              </div>
-              <div style={{ display: "grid", gap: 10, maxWidth: 520, margin: "0 auto 24px", textAlign: "left" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
+            <div className="start-page">
+              <h1 className="start-title">Pick a schema to get started</h1>
+              <div className="start-choices">
+                <div className="schema-grid">
                   {databases.map((profile) => {
                     const isSelected = selectedDatabaseKey === profile.key;
                     return (
@@ -3352,28 +3342,7 @@ export default function App() {
                     {schemaUpdating ? "Loading schema…" : `Load ${currentSchemaProfile.label}`}
                   </button>
                 ) : null}
-              </div>
-              <div style={{ lineHeight: 1.5, display: "grid", gap: 10 }}>
-                <div>
-                  1) See the <button className="link-button" type="button" onClick={() => focusAndOpen("documentation")}>Documentation 👉</button> panel to read class/quantity details as you browse.
-                </div>
-                <div>
-                  2) Switch to <strong>Editable mode</strong> to add, rename, or remove classes and quantities.
-                </div>
-                <div>
-                  3) Prefer to sketch your own? Turn on “Start from empty canvas” to drop in custom classes/quantities without loading existing schema.
-                </div>
-                {!isLightMode ? (
-                  <div>
-                    4) <button className="link-button" type="button" onClick={() => focusAndOpen("compare")}>Compare branches 👈</button> to see how two git branches differ in structure.
-                  </div>
-                ) : null}
-                <div>
-                  {isLightMode ? "4)" : "5)"} Communicate your edits via <button className="link-button" type="button" onClick={() => focusAndOpen("audit")}>Audit trail 👈</button> - export or clear the log anytime.
-                </div>
-              </div>
-              <div style={{ marginTop: 14 }}>
-                <button className="btn secondary" type="button" onClick={() => toggleEmptyMode()}>
+                <button className="btn ghost start-empty" type="button" onClick={() => toggleEmptyMode()}>
                   {emptyCanvasActive ? "Back to schema graph" : "+ Start from empty canvas"}
                 </button>
               </div>
