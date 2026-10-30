@@ -288,6 +288,16 @@ select option:disabled {
   box-shadow: none;
 }
 
+.btn.icon-btn {
+  padding: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.graph-toolbar .icon-btn { align-self: flex-start; }
+
 .link-button {
   all: unset;
   cursor: pointer;
@@ -390,8 +400,9 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   padding: 10px 12px;
   box-shadow: 0 12px 30px rgba(0,0,0,0.35);
   color: var(--text-primary);
-  min-width: 240px;
 }
+
+.floating-help details[open] { position: relative; width: 340px; max-width: calc(100vw - 32px); }
 
 .floating-help summary {
   list-style: none;
@@ -410,16 +421,29 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
 
 .floating-help summary::-webkit-details-marker { display: none; }
 
+.help-mark {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+}
+
 .help-body { margin-top: 8px; display: grid; gap: 10px; }
 
 .help-close-row {
-  display: flex;
-  justify-content: flex-end;
+  position: absolute;
+  top: 6px;
+  right: 8px;
 }
 
 .help-grid { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
 
-.help-links { display: flex; gap: 8px; flex-wrap: wrap; }
+.help-links { display: flex; gap: 10px; flex-wrap: wrap; font-size: 13px; }
 
 .resizer {
   width: 10px;
@@ -645,7 +669,41 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   border-color: var(--input-focus-border);
 }
 
-.empty-state { padding: 32px; color: var(--muted); text-align: center; }
+.start-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: 32px 32px 12vh;
+}
+
+.start-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text-primary);
+}
+
+.start-choices {
+  width: 100%;
+  max-width: 520px;
+  display: grid;
+  gap: 12px;
+}
+
+.schema-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.start-choices .btn { font-family: inherit; font-weight: 600; padding: 13px 14px; }
+
+.start-choices .btn.start-empty { margin-top: 12px; color: var(--muted); }
 
 .doc-shell {
   display: flex;
