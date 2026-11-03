@@ -56,11 +56,14 @@ Set up the ones you want to browse (run from the repository root):
 uv sync --project environments/nomad-simulations    # tracks `develop`
 uv sync --project environments/nomad-measurements   # tracks `main`
 uv sync --project environments/bam-masterdata       # tracks `main`
+uv sync --project environments/bam-masterdata-v1    # tracks `computation-schema-draft`
 ```
 
 bam-masterdata holds two datamodels, `bam_masterdata.datamodel.v0` and
 `bam_masterdata.datamodel.v1`. The app shows them as two schemas
-(`bam-masterdata-v0` and `bam-masterdata-v1`) read from this one environment.
+(`bam-masterdata-v0` and `bam-masterdata-v1`). v0 is read from `main`. v1 is
+still a draft, so it is read from bam-masterdata's `computation-schema-draft`
+branch in its own environment, and the app marks it "draft".
 
 The two NOMAD environments install `nomad-lab` and are large downloads. You can
 also skip this step and use the **Load …** button next to a schema family in

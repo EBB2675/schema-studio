@@ -22,6 +22,7 @@ export type SiteProfile = {
   key: string;
   label: string;
   default_branch: string;
+  draft?: boolean;
   default_package: string;
   default_base_namespace: string;
   default_root: string;
@@ -247,6 +248,7 @@ export function createStaticBackend(options: StaticBackendOptions) {
           key: profile.key,
           label: profile.label,
           default_branch: profile.default_branch,
+          draft: profile.draft === true,
           default_package: profile.default_package,
           default_base_namespace: profile.default_base_namespace,
           default_root: profile.default_root,

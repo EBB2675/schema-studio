@@ -43,8 +43,10 @@ export const WORKSPACE_PRESETS = [
     key: "bam-masterdata-v1",
     label: "bam-masterdata v1",
     namespace: "bam_masterdata.datamodel.v1",
-    branch: "main",
+    branch: "computation-schema-draft",
     pkg: "bam_masterdata.datamodel.v1.base_objects",
     root: "Root",
+    // Read from a draft branch, not a release.
+    draft: true,
   },
 ];

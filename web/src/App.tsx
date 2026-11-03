@@ -92,10 +92,13 @@ type SchemaProfileSummary = {
   edit_rules?: EditRules;
   // The schema has no modules in this build (the static site knows it; servers do not say).
   empty?: boolean;
+  // The tracked branch holds a draft of the schema, not a release.
+  draft?: boolean;
 };
 
 // One button per database in the Workspace panel.
-type DatabaseButton = Pick<SchemaProfileSummary, "key" | "label" | "available" | "version" | "source" | "empty">;
+type DatabaseButton = Pick<SchemaProfileSummary, "key" | "label" | "available" | "version" | "source" | "empty" | "draft">
+  & Partial<Pick<SchemaProfileSummary, "default_branch">>;
 
 const EMPTY_DATABASE_NOTE = "not released on the tracked branch yet";
 
@@ -664,6 +667,7 @@ export default function App() {
           editable: typeof entry.editable === "boolean" ? entry.editable : undefined,
           edit_rules: parseEditRules(entry.edit_rules),
           empty: entry.empty === true,
+          draft: entry.draft === true,
         }))
         .filter((entry: SchemaProfileSummary) => Boolean(entry.key));
       setSchemaProfiles(parsed);
@@ -1144,7 +1148,9 @@ export default function App() {
   const databases = useMemo<DatabaseButton[]>(
     () => (schemaProfiles.length
       ? schemaProfiles
-      : WORKSPACE_PRESETS.map((preset) => ({ key: preset.key, label: preset.label, available: true }))),
+      : WORKSPACE_PRESETS.map((preset) => ({
+        key: preset.key, label: preset.label, available: true, draft: preset.draft, default_branch: preset.branch,
+      }))),
     [schemaProfiles]
   );
   const selectedDatabaseKey = schemaProfileKey ?? inferProfileKey(pkg);
@@ -3303,14 +3309,22 @@ export default function App() {
                         disabled={profile.empty}
                         style={{ justifyContent: "space-between", textAlign: "left" }}
                         title={
-                          profile.empty
-                            ? EMPTY_DATABASE_NOTE
-                            : STATIC_MODE && profile.version
-                              ? `Schema as of commit ${profile.version.slice(0, 9)}`
-                              : undefined
+                          [
+                            profile.empty
+                              ? EMPTY_DATABASE_NOTE
+                              : STATIC_MODE && profile.version
+                                ? `Schema as of commit ${profile.version.slice(0, 9)}`
+                                : null,
+                            profile.draft
+                              ? `Draft schema, read from the ${profile.default_branch ?? "draft"} branch`
+                              : null,
+                          ].filter(Boolean).join(". ") || undefined
                         }
                       >
-                        <span>{profile.label}</span>
+                        <span>
+                          {profile.label}
+                          {profile.draft ? <span className="draft-tag"> (draft)</span> : null}
+                        </span>
                         {STATIC_MODE || !isLightMode ? null : (
                           <span className="small" style={{ color: isSelected ? "inherit" : "var(--muted)" }}>
                             {profile.available

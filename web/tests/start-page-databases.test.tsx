@@ -145,6 +145,20 @@ describe('Start page databases', () => {
     expect(screen.getByText(/bam-masterdata v1: not released on the tracked branch yet/)).toBeInTheDocument();
   });
 
+  it('marks a database read from a draft branch', async () => {
+    answer([...PROFILES.slice(0, 2), { ...PROFILES[2], draft: true, default_branch: 'computation-schema-draft' }]);
+    render(<App />);
+    const draft = await screen.findByRole('button', { name: database('bam-masterdata v1 \\(draft\\)') });
+    expect(draft).toHaveAttribute('title', 'Draft schema, read from the computation-schema-draft branch');
+    expect(screen.getByRole('button', { name: database('bam-masterdata v0') })).not.toHaveTextContent('draft');
+  });
+
+  it('marks bam-masterdata v1 as a draft when the server lists no profiles, as in Dev Mode', async () => {
+    answer(null);
+    render(<App />);
+    expect(await screen.findByRole('button', { name: database('bam-masterdata v1 \\(draft\\)') })).toBeInTheDocument();
+  });
+
   it('offers the four databases when the server lists no profiles, as in Dev Mode', async () => {
     answer(null);
     render(<App />);

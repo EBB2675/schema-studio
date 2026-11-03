@@ -196,6 +196,8 @@ async def test_schema_profiles_reports_every_profile(client: httpx.AsyncClient):
     rules = {entry["key"]: entry["edit_rules"] for entry in payload["profiles"]}
     assert [dtype["name"] for dtype in rules["nomad-simulations"]["dtypes"]][:3] == ["bool", "str", "datetime"]
     assert rules["bam-masterdata-v0"]["codes"] is rules["bam-masterdata-v1"]["codes"] is True
+    drafts = {entry["key"]: entry["draft"] for entry in payload["profiles"]}
+    assert drafts == {"nomad-simulations": False, "nomad-measurements": False, "bam-masterdata-v0": False, "bam-masterdata-v1": True}
     assert all(entry["editable"] for entry in payload["profiles"])
 
 

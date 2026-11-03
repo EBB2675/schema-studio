@@ -60,6 +60,9 @@ class SchemaProfile:
     # Folder under `environments/` when it is not named after the key: profiles
     # that read one package at different namespaces share its environment.
     environment_key: str | None = None
+    # The tracked branch holds a draft of the schema, not a release; the app
+    # marks it as such.
+    draft: bool = False
 
     @property
     def environment(self) -> ExtractorEnvironment:
@@ -118,7 +121,8 @@ SCHEMA_PROFILES: dict[str, SchemaProfile] = {
         contract_script=NOMAD_SCRIPT,
         capabilities=frozenset({"usage", "methods"}),
     ),
-    # bam-masterdata holds two datamodels, read as two schemas from one environment.
+    # bam-masterdata holds two datamodels, read as two schemas. v1 is still a
+    # draft on its own branch, so it has its own environment.
     "bam-masterdata-v0": SchemaProfile(
         key="bam-masterdata-v0",
         label="bam-masterdata v0",
@@ -141,7 +145,7 @@ SCHEMA_PROFILES: dict[str, SchemaProfile] = {
         label="bam-masterdata v1",
         package_import="bam_masterdata",
         package_dist="bam-masterdata",
-        default_branch="main",
+        default_branch="computation-schema-draft",
         default_remote_repo="https://github.com/BAMresearch/bam-masterdata.git",
         default_base_namespace="bam_masterdata.datamodel.v1",
         default_package="bam_masterdata.datamodel.v1.base_objects",
@@ -150,7 +154,7 @@ SCHEMA_PROFILES: dict[str, SchemaProfile] = {
         linkml_prefix="bammd",
         contract_script=BAM_SCRIPT,
         edit_rules="bam-masterdata",
-        environment_key="bam-masterdata",
+        draft=True,
     ),
 }
 DEFAULT_PROFILE_KEY = "nomad-simulations"
