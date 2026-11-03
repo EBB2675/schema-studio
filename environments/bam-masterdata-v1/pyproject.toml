@@ -1,0 +1,15 @@
+# Profile environment for bam-masterdata datamodel v1. datamodel v1 is still a
+# draft, so this environment tracks the draft branch instead of `main` and is
+# kept apart from the bam-masterdata (v0) environment. It only holds the schema
+# package; the app never imports from it and only runs scripts from
+# extractor/scripts/ with this environment's interpreter.
+[project]
+name = "schema-studio-env-bam-masterdata-v1"
+version = "0.0.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "bam-masterdata @ git+https://github.com/BAMresearch/bam-masterdata.git@computation-schema-draft",
+]
+
+[tool.uv]
+package = false

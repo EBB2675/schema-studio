@@ -46,7 +46,7 @@ jobs:
 
       - name: Set up the schema environments
         run: |
-          for environment in nomad-simulations nomad-measurements bam-masterdata; do
+          for environment in nomad-simulations nomad-measurements bam-masterdata bam-masterdata-v1; do
             uv sync --locked --project "environments/$environment"
           done
 

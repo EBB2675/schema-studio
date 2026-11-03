@@ -241,6 +241,7 @@ async def schema_profiles():
             "key": profile.key,
             "label": profile.label,
             "default_branch": profile.default_branch,
+            "draft": profile.draft,
             "default_package": profile.default_package,
             "default_base_namespace": profile.default_base_namespace,
             "default_root": profile.default_root,

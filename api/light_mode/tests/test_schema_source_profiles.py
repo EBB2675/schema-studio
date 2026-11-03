@@ -49,15 +49,18 @@ def test_explicit_bam_profile(monkeypatch):
     assert mod.UPGRADE_TARGET.endswith("bam-masterdata.git@main")
 
 
-def test_bam_v1_profile_reads_the_same_environment(monkeypatch):
+def test_bam_v1_profile_reads_the_draft_branch_in_its_own_environment(monkeypatch):
     mod = _reload_schema_source(monkeypatch, profile="bam-masterdata-v1")
 
     assert mod.DEFAULT_PACKAGE == "bam_masterdata.datamodel.v1.base_objects"
     assert mod.DEFAULT_BASE_NAMESPACE == "bam_masterdata.datamodel.v1"
     assert mod.DEFAULT_ROOT == "Root"
+    assert mod.UPGRADE_TARGET.endswith("bam-masterdata.git@computation-schema-draft")
     v0, v1 = mod.SCHEMA_PROFILES["bam-masterdata-v0"], mod.SCHEMA_PROFILES["bam-masterdata-v1"]
-    assert v0.environment == v1.environment
-    assert v1.environment.directory.name == "bam-masterdata"
+    assert v0.environment.directory.name == "bam-masterdata" and not v0.draft
+    assert v1.environment.directory.name == "bam-masterdata-v1" and v1.draft
+    pyproject = (v1.environment.directory / "pyproject.toml").read_text()
+    assert "bam-masterdata.git@computation-schema-draft" in pyproject
 
 
 def test_package_hint_selects_bam_profile(monkeypatch):

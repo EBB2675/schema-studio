@@ -87,6 +87,7 @@ def build_profile(profile: SchemaProfile, out: Path, *, graphs: bool = False) ->
         "key": profile.key,
         "label": profile.label,
         "default_branch": profile.default_branch,
+        "draft": profile.draft,
         "default_package": profile.default_package,
         "default_base_namespace": profile.default_base_namespace,
         "default_root": profile.default_root,
