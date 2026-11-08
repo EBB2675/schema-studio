@@ -3268,8 +3268,8 @@ export default function App() {
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
-                  <div className="label" style={{ marginBottom: 4 }}>Canvas mode</div>
-                  <div className="toggle-group">
+                  <div className="label" id="canvas-mode-label" style={{ marginBottom: 4 }}>Canvas mode</div>
+                  <div className="toggle-group" role="group" aria-labelledby="canvas-mode-label">
                     <button
                       className={`toggle-chip ${!editableMode ? "active" : ""}`}
                       type="button"
