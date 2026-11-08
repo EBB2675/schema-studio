@@ -1,3 +1,4 @@
+import { Profiler } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import GraphView from '../src/GraphView';
@@ -119,6 +120,67 @@ describe('GraphView overlay geometry vs. viewport synchronization', () => {
     act(() => flushRaf());
     expect(wrapper.style.transform).toContain('translate(12px, 8px)');
     expect(wrapper.style.transform).toContain('scale(1.5)');
+  });
+
+  it.each([false, true])('moves overlays without React commits (edit mode: %s)', (editableMode) => {
+    const onRender = vi.fn();
+    const props = {
+      nodes: [], edges: [], umlState, editableMode, selectedClassId: CLASS_A,
+      onToggleSubclasses: vi.fn(), expandedClassIds: [CLASS_A],
+      onCreateQuantity: vi.fn().mockResolvedValue(undefined),
+      onCreateClass: vi.fn().mockResolvedValue(undefined),
+    };
+    const { container } = render(<Profiler id="graph" onRender={onRender}><GraphView {...props} /></Profiler>);
+    // Keep an open form anchored without rerendering the full graph, too.
+    if (editableMode) fireEvent.click(container.querySelector('.uml-plus')!);
+    onRender.mockClear();
+    const portal = container.querySelector('.uml-inline-portal') as HTMLElement | null;
+    const beforeLeft = portal ? parseFloat(portal.style.left) : 0;
+    for (let i = 1; i <= 10; i++) {
+      act(() => {
+        fakeCy.__pan = { x: i * 10, y: i * 5 };
+        fakeCy.emit('pan');
+        flushRaf();
+      });
+    }
+    expect(onRender).not.toHaveBeenCalled();
+    const layer = container.querySelector('div[style*="translate"]') as HTMLElement;
+    expect(layer.style.transform).toContain('translate(100px, 50px)');
+    if (portal) expect(parseFloat(portal.style.left)).toBe(beforeLeft + 100);
+    act(() => {
+      fakeCy.__zoom = 2;
+      fakeCy.emit('zoom');
+      flushRaf();
+    });
+    expect(onRender).not.toHaveBeenCalled();
+    expect(layer.style.transform).toContain('scale(2)');
+    if (portal) expect(parseFloat(portal.style.left)).toBe((beforeLeft - 12) * 2 + 112);
+  });
+
+  it('mounts a new overlay at the current viewport when switching modes', () => {
+    const props = { nodes: [], edges: [], umlState, onToggleSubclasses: vi.fn(), onCreateClass: vi.fn(), onCreateQuantity: vi.fn() };
+    const { container, rerender } = render(<GraphView {...props} />);
+    act(() => {
+      fakeCy.__pan = { x: 70, y: 80 };
+      fakeCy.__zoom = 2;
+      fakeCy.emit('zoom');
+      flushRaf();
+    });
+    rerender(<GraphView {...props} editableMode />);
+    const layer = container.querySelector('div[style*="translate"]') as HTMLElement;
+    expect(layer.style.transform).toBe('translate(70px, 80px) scale(2)');
+  });
+
+  it('uses the current zoom for card dragging without waiting for an animation frame', () => {
+    renderGraph();
+    fakeCy.__zoom = 2;
+    const node = fakeCy.getElementById(CLASS_A);
+    const before = node.position() as { x: number; y: number };
+    const card = screen.getByText('Alpha').closest('.uml-card')!;
+    fireEvent.mouseDown(card, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.mouseMove(window, { clientX: 40, clientY: 20 });
+    fireEvent.mouseUp(window);
+    expect(node.position()).toEqual({ x: before.x + 20, y: before.y + 10 });
   });
 
   it('re-measures all nodes when the layout finishes', () => {
