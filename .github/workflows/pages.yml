@@ -1,11 +1,13 @@
 name: GitHub Pages
 
 # The static site: the web app without a server, with snapshot files of every schema profile and
-# the Python core running in the browser (Pyodide). Published when a release is published, or
-# started by hand.
+# the Python core running in the browser (Pyodide). Published when a release is published, every
+# night (to pick up the latest commits of the schema branches), or started by hand.
 on:
   release:
     types: [published]
+  schedule:
+    - cron: "0 3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -46,7 +48,13 @@ jobs:
 
       - name: Set up the schema environments
         run: |
-          for environment in nomad-simulations nomad-measurements bam-masterdata bam-masterdata-v1; do
+          # Each environment follows a git branch of its schema package: move the lock to the
+          # latest commit of that branch (only the schema package), then install.
+          for entry in nomad-simulations:nomad-simulations nomad-measurements:nomad-measurements \
+                       bam-masterdata:bam-masterdata bam-masterdata-v1:bam-masterdata; do
+            environment="${entry%%:*}"
+            package="${entry##*:}"
+            uv lock --upgrade-package "$package" --project "environments/$environment"
             uv sync --locked --project "environments/$environment"
           done
 
