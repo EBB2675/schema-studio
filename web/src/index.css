@@ -298,6 +298,15 @@ select option:disabled {
 
 .graph-toolbar .icon-btn { align-self: flex-start; }
 
+/* The toolbar is a column flexbox that stretches children to its widest one;
+   keep the canvas-mode toggle compact, with equal-width segments. */
+.graph-toolbar .toggle-group {
+  align-self: flex-start;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+}
+
 .link-button {
   all: unset;
   cursor: pointer;
