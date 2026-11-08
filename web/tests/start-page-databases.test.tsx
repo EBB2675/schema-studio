@@ -27,10 +27,17 @@ vi.mock('../src/GraphView', () => ({
 
 vi.mock('../src/components/OverviewGrid', () => ({
   __esModule: true,
-  default: ({ base, onClassSelect }: { base: string; onClassSelect?: (pkg: string, cls: string) => void }) => (
+  default: ({ base, onClassSelect, query, onQueryChange }: {
+    base: string;
+    onClassSelect?: (pkg: string, cls: string) => void;
+    query?: string;
+    onQueryChange?: (query: string) => void;
+  }) => (
     <div>
       <div>overview of {base}</div>
+      <input aria-label="Filter" value={query ?? ''} onChange={(e) => onQueryChange?.(e.target.value)} />
       <button type="button" onClick={() => onClassSelect?.(`${base}.base_objects`, 'Entity')}>Entity</button>
+      <button type="button" onClick={() => onClassSelect?.(`${base}.base_objects`, 'Activity')}>Activity</button>
     </div>
   ),
 }));
@@ -137,7 +144,27 @@ describe('Start page databases', () => {
     })));
   });
 
-  it('disables a database that has no classes yet, with a note', async () => {
+  it('goes from a diagram back to the class list of the same schema, keeping the filter', async () => {
+    answer(PROFILES);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: database('bam-masterdata v1') }));
+    await user.type(await screen.findByRole('textbox', { name: 'Filter' }), 'act');
+    await user.click(screen.getByRole('button', { name: 'Entity' }));
+    expect(await screen.findByText('graph view')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '← bam-masterdata v1' }));
+    expect(await screen.findByText(`overview of ${V1}`)).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Filter' })).toHaveValue('act');
+
+    await user.click(screen.getByRole('button', { name: 'Activity' }));
+    expect(await screen.findByText('graph view')).toBeInTheDocument();
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith('/schema', expect.objectContaining({
+      params: expect.objectContaining({ package: `${V1}.base_objects`, root: 'Activity', base_namespace: V1 }),
+    })));
+  });
+
+    it('disables a database that has no classes yet, with a note', async () => {
     answer([...PROFILES.slice(0, 2), { ...PROFILES[2], empty: true }]);
     render(<App />);
     expect(await screen.findByRole('button', { name: database('bam-masterdata v1') })).toBeDisabled();

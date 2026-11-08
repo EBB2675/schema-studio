@@ -11,15 +11,22 @@ export default function OverviewGrid({
   base = DEFAULT_OVERVIEW_NAMESPACE,
   token,
   onClassSelect,
+  query,
+  onQueryChange,
 }: {
   apiBase: string;
   branch: string;
   base?: string;
   token?: string;
   onClassSelect?: (pkg: string, className: string) => void;
+  // Passing the filter in keeps it when the caller leaves and comes back.
+  query?: string;
+  onQueryChange?: (query: string) => void;
 }) {
   const [data, setData] = useState<OverviewResp | null>(null);
-  const [q, setQ] = useState("");
+  const [ownQuery, setOwnQuery] = useState("");
+  const q = query ?? ownQuery;
+  const setQ = onQueryChange ?? setOwnQuery;
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 

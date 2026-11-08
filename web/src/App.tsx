@@ -300,6 +300,7 @@ export default function App() {
 
   // overview mode
   const [mode, setMode] = useState<"graph" | "overview">("graph");
+  const [overviewQuery, setOverviewQuery] = useState<string>("");
   const [overviewBranch, setOverviewBranch] = useState<string>(workspaceBranch || DEFAULT_BRANCH);
   const [packageBranch, setPackageBranch] = useState<string>(workspaceBranch || DEFAULT_BRANCH);
 
@@ -1154,10 +1155,12 @@ export default function App() {
     [schemaProfiles]
   );
   const selectedDatabaseKey = schemaProfileKey ?? inferProfileKey(pkg);
+  const selectedDatabaseLabel = databases.find((entry) => entry.key === selectedDatabaseKey)?.label ?? null;
 
   // A database button opens the bird's-eye view of that schema; a class there opens its diagram.
   const openDatabase = useCallback(async (profileKey: string) => {
     setMode("overview");
+    setOverviewQuery("");
     await applySchemaProfile(profileKey);
   }, [applySchemaProfile]);
 
@@ -3144,6 +3147,8 @@ export default function App() {
                 base={normalizedNamespace}
                 token={token}
                 onClassSelect={handleOverviewClassSelect}
+                query={overviewQuery}
+                onQueryChange={setOverviewQuery}
               />
             </div>
           ) : diffData ? (
@@ -3196,7 +3201,19 @@ export default function App() {
             <>
               <div style={{ position: "relative", flex: 1 }}>
                 <div className="graph-toolbar">
-                  <HomeButton onClick={returnToHome} />
+                  <div className="row" style={{ gap: 6, alignSelf: "flex-start" }}>
+                    <HomeButton onClick={returnToHome} />
+                    {!emptyCanvasActive ? (
+                      <button
+                        className="btn secondary"
+                        type="button"
+                        onClick={() => setMode("overview")}
+                        title="Back to the class list of this schema"
+                      >
+                        {selectedDatabaseLabel ? `← ${selectedDatabaseLabel}` : "← Classes"}
+                      </button>
+                    ) : null}
+                  </div>
                   <button
                     className="btn secondary"
                     type="button"
