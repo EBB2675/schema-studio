@@ -367,6 +367,9 @@ export default function App() {
   );
 
   const emptyCanvasActive = startEmpty && graph?.package === scratchPackage && graph?.root === "";
+  // The schema's base namespace is no module itself; its graph is every class of the data model.
+  const wholeModelPackage = basePackageForEmpty;
+  const wholeModelActive = !startEmpty && pkg === wholeModelPackage;
 
   const preferTaskApi = useMemo(() => {
     if (isLightMode) return false;
@@ -919,12 +922,13 @@ export default function App() {
       // Dev Mode reads the branch it draws; Light Mode has a single, fixed one.
       const r = await api.get("/roots", { params: { package: pkg, branch: isLightMode ? undefined : workspaceBranch || undefined } });
       const list = r.data.sections || [];
-      if (list.length > 0 && !list.includes(root)) setRoot(list[0]);
+      // The whole data model has no root.
+      if (list.length > 0 && !list.includes(root) && !wholeModelActive) setRoot(list[0]);
       syncWorkspaceFromResponse(r.data);
     } catch (e: unknown) {
       setErr(formatApiError(e));
     }
-  }, [api, isLightMode, pkg, root, startEmpty, syncWorkspaceFromResponse, token, workspaceBranch]);
+  }, [api, isLightMode, pkg, root, startEmpty, syncWorkspaceFromResponse, token, wholeModelActive, workspaceBranch]);
 
   // The module's graph as the server draws it; no state changes beyond the workspace sync.
   const fetchGraph = useCallback(async (
@@ -1155,6 +1159,8 @@ export default function App() {
     [schemaProfiles]
   );
   const selectedDatabaseKey = schemaProfileKey ?? inferProfileKey(pkg);
+  // Only bam-masterdata offers the whole data model; the NOMAD schemas are too large to draw at once.
+  const wholeModelOffered = selectedDatabaseKey?.startsWith("bam-masterdata") ?? false;
   const selectedDatabaseLabel = databases.find((entry) => entry.key === selectedDatabaseKey)?.label ?? null;
 
   // A database button opens the bird's-eye view of that schema; a class there opens its diagram.
@@ -1188,15 +1194,15 @@ export default function App() {
       });
       syncWorkspaceFromResponse(r.data);
 
-      // if current pkg is not in the list, default to the first entry (keep scratch when empty)
-      if (unique.length > 0 && !unique.includes(pkg)) {
+      // if current pkg is not in the list, default to the first entry (keep scratch when empty and the whole model)
+      if (unique.length > 0 && !unique.includes(pkg) && pkg !== wholeModelPackage) {
         setPkg(startEmpty && scratchPackage ? scratchPackage : unique[0]);
       }
     } catch (e) {
       console.error("Failed to load packages", e);
       setErr(formatApiError(e));
     }
-  }, [api, isLightMode, normalizedNamespace, packageBranch, pkg, scratchPackage, setPkg, startEmpty, syncWorkspaceFromResponse, token]);
+  }, [api, isLightMode, normalizedNamespace, packageBranch, pkg, scratchPackage, setPkg, startEmpty, syncWorkspaceFromResponse, token, wholeModelPackage]);
 
   const loadSelectedSchemaProfile = useCallback(async () => {
     if (!schemaProfileKey) return;
@@ -1992,7 +1998,9 @@ export default function App() {
         ? "Exit branch comparison to modify quantities"
         : !graph
           ? "Build a graph first to modify quantities"
-          : null;
+          : wholeModelActive
+            ? "The whole data model is view only; open a class from the class list to edit it"
+            : null;
 
   const currentGraph = diffData ? diffData.head?.graph ?? null : graph;
   const currentPackageForAudit = normalizePackageName(currentGraph?.package || pkg);
@@ -2136,6 +2144,20 @@ export default function App() {
       root: className,
       namespace: normalizedNamespace,
       branch: overviewBranch,
+    });
+  };
+
+  const showWholeModel = () => {
+    setMode("graph");
+    setPkg(wholeModelPackage);
+    setRoot("");
+    setPackageBranch((prev) => prev || overviewBranch);
+    loadGraph({
+      pkg: wholeModelPackage,
+      root: "",
+      namespace: normalizedNamespace,
+      branch: overviewBranch,
+      expand: [],
     });
   };
 
@@ -3140,6 +3162,16 @@ export default function App() {
             <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 12 }}>
               <div className="workspace-toolbar">
                 <HomeButton onClick={returnToHome} />
+                {wholeModelOffered ? (
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={showWholeModel}
+                    title="One diagram with every class of the data model"
+                  >
+                    Whole data model
+                  </button>
+                ) : null}
               </div>
               <OverviewGrid
                 apiBase={apiBase}
@@ -3291,6 +3323,7 @@ export default function App() {
                   pinnedClassIds={pinnedClassIds}
                   selectedClassId={selectedClassId}
                   showQuantityMetadata={showQuantityMetadata}
+                  compact={wholeModelActive}
                   showInheritance={includeInheritance}
                   theme={theme}
                   layoutDirection={layoutDirection}

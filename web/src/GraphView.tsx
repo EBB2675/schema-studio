@@ -48,6 +48,8 @@ type Props = {
   // layout for a new layoutDirection.
   onLayoutReady?: (handle: GraphExportHandle) => void;
   showQuantityMetadata?: boolean;
+  // Cards show only the class name; the side panel still lists what a class holds.
+  compact?: boolean;
   showInheritance?: boolean;
   theme?: "dark" | "light";
   // A change lays the canvas out again and fits it.
@@ -286,6 +288,7 @@ export default function GraphView({
   layoutKey,
   onLayoutReady,
   showQuantityMetadata = true,
+  compact = false,
   showInheritance = true,
   theme = "dark",
   layoutDirection = DEFAULT_LAYOUT_DIRECTION,
@@ -713,7 +716,7 @@ export default function GraphView({
     for (const [secId, sec] of sectionsMap.entries()) {
       nodes.push({
         id: secId,
-        label: umlLabel(sec.label, attrsMap.get(secId) ?? [], showQuantityMetadata),
+        label: umlLabel(sec.label, compact ? [] : attrsMap.get(secId) ?? [], showQuantityMetadata),
         rawName: sec.label,
         kind: "uml_class",
         module: sec.module ?? "",
@@ -733,7 +736,7 @@ export default function GraphView({
         card: edge.card ?? ""
       }));
     return { nodes, edges };
-  }, [sectionsMap, attrsMap, keyedEdges, showQuantityMetadata]);
+  }, [sectionsMap, attrsMap, keyedEdges, showQuantityMetadata, compact]);
 
   // The canvas lives as long as this component; its handlers read the latest props through this ref.
   const latestRef = useRef({ onReady, onLayoutReady, publishClassSelection, quantitiesByOwner, sectionsMap });
@@ -775,7 +778,8 @@ export default function GraphView({
     const cy = cytoscape({
       container,
       elements: [],
-      minZoom: 0.2,
+      // Low enough to fit a whole data model of a few hundred classes.
+      minZoom: 0.05,
       maxZoom: 3.5,
       wheelSensitivity: CANVAS_WHEEL_SENSITIVITY,
     });

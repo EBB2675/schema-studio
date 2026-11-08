@@ -200,11 +200,15 @@ def _methods(record: Mapping[str, Any] | None, base_namespace: str) -> list[str]
     return sorted(names) or None
 
 
-def _module_record(extraction: Mapping[str, Any], package: str) -> Mapping[str, Any]:
-    for module in extraction.get("modules") or ():
-        if module["name"] == package:
-            return module
-    return {}
+def _module_records(extraction: Mapping[str, Any], package: str) -> list[Mapping[str, Any]]:
+    """The module's record; for a package that is no module itself, the records of every module under it.
+
+    A schema's base namespace (`bam_masterdata.datamodel.v0`, say) is such a
+    package, so its graph is the whole data model.
+    """
+    modules = extraction.get("modules") or ()
+    own = [module for module in modules if module["name"] == package]
+    return own or [module for module in modules if module["name"].startswith(f"{package}.")]
 
 
 def source_class_id(name: str, cls: Mapping[str, Any]) -> str:
@@ -232,23 +236,27 @@ def entry_points(schema: Mapping[str, Any], extraction: Mapping[str, Any], packa
     """
     classes: Mapping[str, Mapping[str, Any]] = schema.get("classes") or {}
     current = _current_names(classes)
-    module = _module_record(extraction, package)
     starts: list[str] = []
     offered: dict[str, str] = {}
-    for class_id in module.get("classes") or ():
-        name = current.get(class_id)
-        if name in classes and name not in starts:
-            starts.append(name)
-    bindings = module.get("names")
-    if bindings is None:
-        bindings = {class_id.rpartition(".")[2]: class_id for class_id in module.get("classes") or ()}
-    for binding, class_id in bindings.items():
-        name = current.get(class_id)
-        if name not in classes:
-            continue
-        # The class's own name follows a rename; any other name stays as the module binds it.
-        own = binding == class_id.rpartition(".")[2]
-        offered[_title(name, classes[name]) if own else binding] = name
+    for module in _module_records(extraction, package):
+        for class_id in module.get("classes") or ():
+            name = current.get(class_id)
+            if name in classes and name not in starts:
+                starts.append(name)
+        bindings = module.get("names")
+        if bindings is None:
+            bindings = {class_id.rpartition(".")[2]: class_id for class_id in module.get("classes") or ()}
+        names: dict[str, str] = {}
+        for binding, class_id in bindings.items():
+            name = current.get(class_id)
+            if name not in classes:
+                continue
+            # The class's own name follows a rename; any other name stays as the module binds it.
+            own = binding == class_id.rpartition(".")[2]
+            names[_title(name, classes[name]) if own else binding] = name
+        # A name two modules bind stays with the first module that binds it.
+        for binding, name in names.items():
+            offered.setdefault(binding, name)
     for name, cls in classes.items():
         if annotation(cls, "edit_added") == "true" and class_module(name, cls) == package and name not in starts:
             starts.append(name)

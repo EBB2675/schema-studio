@@ -211,6 +211,21 @@ def test_root_selects_one_class_and_unknown_roots_are_refused():
         build(root="Nope")
 
 
+def test_a_namespace_that_is_no_module_draws_every_module_under_it():
+    extraction = {**EXTRACTION, "modules": [
+        {"name": "pkg.app.base", "classes": [BASE, MIXIN]},
+        *EXTRACTION["modules"],
+        {"name": "pkgother.main", "classes": [FAR]},
+    ]}
+    result = graph.build_graph(SCHEMA, extraction, "pkg.app", base_namespace="pkg.app")
+    sections = {node["id"] for node in result["nodes"] if node["kind"] == "section"}
+    assert sections == {BASE, MIXIN, CHILD, GRANDCHILD, PART, FAR}  # FAR only as a subsection of Mixin
+    assert graph.section_names(SCHEMA, extraction, "pkg.app") == ["Base", "Child", "GrandChild", "Mixin", "Part"]
+    # A module keeps drawing only its own classes.
+    module = graph.build_graph(SCHEMA, extraction, "pkg.app.base", base_namespace="pkg.app")
+    assert {node["id"] for node in module["nodes"] if node["kind"] == "section"} == {BASE, MIXIN, FAR}
+
+
 def test_flags_leave_out_quantities_subsections_and_inheritance():
     without_quantities = build(include_quantities=False)
     assert {node["kind"] for node in without_quantities["nodes"]} == {"section"}
