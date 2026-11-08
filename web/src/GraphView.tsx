@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import cytoscape from "cytoscape";
 import elk from "elkjs/lib/elk.bundled.js";
 import cytoscapeElk from "cytoscape-elk";
@@ -10,12 +10,10 @@ import type { QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
 import { fqidFromParts } from "./utils/identifier";
 import { canvasEdges } from "./utils/canvasEdges";
 import { placeNewNodes, subsectionOnly, type PlacedBox, type Point } from "./utils/canvasPlacement";
+import { attachWheelZoom } from "./utils/wheelZoom";
 import { DEFAULT_LAYOUT_DIRECTION, type LayoutDirection } from "./utils/layoutDirection";
 
 type QtyDiffState = "added" | "removed" | "changed" | undefined;
-
-// Lower value makes mouse-wheel zoom less aggressive.
-const CANVAS_WHEEL_SENSITIVITY = 0.7;
 
 cytoscapeElk(cytoscape, elk);
 
@@ -312,10 +310,31 @@ export default function GraphView({
   const cyRef = useRef<Core | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const [cardBoxes, setCardBoxes] = useState<Record<string, CardBox>>({});
-  const [viewport, setViewport] = useState<{ pan: { x: number; y: number }; zoom: number }>({
-    pan: { x: 0, y: 0 },
-    zoom: 1,
-  });
+  const toggleLayerRef = useRef<HTMLDivElement | null>(null);
+  const editLayerRef = useRef<HTMLDivElement | null>(null);
+  const inlinePortalRef = useRef<HTMLDivElement | null>(null);
+  const inlineAnchorRef = useRef<CardBox | null>(null);
+
+  // The viewport belongs to Cytoscape. Moving its HTML layers must not render
+  // every card/control through React on every animation frame.
+  const syncViewport = useCallback(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    const pan = cy.pan();
+    const zoom = cy.zoom();
+    const transform = `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
+    for (const layer of [toggleLayerRef.current, editLayerRef.current]) {
+      if (layer) layer.style.transform = transform;
+    }
+    const portal = inlinePortalRef.current;
+    const box = inlineAnchorRef.current;
+    const overlay = overlayRef.current;
+    if (portal && box && overlay) {
+      const rect = overlay.getBoundingClientRect();
+      portal.style.left = `${rect.left + pan.x + (box.x + box.w) * zoom + 12}px`;
+      portal.style.top = `${rect.top + pan.y + box.y * zoom + 10}px`;
+    }
+  }, []);
   const [activeQuantityTarget, setActiveQuantityTarget] = useState<string | null>(null);
   const [togglingClassId, setTogglingClassId] = useState<string | null>(null);
   const dragRef = useRef<{ id: string; startX: number; startY: number; nodeX: number; nodeY: number } | null>(null);
@@ -775,13 +794,13 @@ export default function GraphView({
     const container = containerRef.current;
     if (!container) return;
 
+    const detachWheelZoom = attachWheelZoom(container, () => cyRef.current);
     const cy = cytoscape({
       container,
       elements: [],
       // Low enough to fit a whole data model of a few hundred classes.
       minZoom: 0.05,
       maxZoom: 3.5,
-      wheelSensitivity: CANVAS_WHEEL_SENSITIVITY,
     });
     cyRef.current = cy;
     laidOutKeyRef.current = NOT_LAID_OUT;
@@ -863,27 +882,17 @@ export default function GraphView({
     // follow Cytoscape pan/zoom. Node model positions and model-space bounding
     // boxes do not change when the user pans or zooms, so this path stays cheap
     // and must never re-measure node geometry.
-    const applyViewport = () => {
-      const pan = cy.pan();
-      const zoom = cy.zoom();
-      setViewport((prev) =>
-        prev.pan.x === pan.x && prev.pan.y === pan.y && prev.zoom === zoom
-          ? prev
-          : { pan: { x: pan.x, y: pan.y }, zoom }
-      );
-    };
-
     // A single interaction (wheel input, cy.animate()) can emit several
-    // pan/zoom events per frame; coalesce them into one state update.
+    // pan/zoom events per frame; coalesce them into one transform update.
     const scheduleViewportSync = () => {
       if (viewportRaf !== null) return;
       viewportRaf = requestAnimationFrame(() => {
         viewportRaf = null;
-        applyViewport();
+        syncViewport();
       });
     };
 
-    applyViewport();
+    syncViewport();
     cy.on("pan zoom", scheduleViewportSync);
     cy.on("layoutstop", syncAllCardBoxes);
 
@@ -915,6 +924,7 @@ export default function GraphView({
     latestRef.current.onReady?.(handle);
 
     return () => {
+      detachWheelZoom();
       resizeObserver.disconnect();
       if (viewportRaf !== null) cancelAnimationFrame(viewportRaf);
       layoutRef.current?.stop();
@@ -924,7 +934,7 @@ export default function GraphView({
       cy.destroy();
       if (cyRef.current === cy) cyRef.current = null;
     };
-  }, [syncAllCardBoxes]);
+  }, [syncAllCardBoxes, syncViewport]);
 
   useEffect(() => {
     cyRef.current?.style(stylesheet(palette));
@@ -1120,8 +1130,8 @@ export default function GraphView({
       if (!cy) return;
       const node = cy.getElementById(state.id);
       if (!node || node.empty()) return;
-      const dx = (e.clientX - state.startX) / viewport.zoom;
-      const dy = (e.clientY - state.startY) / viewport.zoom;
+      const dx = (e.clientX - state.startX) / cy.zoom();
+      const dy = (e.clientY - state.startY) / cy.zoom();
       node.position({ x: state.nodeX + dx, y: state.nodeY + dy });
 
       // Only the dragged node's model position changed: update just its card
@@ -1132,7 +1142,7 @@ export default function GraphView({
         sameCardBox(prev[state.id], next) ? prev : { ...prev, [state.id]: next }
       );
     },
-    [viewport.zoom]
+    []
   );
 
   const onDragEnd = useCallback(() => {
@@ -1168,15 +1178,16 @@ export default function GraphView({
   }, [onDragEnd]);
 
   const inlinePortal = useMemo(() => {
-    if (!activeQuantityTarget || !overlayRef.current) return null;
-    const targetCard = cardViews.find((c) => c.cls.id === activeQuantityTarget);
-    const box = targetCard?.box;
-    if (!box) return null;
-    const overlayRect = overlayRef.current.getBoundingClientRect();
-    const left = overlayRect.left + viewport.pan.x + box.x * viewport.zoom + box.w * viewport.zoom + 12;
-    const top = overlayRect.top + viewport.pan.y + box.y * viewport.zoom + 10;
-    return { cls: targetCard.cls, pos: { top, left } };
-  }, [activeQuantityTarget, cardViews, viewport]);
+    if (!activeQuantityTarget) return null;
+    return cardViews.find((c) => c.cls.id === activeQuantityTarget && c.box) ?? null;
+  }, [activeQuantityTarget, cardViews]);
+
+  // Newly mounted layers (including a switch into Edit mode) start at the
+  // current viewport before paint. The same applies when an anchor moves.
+  useLayoutEffect(() => {
+    inlineAnchorRef.current = inlinePortal?.box ?? null;
+    syncViewport();
+  });
 
   const expandedClassIdSet = useMemo(() => new Set(expandedClassIds ?? []), [expandedClassIds]);
   // Subclasses hang below a card, linked by inheritance arrows, so the toggle needs those arrows shown.
@@ -1215,9 +1226,7 @@ export default function GraphView({
       {!showEditingUi && onToggleSubclasses ? (
         <div
           className="uml-toggle-layer"
-          style={{
-            transform: `translate(${viewport.pan.x}px, ${viewport.pan.y}px) scale(${viewport.zoom})`,
-          }}
+          ref={toggleLayerRef}
         >
           {cardViews.map(({ cls, box }) => {
             const toggle = box ? subclassToggle(cls) : null;
@@ -1348,10 +1357,10 @@ export default function GraphView({
           </div>
 
           <div
+            ref={editLayerRef}
             style={{
               position: "absolute",
               inset: 0,
-              transform: `translate(${viewport.pan.x}px, ${viewport.pan.y}px) scale(${viewport.zoom})`,
               transformOrigin: "top left",
               pointerEvents: "none"
             }}
@@ -1501,7 +1510,8 @@ export default function GraphView({
           {editingEnabled && inlinePortal ? (
             <div
               className="uml-inline-portal"
-              style={{ position: "fixed", top: inlinePortal.pos.top, left: inlinePortal.pos.left, zIndex: 5000, pointerEvents: "auto" }}
+              ref={inlinePortalRef}
+              style={{ position: "fixed", zIndex: 5000, pointerEvents: "auto" }}
               onClick={(e) => e.stopPropagation()}
             >
               <form
