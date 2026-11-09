@@ -208,22 +208,12 @@ Open `https://localhost`.
 
 Schema Studio also has a Tauri-based desktop packaging path for Light Mode.
 
-Current desktop characteristics:
+The launcher uses a native Tauri window and a Python backend sidecar. Desktop
+packaging still needs to be aligned with the isolated schema environments
+described above before self-contained installers can be considered supported.
 
-- native Tauri window
-- packaged Python backend sidecar
-- self-contained Windows installer support
-- first-pass Linux `.deb` packaging support
-- first-pass macOS `.app` / `.dmg` packaging support
-
-
-For desktop-specific setup, testing, packaging, and maintenance notes, use the dedicated docs:
-
-- [Desktop Light Mode](docs/desktop-light-mode.md)
-- [Light Mode Schema Selection](docs/light-mode-schema-selection.md)
-- [Desktop Mode Extension](docs/desktop-mode-extension.md)
-- [Desktop Roadmap](docs/desktop-roadmap.md)
-- [BAM Schema Selection Plan](docs/bam-schema-selection-plan.md)
+For the launcher structure and guidance on adding modes, see
+[Desktop Mode Extension](docs/desktop-mode-extension.md).
 
 ## Static Site (GitHub Pages)
 
