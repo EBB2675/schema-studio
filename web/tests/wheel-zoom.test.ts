@@ -1,6 +1,11 @@
 import cytoscape, { type Core } from 'cytoscape';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { attachWheelZoom } from '../src/utils/wheelZoom';
+import { attachWheelZoom, LOG_ZOOM_PER_PIXEL, MAX_EVENT_PIXELS } from '../src/utils/wheelZoom';
+
+// Log-zoom change for one 100px notch, the per-event cap, and a few trackpad pixels.
+const NOTCH = 100 * LOG_ZOOM_PER_PIXEL;
+const CAP = MAX_EVENT_PIXELS * LOG_ZOOM_PER_PIXEL;
+const TRACKPAD = 6 * LOG_ZOOM_PER_PIXEL;
 
 describe('canvas wheel zoom', () => {
   let cy: Core;
@@ -56,10 +61,10 @@ describe('canvas wheel zoom', () => {
       cy.zoom(1); wheel();
       expect(cy.zoom()).toBe(1);
       advance();
-      expect(cy.zoom()).toBeGreaterThan(1.2);
-      expect(cy.zoom()).toBeLessThan(Math.exp(0.5));
+      expect(cy.zoom()).toBeGreaterThan(Math.exp(NOTCH * 0.4));
+      expect(cy.zoom()).toBeLessThan(Math.exp(NOTCH));
       settle();
-      expect(cy.zoom()).toBeCloseTo(Math.exp(0.5), 8);
+      expect(cy.zoom()).toBeCloseTo(Math.exp(NOTCH), 8);
     }
   });
   it('keeps the point under the cursor fixed throughout the animation', () => {
@@ -74,13 +79,13 @@ describe('canvas wheel zoom', () => {
   });
   it.each([0, 1, 2])('normalizes delta mode %s and caps oversized events', deltaMode => {
     wheel(-10000, { deltaMode }); settle();
-    expect(cy.zoom()).toBeCloseTo(Math.exp(0.6), 8);
+    expect(cy.zoom()).toBeCloseTo(Math.exp(CAP), 8);
   });
   it('keeps small trackpad deltas proportional and coalesces events', () => {
     wheel(-1); wheel(-2); wheel(-3);
     expect(frames.size).toBe(1);
     settle();
-    expect(cy.zoom()).toBeCloseTo(Math.exp(0.03), 8);
+    expect(cy.zoom()).toBeCloseTo(Math.exp(TRACKPAD), 8);
   });
   it('reverses immediately instead of finishing the old target', () => {
     wheel(); wheel(); wheel(); advance();
@@ -88,7 +93,7 @@ describe('canvas wheel zoom', () => {
     wheel(100); advance();
     expect(cy.zoom()).toBeLessThan(before);
     settle();
-    expect(cy.zoom()).toBeCloseTo(before * Math.exp(-0.5), 8);
+    expect(cy.zoom()).toBeCloseTo(before * Math.exp(-NOTCH), 8);
   });
   it('does not accumulate excess wheel input at zoom limits', () => {
     cy.zoom(3.5);
@@ -96,7 +101,7 @@ describe('canvas wheel zoom', () => {
     settle();
     expect(cy.zoom()).toBe(3.5);
     wheel(100); settle();
-    expect(cy.zoom()).toBeCloseTo(3.5 * Math.exp(-0.5));
+    expect(cy.zoom()).toBeCloseTo(3.5 * Math.exp(-NOTCH));
     cy.zoom(0.05); wheel(100); settle();
     expect(cy.zoom()).toBeCloseTo(0.05);
   });
@@ -122,7 +127,7 @@ describe('canvas wheel zoom', () => {
   it('honors reduced motion', () => {
     vi.stubGlobal('matchMedia', () => ({ matches: true }));
     wheel(); advance();
-    expect(cy.zoom()).toBeCloseTo(Math.exp(0.5));
+    expect(cy.zoom()).toBeCloseTo(Math.exp(NOTCH));
     expect(frames.size).toBe(0);
   });
   it('prevents duplicate wheel handling and cleans up listeners and animation', () => {

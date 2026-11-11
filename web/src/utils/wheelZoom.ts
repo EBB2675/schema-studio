@@ -1,9 +1,10 @@
 import type { Core } from 'cytoscape';
 
 // Normalize browser wheel units without a device-detection warmup. A typical
-// 100px wheel notch is about x1.65; small trackpad deltas stay proportional.
-const LOG_ZOOM_PER_PIXEL = 0.005;
-const MAX_EVENT_PIXELS = 120;
+// 100px wheel notch is about x1.22, so content away from the cursor drifts
+// gradually; small trackpad deltas stay proportional.
+export const LOG_ZOOM_PER_PIXEL = 0.002;
+export const MAX_EVENT_PIXELS = 120;
 const RESPONSE_MS = 20;
 
 type Viewport = { zoom: number; pan: { x: number; y: number } };
