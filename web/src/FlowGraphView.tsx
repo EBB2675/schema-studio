@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Background, Controls, Handle, MarkerType, Panel, Position, ReactFlow, ReactFlowProvider, applyNodeChanges, useNodesInitialized, useReactFlow, type Node, type NodeProps, type XYPosition } from "@xyflow/react";
+import { Background, Controls, Handle, MarkerType, Panel, Position, ReactFlow, ReactFlowProvider, applyNodeChanges, useNodesInitialized, useReactFlow, type Node, type NodeProps } from "@xyflow/react";
 import ELK from "elkjs/lib/elk.bundled.js";
 import { toPng } from "html-to-image";
 import type { GraphExportHandle, GraphViewProps } from "./GraphView";
 import type { QuantityNode, UmlClassNode } from "./types/uml";
 import { useSelection } from "./store/selection";
 import { canvasEdges } from "./utils/canvasEdges";
+import { canvasPositionKey, createCanvasPositionStore } from "./utils/canvasPositions";
 import { placeNewNodes, type PlacedBox } from "./utils/canvasPlacement";
 import { NOMAD_EDIT_RULES, VOCAB_TERM, dtypeNameFor, type QuantityFormData } from "./components/quantityShared";
 import "@xyflow/react/dist/style.css";
@@ -14,6 +15,7 @@ import "./flow-editor.css";
 
 export type FlowGraphProps = GraphViewProps & {
   mobile?: boolean;
+  positionStorageKey?: string;
   onRenameClass: (id: string, name: string) => Promise<string>;
   onEditQuantity: (id: string, data: QuantityFormData) => Promise<boolean>;
 };
@@ -180,7 +182,9 @@ function FlowCanvas(props: FlowGraphProps) {
   const [addingClass, setAddingClass] = useState(false);
   const [layoutError, setLayoutError] = useState("");
   const [layoutVersion, setLayoutVersion] = useState(0);
-  const positions = useRef(new Map<string, XYPosition>());
+  const [positionStore] = useState(() => createCanvasPositionStore(props.positionStorageKey!));
+  const positions = useRef(positionStore.positions);
+  const [positionError, setPositionError] = useState(false);
   const latest = useRef(props); latest.current = props;
   const layoutGeneration = useRef(0);
   const laidOut = useRef("");
@@ -202,6 +206,14 @@ function FlowCanvas(props: FlowGraphProps) {
         const w = n.measured?.width ?? 290;
         const h = n.measured?.height ?? 145 + n.data.cls.quantities.length * 34;
         boxes.set(n.id, { x: n.position.x + w / 2, y: n.position.y + h / 2, w, h });
+      });
+      // Include saved boxes in collision checks before placing newly visible classes.
+      classes.forEach(cls => {
+        const at = positions.current.get(cls.id);
+        if (!at || boxes.has(cls.id)) return;
+        const w = 290;
+        const h = props.compact ? 135 : (touchEditing() ? 210 + cls.quantities.length * 44 : 145 + cls.quantities.length * 34);
+        boxes.set(cls.id, { x: at.x + w / 2, y: at.y + h / 2, w, h });
       });
       const added = classes.filter(c => !boxes.has(c.id) && !positions.current.has(c.id)).map(c => ({ id: c.id, w: 290, h: props.compact ? 135 : (touchEditing() ? 210 + c.quantities.length * 44 : 145 + c.quantities.length * 34) }));
       const placed = placeNewNodes(boxes, added, props.umlState?.edges ?? [], new Map(), props.layoutDirection);
@@ -243,6 +255,15 @@ function FlowCanvas(props: FlowGraphProps) {
     const run = ++layoutGeneration.current;
     const startingPositions = new Map(flow.getNodes().map(n => [n.id, { ...n.position }]));
     let cancelled = false;
+    if (layoutVersion === 0 && classes.some(cls => positionStore.restoredIds.has(cls.id))) {
+      laidOut.current = key;
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        void flow.fitView({ padding: 0.25 });
+        if (handleRef.current) latest.current.onLayoutReady?.(handleRef.current);
+      });
+      return () => { cancelled = true; };
+    }
     const elk = new ELK();
     void elk.layout({ id: "root", layoutOptions: { "elk.algorithm": "layered", "elk.direction": props.layoutDirection ?? "UP", "elk.spacing.nodeNode": "70", "elk.layered.spacing.nodeNodeBetweenLayers": "100" }, children: classes.map(c => ({ id: c.id, width: 290, height: flow.getNode(c.id)?.measured?.height ?? (props.compact ? 135 : (touchEditing() ? 210 + c.quantities.length * 44 : 145 + c.quantities.length * 34)) })), edges: edges.map(e => ({ id: e.id, sources: [e.source], targets: [e.target] })) }).then(result => {
       if (cancelled || run !== layoutGeneration.current) return;
@@ -257,18 +278,34 @@ function FlowCanvas(props: FlowGraphProps) {
       setLayoutError("");
     }).catch(() => { if (!cancelled) setLayoutError("Auto-layout failed. You can still drag cards or retry Arrange."); });
     return () => { cancelled = true; };
-  }, [classes, edges, props.layoutKey, props.layoutDirection, props.compact, layoutVersion, flow, nodesInitialized]);
+  }, [classes, edges, props.layoutKey, props.layoutDirection, props.compact, layoutVersion, flow, nodesInitialized, positionStore]);
+
+  // Save final layouts and keyboard moves, retaining hidden/collapsed nodes for later.
+  // Drag-stop below also flushes immediately, before a navigation or reload can unmount us.
+  useEffect(() => {
+    if (!nodesInitialized || !laidOut.current || nodes.some(node => node.dragging)) return;
+    nodes.forEach(node => positions.current.set(node.id, { ...node.position }));
+    setPositionError(!positionStore.save());
+  }, [nodes, nodesInitialized, positionStore]);
 
   const context = { ...props, onRenameClass: async (id: string, name: string) => {
     const position = flow.getNode(id)?.position;
     const newId = await props.onRenameClass(id, name);
-    if (position) positions.current.set(newId, position);
+    if (position) {
+      // Retain the old ID too, so undoing a rename restores its position.
+      positions.current.set(newId, { ...position });
+      setPositionError(!positionStore.save());
+    }
     return newId;
   } };
   return <EditorContext.Provider value={context}><div ref={container} className="flow-editor">
     <ReactFlow<CardNode> nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={changes => setNodes(previous => {
       const updated = applyNodeChanges(changes, previous); updated.forEach(n => positions.current.set(n.id, n.position)); return updated;
-    })} onNodeClick={(_, node) => selectClass(node.data.cls, props)} onPaneClick={() => { props.onClearSelection?.(); useSelection.getState().setSelected(null); }} nodesConnectable={false} deleteKeyCode={null} zoomOnDoubleClick={false} minZoom={0.05} maxZoom={2} colorMode={props.theme ?? "light"} fitView>
+    })} onNodeDragStop={(_, node, moved) => {
+      [...moved, node].forEach(n => positions.current.set(n.id, { ...n.position }));
+      setPositionError(!positionStore.save());
+    }} onNodeClick={(_, node) => selectClass(node.data.cls, props)} onPaneClick={() => { props.onClearSelection?.(); useSelection.getState().setSelected(null); }} nodesConnectable={false} deleteKeyCode={null} zoomOnDoubleClick={false} minZoom={0.05} maxZoom={2} colorMode={props.theme ?? "light"} fitView>
+      {positionError && <Panel position="bottom-center" className="flow-position-error" role="status">Could not save box positions in this browser.</Panel>}
       <Background gap={24} size={1} /><Controls showInteractive={false} position="bottom-left" />
       <Panel position="top-right" className="flow-actions"><span className="flow-badge">New editor</span><button onClick={() => setLayoutVersion(v => v + 1)}>Arrange</button>{props.editableMode && <button className="flow-primary" onClick={() => setAddingClass(v => !v)}>+ Add class</button>}{addingClass && props.editableMode && (props.mobile ? <MobileEditSheet title="Add class" onClose={() => setAddingClass(false)}><NewClassForm props={props} onClose={() => setAddingClass(false)} /></MobileEditSheet> : <NewClassForm props={props} onClose={() => setAddingClass(false)} />)}</Panel>
       <Panel position="bottom-center" className="flow-hint">{layoutError || (props.editableMode ? (touchEditing() ? "Tap to edit · Drag to move · Pinch to zoom" : "Double-click to edit · Drag to move · Scroll to zoom") : "Select a class to explore · Switch to Edit to make changes")}</Panel>
@@ -276,5 +313,6 @@ function FlowCanvas(props: FlowGraphProps) {
   </div></EditorContext.Provider>;
 }
 export default function FlowGraphView(props: FlowGraphProps) {
-  return <ReactFlowProvider><FlowCanvas {...props} /></ReactFlowProvider>;
+  const key = props.positionStorageKey ?? canvasPositionKey(props.editRules?.name ?? "default", props.umlState?.package ?? "", props.layoutDirection ?? "UP");
+  return <ReactFlowProvider key={key}><FlowCanvas {...props} positionStorageKey={key} /></ReactFlowProvider>;
 }

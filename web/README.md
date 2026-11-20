@@ -57,8 +57,11 @@ canvas. Dev Mode keeps its existing renderer.
 - Inherited quantities remain read-only; click them for documentation.
 - Drag cards to position them; **Arrange** recalculates the layout. Ordinary edits
   keep positions. Opening an inline form brings that card into view.
-- Schema edits persist through the existing browser edit store. Canvas positions
-  currently last only while that canvas is open.
+- Schema edits persist through the existing browser edit store. Box positions are also saved
+  in this browser, per schema profile, package and layout direction. They survive
+  reopening, reloads and switching back from Classic. **Arrange** replaces the saved
+  arrangement with an automatic layout. Positions are local to this browser and
+  are not included in schema or edit-log exports.
 
 On screens up to 900px wide, the static app uses a full-width canvas, a Workspace
 drawer, a Tools menu and a Details bottom sheet. Touch screens support tapping a

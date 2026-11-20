@@ -87,3 +87,4 @@
 .flow-mobile-dialog .flow-new-class { position: static; width: 100%; max-height: none; border: 0; box-shadow: none; }
 .flow-mobile-dialog button { min-height: 44px; }
 .flow-mobile-dialog [role="alert"] { color: #e15b60; }
+.flow-position-error { bottom: 52px; max-width: calc(100% - 32px); border: 1px solid var(--panel-border); border-radius: 10px; padding: 10px 14px; background: var(--panel); color: var(--text-primary); font-size: 13px; }

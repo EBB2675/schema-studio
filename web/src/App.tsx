@@ -37,6 +37,7 @@ import { fqidFromParts, normalizeId, normalizeLabel, normalizeModule } from "./u
 import { formatApiError } from "./utils/errors";
 import { buildUmlStateFromGraph } from "./utils/umlState";
 import { initialTheme } from "./utils/theme";
+import { canvasPositionKey } from "./utils/canvasPositions";
 import { initialLayoutDirection, LAYOUT_DIRECTION_STORAGE_KEY, LAYOUT_DIRECTIONS, type LayoutDirection } from "./utils/layoutDirection";
 
 // Only static builds show it; loaded on demand so other builds do not carry it.
@@ -3355,6 +3356,7 @@ export default function App() {
                 </div>
                 <CanvasView
                   key={newEditor ? `flow-${canvasKey}` : "classic"}
+                  positionStorageKey={canvasPositionKey(schemaProfileKey || "default", graph.package, layoutDirection)}
                   mobile={isMobile}
                   onRenameClass={renameClassOnCanvas}
                   onEditQuantity={editQuantity}
