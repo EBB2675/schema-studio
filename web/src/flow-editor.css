@@ -53,3 +53,37 @@
 .flow-editor .react-flow__edge-text { fill: var(--flow-muted); font-size: 11px; }
 .flow-editor .react-flow__edge-textbg { fill: var(--flow-card); }
 .flow-editor .react-flow__handle { background: var(--flow-muted); border-color: var(--flow-card); width: 6px; height: 6px; }
+
+@media (max-width: 900px) {
+  .flow-editor .flow-actions { top: 8px; right: 8px; margin: 0; gap: 6px; }
+  .flow-badge { display: none; }
+  .flow-actions > button { min-height: 44px; }
+  .flow-new-class { top: 52px; width: min(320px, calc(100vw - 24px)); max-height: calc(100dvh - 180px); overflow-y: auto; overscroll-behavior: contain; }
+  .flow-hint { display: none; }
+  .flow-editor .react-flow__controls { bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .flow-editor .react-flow__controls-button { width: 40px; height: 40px; }
+  .flow-form input, .flow-form select, .flow-form textarea, .flow-inline input { font-size: 16px; }
+}
+@media (pointer: coarse) {
+  .flow-quantity, .flow-add, .flow-expand, .flow-title { min-height: 44px; }
+  .flow-form button { min-height: 44px; }
+}
+.flow-mobile-dialog {
+  --flow-card: var(--panel);
+  --flow-text: var(--text-primary);
+  --flow-muted: var(--muted);
+  --flow-border: var(--panel-border);
+  --flow-accent: var(--accent);
+  --flow-soft: var(--surface);
+  position: fixed; inset: auto 0 0; margin: 0; padding: 8px 0 env(safe-area-inset-bottom);
+  width: 100%; max-width: 100%; max-height: calc(100dvh - 24px); overflow-y: auto;
+  border: 1px solid var(--panel-border); border-radius: 18px 18px 0 0;
+  color: var(--text-primary); background: var(--panel); overscroll-behavior: contain;
+}
+.flow-mobile-dialog::backdrop { background: rgb(4 15 29 / .45); }
+.flow-mobile-dialog .flow-form { font-size: 16px; }
+.flow-mobile-dialog .flow-form label { font-size: 14px; }
+.flow-mobile-dialog .flow-form input, .flow-mobile-dialog .flow-form select, .flow-mobile-dialog .flow-form textarea { font-size: 16px; }
+.flow-mobile-dialog .flow-new-class { position: static; width: 100%; max-height: none; border: 0; box-shadow: none; }
+.flow-mobile-dialog button { min-height: 44px; }
+.flow-mobile-dialog [role="alert"] { color: #e15b60; }

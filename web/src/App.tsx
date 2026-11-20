@@ -3,6 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import axios from "axios";
 import GraphView, { type GraphExportHandle } from "./GraphView";
 import FlowGraphView from "./FlowGraphView";
+import { useMobilePanels } from "./hooks/useMobilePanels";
 import DocPanel from "./components/DocPanel";
 import OverviewGrid from "./components/OverviewGrid";
 import UnderTheHoodPanel from "./components/UnderTheHoodPanel";
@@ -198,6 +199,8 @@ export default function App() {
   });
   // The right panel starts collapsed; the canvas gets the room until someone opens it.
   const [docPanelCollapsed, setDocPanelCollapsed] = useState<boolean>(true);
+  const { isMobile, mobilePanel, setMobilePanel } = useMobilePanels(STATIC_MODE);
+  const detailsHidden = isMobile ? mobilePanel !== "details" : docPanelCollapsed;
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [linkmlStatus, setLinkmlStatus] = useState<string | null>(null);
   const [canvasStatus, setCanvasStatus] = useState<string | null>(null);
@@ -303,6 +306,7 @@ export default function App() {
 
   // overview mode
   const [mode, setMode] = useState<"graph" | "overview">("graph");
+  useEffect(() => { setMobilePanel(null); }, [canvasKey, mode, graph?.package, setMobilePanel]);
   const [overviewQuery, setOverviewQuery] = useState<string>("");
   const [overviewBranch, setOverviewBranch] = useState<string>(workspaceBranch || DEFAULT_BRANCH);
   const [packageBranch, setPackageBranch] = useState<string>(workspaceBranch || DEFAULT_BRANCH);
@@ -874,6 +878,7 @@ export default function App() {
       under: { setter: setOpenUnderTheHood, elementId: "section-under" },
     };
 
+    if (isMobile) setMobilePanel(section === "documentation" || section === "under" ? "details" : "workspace");
     const target = mapping[section];
     target.setter(true);
     if (section === "documentation" || section === "under") setDocPanelCollapsed(false);
@@ -892,7 +897,7 @@ export default function App() {
         headerBtn?.focus({ preventScroll: true });
       }
     });
-  }, []);
+  }, [isMobile, setMobilePanel]);
 
   const startDocResize = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -2686,11 +2691,19 @@ export default function App() {
 
   return (
     <main
-      className="app-shell"
+      className={`app-shell ${STATIC_MODE ? "responsive-studio" : ""} ${mobilePanel ? `mobile-${mobilePanel}-open` : ""}`}
       ref={appShellRef}
       style={{ gridTemplateColumns: `${sidebarWidth}px 10px 1fr` }}
     >
-      <aside className="sidebar">
+      {STATIC_MODE && <header className="mobile-bar">
+        <button type="button" aria-label="Open workspace" aria-expanded={mobilePanel === "workspace"} aria-controls="mobile-workspace" onClick={() => setMobilePanel("workspace")}>☰</button>
+        <strong>SchemaStudio</strong>
+        {graph && mode !== "overview" && <button type="button" aria-expanded={mobilePanel === "tools"} aria-controls="mobile-tools" onClick={() => setMobilePanel("tools")}>Tools</button>}
+        <button type="button" aria-expanded={mobilePanel === "details"} aria-controls="mobile-details" onClick={() => { setOpenDocumentation(true); setMobilePanel("details"); }}>Details</button>
+      </header>}
+      {isMobile && mobilePanel && <button className="mobile-backdrop" type="button" aria-label="Close panel" tabIndex={-1} onClick={() => setMobilePanel(null)} />}
+      <aside id="mobile-workspace" className="sidebar" data-mobile-panel="workspace" role={isMobile && mobilePanel === "workspace" ? "dialog" : undefined} aria-modal={isMobile && mobilePanel === "workspace" || undefined} aria-label="Workspace" tabIndex={-1}>
+        <div className="mobile-panel-heading"><strong>Workspace</strong><button type="button" onClick={() => setMobilePanel(null)} aria-label="Close workspace">✕</button></div>
         <div className="brand-card">
           <h3 className="brand-title">
             <span className="pulse" />
@@ -3170,6 +3183,7 @@ export default function App() {
 
         {/* Left: graph area */}
         <div
+          className="workspace-content"
           style={{
             minWidth: 0,
             display: "flex",
@@ -3252,7 +3266,8 @@ export default function App() {
           ) : graph ? (
             <>
               <div style={{ position: "relative", flex: 1 }}>
-                <div className="graph-toolbar">
+                <div id="mobile-tools" className="graph-toolbar" data-mobile-panel="tools" role={isMobile && mobilePanel === "tools" ? "dialog" : undefined} aria-modal={isMobile && mobilePanel === "tools" || undefined} aria-label="Canvas tools" tabIndex={-1}>
+                  <div className="mobile-panel-heading"><strong>Canvas tools</strong><button type="button" onClick={() => setMobilePanel(null)} aria-label="Close tools">✕</button></div>
                   <div className="row" style={{ gap: 6, alignSelf: "flex-start" }}>
                     <HomeButton onClick={returnToHome} />
                     {!emptyCanvasActive ? (
@@ -3340,6 +3355,7 @@ export default function App() {
                 </div>
                 <CanvasView
                   key={newEditor ? `flow-${canvasKey}` : "classic"}
+                  mobile={isMobile}
                   onRenameClass={renameClassOnCanvas}
                   onEditQuantity={editQuantity}
                   nodes={graph.nodes}
@@ -3441,7 +3457,7 @@ export default function App() {
           )}
         </div>
 
-        {docPanelCollapsed ? null : (
+        {detailsHidden ? null : (
           <div
             className="resizer"
             role="separator"
@@ -3453,6 +3469,13 @@ export default function App() {
 
         {/* Right: Documentation, Under the hood; collapses to a thin rail */}
         <div
+          id="mobile-details"
+          className="documentation-panel"
+          data-mobile-panel="details"
+          role={isMobile && mobilePanel === "details" ? "dialog" : undefined}
+          aria-modal={isMobile && mobilePanel === "details" || undefined}
+          aria-label="Details"
+          tabIndex={-1}
           style={{
             minWidth: 0,
             display: "flex",
@@ -3461,10 +3484,11 @@ export default function App() {
             borderLeft: "1px solid var(--panel-border)",
             padding: "10px",
             gap: "10px",
-            overflowY: docPanelCollapsed ? "hidden" : "auto"
+            overflowY: detailsHidden ? "hidden" : "auto"
           }}
         >
-          {docPanelCollapsed ? (
+          <div className="mobile-panel-heading"><strong>Details</strong><button type="button" onClick={() => setMobilePanel(null)} aria-label="Close details">✕</button></div>
+          {isMobile ? null : docPanelCollapsed ? (
             <button
               type="button"
               className="side-rail-tab"
@@ -3495,7 +3519,7 @@ export default function App() {
           {/* Kept mounted while collapsed so the sections keep their state */}
           <div
             id="right-panel-sections"
-            style={{ display: docPanelCollapsed ? "none" : "flex", flexDirection: "column", gap: "10px" }}
+            style={{ display: detailsHidden ? "none" : "flex", flexDirection: "column", gap: "10px" }}
           >
             {/* TOP PANEL — content-stacked like left sidebar */}
             <div

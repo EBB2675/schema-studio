@@ -1149,3 +1149,38 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   color: #dc2626;
   font-size: 12px;
 }
+
+/* Phones and tablets: the canvas owns the viewport; controls are opened on demand. */
+.mobile-bar, .mobile-panel-heading, .mobile-backdrop { display: none; }
+@media (max-width: 900px) {
+  .responsive-studio.app-shell { display: flex; flex-direction: column; height: 100dvh; width: 100%; overflow: hidden; }
+  .responsive-studio .mobile-bar { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; padding: calc(6px + env(safe-area-inset-top)) 10px 6px; background: var(--panel); border-bottom: 1px solid var(--panel-border); z-index: 40; }
+  .mobile-bar strong { flex: 1; min-width: 0; font-size: 14px; }
+  .mobile-bar button, .mobile-panel-heading button { min-width: 44px; min-height: 44px; border: 1px solid var(--panel-border); border-radius: 9px; padding: 8px 10px; color: var(--text-primary); background: var(--panel); font: inherit; font-size: 14px; cursor: pointer; }
+  .responsive-studio > .sidebar { display: none; }
+  .responsive-studio.mobile-workspace-open > .sidebar { display: block; position: fixed; inset: 0 auto 0 0; width: min(88vw, 380px); height: 100dvh; z-index: 60; padding: calc(12px + env(safe-area-inset-top)) 12px calc(16px + env(safe-area-inset-bottom)); overscroll-behavior: contain; }
+  .responsive-studio .mobile-backdrop { display: block; position: fixed; inset: 0; z-index: 50; border: 0; padding: 0; border-radius: 0; background: rgb(4 15 29 / .45); }
+  .responsive-studio .mobile-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 0 12px; font-size: 16px; }
+  .responsive-studio .workspace { display: flex; position: relative; flex: 1; min-height: 0; height: auto; width: 100%; }
+  .responsive-studio .workspace-content { flex: 1; min-height: 0; height: 100% !important; width: 100%; }
+  .responsive-studio .resizer { display: none; }
+  .responsive-studio .documentation-panel { display: none !important; }
+  .responsive-studio.mobile-details-open .documentation-panel { display: flex !important; position: fixed; inset: auto 0 0; width: 100%; height: min(68dvh, 640px) !important; max-height: calc(100dvh - 64px); z-index: 60; border: 1px solid var(--panel-border); border-radius: 18px 18px 0 0; background: var(--panel); padding: 16px 12px calc(16px + env(safe-area-inset-bottom)) !important; overscroll-behavior: contain; box-shadow: 0 -8px 32px rgb(0 0 0 / .15); }
+  .responsive-studio .graph-toolbar { display: none; }
+  .responsive-studio.mobile-tools-open .graph-toolbar { display: flex; position: fixed; inset: calc(64px + env(safe-area-inset-top)) 12px auto; max-height: calc(100dvh - 88px - env(safe-area-inset-top)); overflow-y: auto; overscroll-behavior: contain; z-index: 60; border: 1px solid var(--panel-border); border-radius: 14px; background: var(--panel); padding: 16px; gap: 12px; }
+  .responsive-studio .graph-toolbar .mobile-panel-heading { width: 100%; }
+  .responsive-studio .start-page { padding: 24px 16px; overflow-y: auto; }
+  .responsive-studio .start-title { font-size: 24px; }
+  .responsive-studio .schema-grid { grid-template-columns: 1fr; }
+  .responsive-studio .start-choices { width: 100%; min-width: 0; }
+  .responsive-studio .start-empty { width: 100%; }
+  .responsive-studio .overview-search { width: 100%; min-width: 0; }
+  .responsive-studio .overview-card { min-width: 0; }
+  .responsive-studio .workspace-toolbar { flex-wrap: wrap; padding: 8px 12px; }
+  .responsive-studio .btn, .responsive-studio .toggle-chip, .responsive-studio .overview-chip, .responsive-studio .qty-row { min-height: 44px; }
+  .responsive-studio input, .responsive-studio select, .responsive-studio textarea { font-size: 16px; }
+  .responsive-studio .floating-help { bottom: calc(12px + env(safe-area-inset-bottom)); right: 12px; z-index: 25; }
+  .responsive-studio .floating-help summary { min-height: 24px; }
+  .responsive-studio .control-grid { grid-template-columns: 1fr; }
+  .responsive-studio .code-badge, .responsive-studio .doc-title { overflow-wrap: anywhere; min-width: 0; }
+}

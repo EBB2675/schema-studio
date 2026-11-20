@@ -60,6 +60,12 @@ canvas. Dev Mode keeps its existing renderer.
 - Schema edits persist through the existing browser edit store. Canvas positions
   currently last only while that canvas is open.
 
+On screens up to 900px wide, the static app uses a full-width canvas, a Workspace
+drawer, a Tools menu and a Details bottom sheet. Touch screens support tapping a
+class name or owned quantity to edit it. Quantity and new-class forms open as
+unscaled modal sheets with larger controls. Inherited quantities stay read-only.
+The desktop panel widths and collapse state are kept separately from mobile panels.
+
 `src/FlowGraphView.tsx` and `src/flow-editor.css` implement the prototype. The
 existing details panel, edit downloads, LinkML export and PDF export remain wired
 through `App.tsx`. Relationships are created through class parent/subsection
