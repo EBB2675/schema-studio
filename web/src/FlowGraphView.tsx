@@ -22,6 +22,13 @@ export type FlowGraphProps = GraphViewProps & {
 type CardNode = Node<{ cls: UmlClassNode }, "schemaClass">;
 const EditorContext = createContext<FlowGraphProps | null>(null);
 const touchEditing = () => typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+// Before React Flow measures a card: inherited quantities start collapsed behind one toggle row.
+function estimatedCardHeight(cls: UmlClassNode, compact?: boolean) {
+  if (compact) return 135;
+  const own = cls.quantities.filter(q => !q.inherited).length;
+  const toggle = own < cls.quantities.length ? 1 : 0;
+  return touchEditing() ? 210 + (own + toggle) * 44 : 140 + own * 26 + toggle * 26;
+}
 function useEditor() { return useContext(EditorContext)!; }
 const qtySelection = (q: QuantityNode) => ({ ...q, owner: q.ownerId, doc: q.doc ?? "", path: q.path ?? undefined, line: q.line ?? undefined });
 function selectClass(cls: UmlClassNode, props: FlowGraphProps) {
@@ -130,6 +137,15 @@ function ClassCard({ data, selected }: NodeProps<CardNode>) {
   const source = { UP: Position.Top, DOWN: Position.Bottom, LEFT: Position.Left, RIGHT: Position.Right }[direction];
   const target = { UP: Position.Bottom, DOWN: Position.Top, LEFT: Position.Right, RIGHT: Position.Left }[direction];
   const editable = props.editableMode;
+  const [showInherited, setShowInherited] = useState(false);
+  const ownQuantities = cls.quantities.filter(q => !q.inherited);
+  const inheritedQuantities = cls.quantities.filter(q => q.inherited);
+  const renderQuantity = (q: QuantityNode) => <button key={q.id} className={`flow-quantity nodrag ${q.inherited ? "is-inherited" : ""}`} title={q.inherited ? `Inherited from ${q.inheritedFromName || "parent"}` : "Double-click to edit · Enter to edit"} onClick={e => {
+      e.stopPropagation(); useSelection.getState().setSelected({ ...qtySelection(q), kind: "quantity" });
+      if (editable && !q.inherited && touchEditing()) setEditing(q);
+    }} onDoubleClick={e => { e.stopPropagation(); if (editable && !q.inherited) setEditing(q); }} onKeyDown={e => { if (e.key === "Enter" && editable && !q.inherited) { e.preventDefault(); setEditing(q); } }}>
+      <span>{q.name}</span><code>{q.inherited ? "inherited" : q.dtype?.replace(/^m_\w+\((.+)\)$/, "$1")}</code>
+    </button>;
   return <article className={`flow-class ${selected ? "is-selected" : ""}`}>
     <Handle type="target" position={target} isConnectable={false} />
     <header className="flow-class-header" onDoubleClick={() => { if (editable) setRename(true); }}>
@@ -138,12 +154,7 @@ function ClassCard({ data, selected }: NodeProps<CardNode>) {
         <button className="flow-title nodrag" onClick={() => { if (editable && touchEditing()) setRename(true); }} title={editable ? "Double-click to rename · Enter to edit" : cls.name} onKeyDown={e => { if (e.key === "Enter" && editable) { e.preventDefault(); setRename(true); } }}>{cls.name}</button>}
       <span className="flow-module" title={cls.module ?? ""}>{cls.module?.split(".").pop()}</span>
     </header>
-    {!props.compact && <div className="flow-quantities">{cls.quantities.map(q => <button key={q.id} className={`flow-quantity nodrag ${q.inherited ? "is-inherited" : ""}`} title={q.inherited ? `Inherited from ${q.inheritedFromName || "parent"}` : "Double-click to edit · Enter to edit"} onClick={e => {
-      e.stopPropagation(); useSelection.getState().setSelected({ ...qtySelection(q), kind: "quantity" });
-      if (editable && !q.inherited && touchEditing()) setEditing(q);
-    }} onDoubleClick={e => { e.stopPropagation(); if (editable && !q.inherited) setEditing(q); }} onKeyDown={e => { if (e.key === "Enter" && editable && !q.inherited) { e.preventDefault(); setEditing(q); } }}>
-      <span>{q.name}</span><code>{q.inherited ? "inherited" : q.dtype?.replace(/^m_\w+\((.+)\)$/, "$1")}</code>
-    </button>)}{!cls.quantities.length && <div className="flow-empty">No quantities yet</div>}</div>}
+    {!props.compact && <div className="flow-quantities">{ownQuantities.map(renderQuantity)}{inheritedQuantities.length > 0 && <button className="flow-inherited-toggle nodrag" aria-expanded={showInherited} onClick={e => { e.stopPropagation(); setShowInherited(v => !v); }}>{showInherited ? "▾ Hide" : "▸"} {inheritedQuantities.length} inherited</button>}{showInherited && inheritedQuantities.map(renderQuantity)}{!cls.quantities.length && <div className="flow-empty">No quantities yet</div>}</div>}
     {editing && editable ? props.mobile ? <MobileEditSheet title={editing === "new" ? "Add quantity" : "Edit quantity"} onClose={() => setEditing(null)}><QuantityForm key={typeof editing === "string" ? editing : editing.id} cls={cls} quantity={editing === "new" ? undefined : editing} props={props} onClose={() => setEditing(null)} /></MobileEditSheet> : <QuantityForm key={typeof editing === "string" ? editing : editing.id} cls={cls} quantity={editing === "new" ? undefined : editing} props={props} onClose={() => setEditing(null)} /> : editable && <button className="flow-add nodrag" onClick={e => { e.stopPropagation(); selectClass(cls, props); setEditing("new"); }}>+ Add {props.editRules?.codes && cls.quantities.some(q => q.dtype === VOCAB_TERM) ? "term" : "quantity"}</button>}
     {(expanded || (cls.subclasses ?? 0) > 0) && <button className="flow-expand nodrag" onClick={async e => { e.stopPropagation(); try { await props.onToggleSubclasses?.(cls.id); setExpandError(""); } catch { setExpandError("Could not load subclasses."); } }}>{expanded ? "− Hide subclasses" : `+ Show subclasses${cls.subclasses ? ` (${cls.subclasses})` : ""}`}</button>}
     {expandError && <small role="alert">{expandError}</small>}
@@ -204,7 +215,7 @@ function FlowCanvas(props: FlowGraphProps) {
       const boxes = new Map<string, PlacedBox>();
       previous.filter(n => visible.has(n.id)).forEach(n => {
         const w = n.measured?.width ?? 290;
-        const h = n.measured?.height ?? 145 + n.data.cls.quantities.length * 34;
+        const h = n.measured?.height ?? estimatedCardHeight(n.data.cls, props.compact);
         boxes.set(n.id, { x: n.position.x + w / 2, y: n.position.y + h / 2, w, h });
       });
       // Include saved boxes in collision checks before placing newly visible classes.
@@ -212,10 +223,10 @@ function FlowCanvas(props: FlowGraphProps) {
         const at = positions.current.get(cls.id);
         if (!at || boxes.has(cls.id)) return;
         const w = 290;
-        const h = props.compact ? 135 : (touchEditing() ? 210 + cls.quantities.length * 44 : 145 + cls.quantities.length * 34);
+        const h = estimatedCardHeight(cls, props.compact);
         boxes.set(cls.id, { x: at.x + w / 2, y: at.y + h / 2, w, h });
       });
-      const added = classes.filter(c => !boxes.has(c.id) && !positions.current.has(c.id)).map(c => ({ id: c.id, w: 290, h: props.compact ? 135 : (touchEditing() ? 210 + c.quantities.length * 44 : 145 + c.quantities.length * 34) }));
+      const added = classes.filter(c => !boxes.has(c.id) && !positions.current.has(c.id)).map(c => ({ id: c.id, w: 290, h: estimatedCardHeight(c, props.compact) }));
       const placed = placeNewNodes(boxes, added, props.umlState?.edges ?? [], new Map(), props.layoutDirection);
       return classes.map((cls, i) => {
         const existing = previous.find(n => n.id === cls.id);
@@ -265,7 +276,7 @@ function FlowCanvas(props: FlowGraphProps) {
       return () => { cancelled = true; };
     }
     const elk = new ELK();
-    void elk.layout({ id: "root", layoutOptions: { "elk.algorithm": "layered", "elk.direction": props.layoutDirection ?? "UP", "elk.spacing.nodeNode": "70", "elk.layered.spacing.nodeNodeBetweenLayers": "100" }, children: classes.map(c => ({ id: c.id, width: 290, height: flow.getNode(c.id)?.measured?.height ?? (props.compact ? 135 : (touchEditing() ? 210 + c.quantities.length * 44 : 145 + c.quantities.length * 34)) })), edges: edges.map(e => ({ id: e.id, sources: [e.source], targets: [e.target] })) }).then(result => {
+    void elk.layout({ id: "root", layoutOptions: { "elk.algorithm": "layered", "elk.direction": props.layoutDirection ?? "UP", "elk.spacing.nodeNode": "70", "elk.layered.spacing.nodeNodeBetweenLayers": "100" }, children: classes.map(c => ({ id: c.id, width: 290, height: flow.getNode(c.id)?.measured?.height ?? (estimatedCardHeight(c, props.compact)) })), edges: edges.map(e => ({ id: e.id, sources: [e.source], targets: [e.target] })) }).then(result => {
       if (cancelled || run !== layoutGeneration.current) return;
       laidOut.current = key;
       const targets = new Map(result.children?.map(n => [n.id, { x: n.x ?? 0, y: n.y ?? 0 }]));

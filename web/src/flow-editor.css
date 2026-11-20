@@ -25,15 +25,17 @@
 .flow-class-kind { font-size: 10px; font-weight: 700; letter-spacing: .13em; color: var(--flow-accent); }
 .flow-title { font: inherit; font-size: 17px; font-weight: 650; text-align: left; overflow-wrap: anywhere; padding: 0; color: inherit; background: none; border: 0; cursor: text; }
 .flow-module { font-size: 11px; color: var(--flow-muted); overflow: hidden; text-overflow: ellipsis; }
-.flow-quantities { padding: 8px; }
-.flow-quantity { width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border: 0; background: none; padding: 9px 10px; border-radius: 6px; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.flow-quantities { padding: 6px 8px; }
+.flow-quantity { width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border: 0; background: none; padding: 4px 10px; border-radius: 6px; color: inherit; text-align: left; font: inherit; line-height: 1.3; cursor: pointer; }
 .flow-quantity span { overflow-wrap: anywhere; min-width: 0; }
 .flow-quantity code { font-size: 11px; color: var(--flow-muted); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flow-quantity:hover, .flow-title:hover { background: var(--flow-soft); }
 .flow-quantity.is-inherited { opacity: .65; }
+.flow-inherited-toggle { width: 100%; border: 0; background: none; padding: 4px 10px; border-radius: 6px; text-align: left; font: inherit; font-size: 12px; line-height: 1.3; color: var(--flow-muted); cursor: pointer; }
+.flow-inherited-toggle:hover { background: var(--flow-soft); color: var(--flow-text); }
 .flow-add, .flow-expand { border: 0; background: none; color: var(--flow-accent); width: 100%; padding: 12px 18px; text-align: left; font: inherit; cursor: pointer; border-top: 1px solid var(--flow-border); }
 .flow-expand { color: var(--flow-muted); font-size: 12px; }
-.flow-empty { padding: 12px 10px; color: var(--flow-muted); }
+.flow-empty { padding: 8px 10px; color: var(--flow-muted); }
 .flow-form { padding: 16px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; background: var(--flow-card); color: var(--flow-text); border-radius: 12px; }
 .flow-form fieldset { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; border: 0; min-width: 0; }
 .flow-form label { display: flex; flex-direction: column; gap: 5px; color: var(--flow-muted); font-size: 12px; }
@@ -65,7 +67,7 @@
   .flow-form input, .flow-form select, .flow-form textarea, .flow-inline input { font-size: 16px; }
 }
 @media (pointer: coarse) {
-  .flow-quantity, .flow-add, .flow-expand, .flow-title { min-height: 44px; }
+  .flow-quantity, .flow-inherited-toggle, .flow-add, .flow-expand, .flow-title { min-height: 44px; }
   .flow-form button { min-height: 44px; }
 }
 .flow-mobile-dialog {
