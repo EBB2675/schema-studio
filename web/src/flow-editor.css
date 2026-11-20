@@ -1,7 +1,26 @@
-.flow-editor { position: absolute; inset: 0; background: var(--graph-bg); --flow-card: #fff; --flow-text: #26324a; --flow-muted: #758098; --flow-border: #dce3ef; --flow-accent: #6155df; --flow-soft: #f5f6fc; }
-[data-theme="dark"] .flow-editor { --flow-card: #202637; --flow-text: #e5eaf6; --flow-muted: #a1adc5; --flow-border: #3b455d; --flow-accent: #ada3ff; --flow-soft: #292f43; }
+.flow-editor {
+  position: absolute;
+  inset: 0;
+  background: var(--graph-bg);
+  --flow-card: var(--panel);
+  --flow-text: var(--text-primary);
+  --flow-muted: var(--muted);
+  --flow-border: var(--panel-border);
+  --flow-accent: var(--accent);
+  --flow-soft: var(--surface);
+}
+.flow-editor .react-flow {
+  --xy-background-color: var(--graph-bg);
+  --xy-background-pattern-dots-color: var(--panel-border);
+  --xy-controls-button-background-color: var(--panel);
+  --xy-controls-button-background-color-hover: var(--surface);
+  --xy-controls-button-color: var(--text-primary);
+  --xy-controls-button-border-color: var(--panel-border);
+  --xy-attribution-background-color: var(--panel);
+}
+.flow-editor .react-flow__attribution a { color: var(--muted); }
 .flow-class { width: 290px; border: 1px solid var(--flow-border); border-radius: 14px; background: var(--flow-card); color: var(--flow-text); box-shadow: 0 4px 20px #182b4b0d; overflow: visible; font-size: 14px; }
-.flow-class.is-selected { border-color: var(--flow-accent); box-shadow: 0 0 0 3px #8b7cf62b, 0 8px 24px #182b4b14; }
+.flow-class.is-selected { border-color: var(--flow-accent); box-shadow: 0 0 0 3px var(--input-focus-shadow), 0 8px 24px #182b4b14; }
 .flow-class-header { padding: 16px 18px 13px; display: flex; flex-direction: column; gap: 5px; border-bottom: 1px solid var(--flow-border); }
 .flow-class-kind { font-size: 10px; font-weight: 700; letter-spacing: .13em; color: var(--flow-accent); }
 .flow-title { font: inherit; font-size: 17px; font-weight: 650; text-align: left; overflow-wrap: anywhere; padding: 0; color: inherit; background: none; border: 0; cursor: text; }
@@ -23,7 +42,7 @@
 .flow-check input { width: auto; }
 .flow-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .flow-form button, .flow-actions > button { border: 1px solid var(--flow-border); background: var(--flow-card); color: var(--flow-text); padding: 8px 12px; border-radius: 8px; cursor: pointer; font: inherit; }
-.flow-form button[type="submit"], .flow-actions > .flow-primary { background: #6155df; color: white; border-color: #6155df; }
+.flow-form button[type="submit"], .flow-actions > .flow-primary { background: var(--button-bg); color: var(--button-fg); border-color: var(--button-bg); }
 .flow-editor button:disabled { opacity: .5; cursor: wait; }
 .flow-editor [role="alert"] { color: #e15b60; font-size: 12px; overflow-wrap: anywhere; }
 .flow-inline small { display: block; margin-top: 5px; }

@@ -209,7 +209,7 @@ function FlowCanvas(props: FlowGraphProps) {
         const viewport = container.current?.querySelector<HTMLElement>(".react-flow__viewport");
         if (!viewport) return null;
         const bounds = flow.getNodesBounds(flow.getNodes());
-        return toPng(viewport, { backgroundColor: latest.current.theme === "dark" ? "#111827" : "#f6f8fc", width: bounds.width + 80, height: bounds.height + 80, style: { transform: `translate(${-bounds.x + 40}px, ${-bounds.y + 40}px)` }, filter: element => !(element instanceof Element && element.classList.contains("react-flow__handle")) });
+        return toPng(viewport, { backgroundColor: getComputedStyle(container.current!).getPropertyValue("--graph-bg").trim(), width: bounds.width + 80, height: bounds.height + 80, style: { transform: `translate(${-bounds.x + 40}px, ${-bounds.y + 40}px)` }, filter: element => !(element instanceof Element && element.classList.contains("react-flow__handle")) });
       },
     };
     handleRef.current = handle; props.onReady?.(handle);
