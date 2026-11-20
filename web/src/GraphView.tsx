@@ -21,7 +21,7 @@ type RawNode = ApiNode;
 type RawEdge = ApiEdge;
 
 export type GraphExportHandle = {
-  toPng: () => string | null;
+  toPng: () => string | null | Promise<string | null>;
   // Selects a class; moveViewport: false leaves pan and zoom as they are.
   focusNode: (name: string, options?: { moveViewport?: boolean }) => boolean;
   refit: () => void;
@@ -31,7 +31,7 @@ type DiffNodes = { added: ApiNode[]; removed: ApiNode[]; changed: { id: string }
 type DiffEdges = { added: ApiEdge[]; removed: ApiEdge[] };
 type CardBox = { x: number; y: number; w: number; h: number };
 
-type Props = {
+export type GraphViewProps = {
   nodes: RawNode[];
   edges: RawEdge[];
   diff?: {
@@ -70,6 +70,8 @@ type Props = {
   expandedClassIds?: string[];
   onToggleSubclasses?: (classId: string) => void | Promise<void>;
 };
+
+type Props = GraphViewProps;
 
 const cleanType = (t?: string | null) => {
   if (!t) return "";

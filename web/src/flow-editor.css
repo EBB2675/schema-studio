@@ -1,0 +1,36 @@
+.flow-editor { position: absolute; inset: 0; background: var(--graph-bg); --flow-card: #fff; --flow-text: #26324a; --flow-muted: #758098; --flow-border: #dce3ef; --flow-accent: #6155df; --flow-soft: #f5f6fc; }
+[data-theme="dark"] .flow-editor { --flow-card: #202637; --flow-text: #e5eaf6; --flow-muted: #a1adc5; --flow-border: #3b455d; --flow-accent: #ada3ff; --flow-soft: #292f43; }
+.flow-class { width: 290px; border: 1px solid var(--flow-border); border-radius: 14px; background: var(--flow-card); color: var(--flow-text); box-shadow: 0 4px 20px #182b4b0d; overflow: visible; font-size: 14px; }
+.flow-class.is-selected { border-color: var(--flow-accent); box-shadow: 0 0 0 3px #8b7cf62b, 0 8px 24px #182b4b14; }
+.flow-class-header { padding: 16px 18px 13px; display: flex; flex-direction: column; gap: 5px; border-bottom: 1px solid var(--flow-border); }
+.flow-class-kind { font-size: 10px; font-weight: 700; letter-spacing: .13em; color: var(--flow-accent); }
+.flow-title { font: inherit; font-size: 17px; font-weight: 650; text-align: left; overflow-wrap: anywhere; padding: 0; color: inherit; background: none; border: 0; cursor: text; }
+.flow-module { font-size: 11px; color: var(--flow-muted); overflow: hidden; text-overflow: ellipsis; }
+.flow-quantities { padding: 8px; }
+.flow-quantity { width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border: 0; background: none; padding: 9px 10px; border-radius: 6px; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.flow-quantity span { overflow-wrap: anywhere; min-width: 0; }
+.flow-quantity code { font-size: 11px; color: var(--flow-muted); max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-quantity:hover, .flow-title:hover { background: var(--flow-soft); }
+.flow-quantity.is-inherited { opacity: .65; }
+.flow-add, .flow-expand { border: 0; background: none; color: var(--flow-accent); width: 100%; padding: 12px 18px; text-align: left; font: inherit; cursor: pointer; border-top: 1px solid var(--flow-border); }
+.flow-expand { color: var(--flow-muted); font-size: 12px; }
+.flow-empty { padding: 12px 10px; color: var(--flow-muted); }
+.flow-form { padding: 16px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; background: var(--flow-card); color: var(--flow-text); border-radius: 12px; }
+.flow-form fieldset { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.flow-form label { display: flex; flex-direction: column; gap: 5px; color: var(--flow-muted); font-size: 12px; }
+.flow-form input, .flow-form select, .flow-form textarea, .flow-inline input { box-sizing: border-box; min-width: 0; width: 100%; border: 1px solid var(--flow-border); border-radius: 6px; padding: 8px; font: inherit; color: var(--flow-text); background: var(--flow-soft); }
+.flow-form .flow-check { flex-direction: row; align-items: center; }
+.flow-check input { width: auto; }
+.flow-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.flow-form button, .flow-actions > button { border: 1px solid var(--flow-border); background: var(--flow-card); color: var(--flow-text); padding: 8px 12px; border-radius: 8px; cursor: pointer; font: inherit; }
+.flow-form button[type="submit"], .flow-actions > .flow-primary { background: #6155df; color: white; border-color: #6155df; }
+.flow-editor button:disabled { opacity: .5; cursor: wait; }
+.flow-editor [role="alert"] { color: #e15b60; font-size: 12px; overflow-wrap: anywhere; }
+.flow-inline small { display: block; margin-top: 5px; }
+.flow-actions { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.flow-badge { color: var(--flow-muted); margin-right: 5px; }
+.flow-new-class { position: absolute; top: 48px; right: 0; width: 280px; border: 1px solid var(--flow-border); box-shadow: 0 12px 40px #11182725; }
+.flow-hint { background: var(--flow-card); color: var(--flow-muted); border: 1px solid var(--flow-border); border-radius: 20px; padding: 8px 16px; font-size: 12px; pointer-events: none; }
+.flow-editor .react-flow__edge-text { fill: var(--flow-muted); font-size: 11px; }
+.flow-editor .react-flow__edge-textbg { fill: var(--flow-card); }
+.flow-editor .react-flow__handle { background: var(--flow-muted); border-color: var(--flow-card); width: 6px; height: 6px; }

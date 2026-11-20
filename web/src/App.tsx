@@ -2,6 +2,7 @@ import type { ChangeEvent, FormEvent, SyntheticEvent } from "react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import GraphView, { type GraphExportHandle } from "./GraphView";
+import FlowGraphView from "./FlowGraphView";
 import DocPanel from "./components/DocPanel";
 import OverviewGrid from "./components/OverviewGrid";
 import UnderTheHoodPanel from "./components/UnderTheHoodPanel";
@@ -270,7 +271,9 @@ export default function App() {
   });
 
   // editable mode
-  const [editableMode, setEditableMode] = useState<boolean>(false);
+  const [editableMode, setEditableMode] = useState<boolean>(STATIC_MODE);
+  const [newEditor, setNewEditor] = useState(STATIC_MODE);
+  const CanvasView = STATIC_MODE && newEditor ? FlowGraphView : GraphView;
   const [quantityActionErr, setQuantityActionErr] = useState<string | null>(null);
   const [creatingQuantityFor, setCreatingQuantityFor] = useState<string | null>(null);
   const [creatingClass, setCreatingClass] = useState<boolean>(false);
@@ -1045,7 +1048,7 @@ export default function App() {
     const useEmpty = overrides?.forceEmpty ?? startEmpty;
     if (!useEmpty) {
       setStartEmpty(false);
-      setEditableMode(false);
+      setEditableMode(STATIC_MODE);
       setCanvasStatus(null);
     }
     setErr(null);
@@ -1980,7 +1983,7 @@ export default function App() {
   useEffect(() => {
     if (startEmpty && pkg !== scratchPackage) {
       setStartEmpty(false);
-      setEditableMode(false);
+      setEditableMode(STATIC_MODE);
       setCanvasStatus(null);
     }
   }, [pkg, scratchPackage, setStartEmpty, startEmpty]);
@@ -2252,6 +2255,20 @@ export default function App() {
     }
   };
 
+  const renameClassOnCanvas = async (classId: string, name: string): Promise<string> => {
+    if (!ensureEditableReady()) throw new Error(addBlockedReason || "Enable editing first.");
+    const before = umlState?.classes.find(c => c.id === classId);
+    if (!before) throw new Error("Class not found.");
+    const updated = await submitEdits([{ op: "rename_class", target: classId, payload: { new_name: name } }]);
+    const newId = before.module ? `${before.module}.${name}` : name;
+    const after = buildUmlStateFromGraph(updated)?.classes.find(c => c.id === newId);
+    if (after) appendAudit({ type: "edit-class", before, after }, `Renamed class ${before.name} to ${name}`, editIdsOf(updated), updated.package);
+    setSelectedClassId(newId);
+    setSelectedQuantityId(null);
+    setQuantityActionErr(null);
+    return newId;
+  };
+
   // The quantity the user picked, if it can be edited: not inherited, with an owner.
   const editableQuantity = (current: ApiGraph, quantityId: string, verb: string): ApiNode | null => {
     const ownerHint = selected?.kind === "quantity" ? selected.owner : selectedClassId;
@@ -2289,14 +2306,14 @@ export default function App() {
 
   const editQuantity = async (quantityId: string, updates: QuantityFormData) => {
     const current = ensureEditableReady();
-    if (!current) return;
+    if (!current) return false;
     const target = editableQuantity(current, quantityId, "edited");
-    if (!target?.owner) return;
+    if (!target?.owner) return false;
 
     const trimmedName = updates.quantityName.trim();
     if (!trimmedName) {
       setQuantityActionErr("Quantity name cannot be empty.");
-      return;
+      return false;
     }
     const owner = target.owner;
     const description = updates.docstring.trim() || null;
@@ -2306,11 +2323,11 @@ export default function App() {
       const code = target.details?.code;
       if (!code) {
         setQuantityActionErr("This term has no code to edit it by.");
-        return;
+        return false;
       }
       if (trimmedName !== target.label) {
         setQuantityActionErr("A vocabulary term is named by its code; remove it and add a new term instead.");
-        return;
+        return false;
       }
       if (docChanged) edits.push({ op: "set_description", target: owner, payload: { value: code, description } });
     } else {
@@ -2336,7 +2353,7 @@ export default function App() {
     }
     if (!edits.length) {
       setQuantityActionErr(null);
-      return;
+      return true;
     }
 
     let updated: ApiGraph;
@@ -2344,7 +2361,7 @@ export default function App() {
       updated = await submitEdits(edits);
     } catch (e: unknown) {
       setQuantityActionErr(formatApiError(e));
-      return;
+      return false;
     }
     setQuantityActionErr(null);
     const newId = `${owner}.${target.dtype === VOCAB_TERM ? target.label : trimmedName}`;
@@ -2361,6 +2378,7 @@ export default function App() {
     if (selected?.kind === "quantity" && selected.id === quantityId) {
       setSelectedQuantityId(newId);
     }
+    return true;
   };
 
   const removeQuantity = async (quantityId: string) => {
@@ -2533,10 +2551,12 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  const exportPdf = () => {
+  const exportPdf = async () => {
     if (!currentGraph || !graphHandle) return;
 
-    const png = graphHandle.toPng();
+    let png: string | null;
+    try { png = await graphHandle.toPng(); }
+    catch (error) { setErr(`PDF export failed: ${formatApiError(error)}`); return; }
     if (!png) return;
 
     const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
@@ -3268,6 +3288,10 @@ export default function App() {
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
+                  {STATIC_MODE && <div className="toggle-group" role="group" aria-label="Editor version">
+                    <button type="button" className={`toggle-chip ${newEditor ? "active" : ""}`} aria-pressed={newEditor} onClick={() => { setNewEditor(true); setEditableMode(true); }}>New editor</button>
+                    <button type="button" className={`toggle-chip ${!newEditor ? "active" : ""}`} aria-pressed={!newEditor} onClick={() => setNewEditor(false)}>Classic</button>
+                  </div>}
                   <div className="label" id="canvas-mode-label" style={{ marginBottom: 4 }}>Canvas mode</div>
                   <div className="toggle-group" role="group" aria-labelledby="canvas-mode-label">
                     <button
@@ -3314,7 +3338,10 @@ export default function App() {
                     <div className="small" style={{ color: "var(--muted)" }}>{addBlockedReason}</div>
                   ) : null}
                 </div>
-                <GraphView
+                <CanvasView
+                  key={newEditor ? `flow-${canvasKey}` : "classic"}
+                  onRenameClass={renameClassOnCanvas}
+                  onEditQuantity={editQuantity}
                   nodes={graph.nodes}
                   edges={graph.edges}
                   umlState={umlState}
@@ -3337,7 +3364,7 @@ export default function App() {
                   creatingQuantityFor={creatingQuantityFor}
                   creatingClass={creatingClass}
                   onClearSelection={handleCanvasClear}
-                  editableMode={editableMode}
+                  editableMode={editableMode && !addBlockedReason}
                   expandedClassIds={expandedClasses}
                   onToggleSubclasses={toggleSubclasses}
                 />
@@ -3488,7 +3515,7 @@ export default function App() {
                   editRules={editRules}
                   editableMode={editableMode}
                   onRemoveQuantity={removeQuantity}
-                  onEditQuantity={editQuantity}
+                  onEditQuantity={async (id, data) => { await editQuantity(id, data); }}
                   onEditClass={editClassDoc}
                   blockedReason={addBlockedReason}
                   actionError={quantityActionErr}

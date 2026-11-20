@@ -45,6 +45,33 @@ These Vite env vars (see `App.tsx`) control the initial workspace:
 - `src/components/AddQuantityForm.tsx`, `src/components/QuantityEditPanel.tsx` — quantity add/edit/remove UI.
 - `src/store/selection.ts` — Zustand selection store.
 
+## Static canvas prototype
+
+GitHub Pages builds open schemas in the **New editor**, a React Flow canvas using
+that same browser schema engine and edit store. Use **Classic** to compare the old
+canvas. Dev Mode keeps its existing renderer.
+
+- Double-click a class title to rename it (Enter saves, Escape cancels).
+- Double-click an owned quantity to edit its name, type and description.
+- Add quantities on a card and classes from the top-right toolbar.
+- Inherited quantities remain read-only; click them for documentation.
+- Drag cards to position them; **Arrange** recalculates the layout. Ordinary edits
+  keep positions. Opening an inline form brings that card into view.
+- Schema edits persist through the existing browser edit store. Canvas positions
+  currently last only while that canvas is open.
+
+`src/FlowGraphView.tsx` and `src/flow-editor.css` implement the prototype. The
+existing details panel, edit downloads, LinkML export and PDF export remain wired
+through `App.tsx`. Relationships are created through class parent/subsection
+choices and schema properties; freehand edge editing is not implemented.
+
+After building and preparing snapshots as described in the root README, preview
+with the Pages base path enabled:
+
+```bash
+npm run preview -- --mode pages
+```
+
 ## Testing & linting
 
 - Vitest + @testing-library with `happy-dom` powers UI flow tests.
