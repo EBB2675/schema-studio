@@ -1444,7 +1444,6 @@ export default function GraphView({
               const isSelected = selectedClassId === cls.id;
               const hasInline = activeQuantityTarget === cls.id;
               const zIndex = hasInline ? 1200 : isSelected ? 900 : 200;
-              const moduleLabel = cls.module ? (cls.module.split(".").pop() || cls.module) : null;
               const toggle = subclassToggle(cls);
               return (
                 <div
@@ -1469,7 +1468,6 @@ export default function GraphView({
                   <div className="uml-card-header">
                     <div>
                       <div className="uml-card-title">{cls.name}</div>
-                      {moduleLabel ? <div className="uml-card-sub" title={cls.module || ""}>{moduleLabel}</div> : null}
                     </div>
                     {editingEnabled && isSelected ? (
                       <button

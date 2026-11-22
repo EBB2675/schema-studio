@@ -1036,11 +1036,6 @@ hr { border:0; border-top:1px solid var(--panel-border); margin:12px 0; }
   font-size: 13px;
 }
 
-.uml-card-sub {
-  font-size: 12px;
-  color: var(--muted);
-}
-
 .uml-qty-list {
   display: flex;
   flex-direction: column;
