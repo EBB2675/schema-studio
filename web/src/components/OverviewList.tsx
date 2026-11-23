@@ -52,7 +52,7 @@ export default function OverviewList({
   }, [branch, base]);
 
   if (loading) return <div className="p-2 text-sm">Loading…</div>;
-  if (err) return <div className="p-2 text-sm" style={{ color: "#b91c1c" }}>{err}</div>;
+  if (err) return <div className="p-2 text-sm" style={{ color: "var(--danger)" }}>{err}</div>;
   if (!data) return <div className="p-2 text-sm">No data.</div>;
 
   const items = data.items.filter(

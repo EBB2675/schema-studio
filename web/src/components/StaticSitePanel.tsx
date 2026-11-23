@@ -68,7 +68,7 @@ export default function StaticSitePanel({ onEditsChanged }: { onEditsChanged: ()
         <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: "none" }} onChange={loadLog} aria-label="Edit log file" />
       </div>
       {ENGINE_TEXT[engine] ? (
-        <div className="small" role="status" style={{ marginTop: 6, color: engine === "failed" ? "#fca5a5" : "var(--muted)" }}>
+        <div className="small" role="status" style={{ marginTop: 6, color: engine === "failed" ? "var(--danger)" : "var(--muted)" }}>
           {ENGINE_TEXT[engine]}
         </div>
       ) : null}

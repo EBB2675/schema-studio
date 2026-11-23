@@ -86,7 +86,7 @@ export default function QuantityEditPanel({
   return (
     <div className="action-stack" style={{ gap: 12 }}>
       {!editingId ? (
-        <div style={{ color: "#6b7280", fontSize: 13 }}>{showSelectionHint()}</div>
+        <div style={{ color: "var(--muted)", fontSize: 13 }}>{showSelectionHint()}</div>
       ) : (
         <>
           <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8 }}>
@@ -166,9 +166,9 @@ export default function QuantityEditPanel({
             />
           </div>
 
-          {actionError && <div style={{ color: "#b91c1c", fontSize: 13 }}>{actionError}</div>}
-          {blockedReason && <div style={{ color: "#6b7280", fontSize: 13 }}>{blockedReason}</div>}
-          {inheritedBlockedReason && <div style={{ color: "#6b7280", fontSize: 13 }}>{inheritedBlockedReason}</div>}
+          {actionError && <div style={{ color: "var(--danger)", fontSize: 13 }}>{actionError}</div>}
+          {blockedReason && <div style={{ color: "var(--muted)", fontSize: 13 }}>{blockedReason}</div>}
+          {inheritedBlockedReason && <div style={{ color: "var(--muted)", fontSize: 13 }}>{inheritedBlockedReason}</div>}
 
           <div className="row" style={{ justifyContent: "space-between", gap: 8 }}>
             <button className="btn secondary" type="button" onClick={confirmRemove} disabled={disableActions}>

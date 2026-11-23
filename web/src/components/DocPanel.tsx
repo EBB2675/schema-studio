@@ -89,7 +89,7 @@ function QtyRow({ q, onClick, onEdit, onRemove, editableMode, disabled }: { q: Q
       <button className="qty-row" type="button" onClick={handleClick} style={{ flex: 1 }}>
         <div style={{ flex: 1 }} className="qty-mono">
           <div style={{ fontSize: 13 }}>{q.name}</div>
-          <div style={{ fontSize: 11, opacity: 0.7 }}>{meta.join("  ")}</div>
+          <div style={{ fontSize: 12, color: "var(--muted)" }}>{meta.join("  ")}</div>
         </div>
         {diffLabel ? <span className={diffClass || "pill"}>{diffLabel}</span> : null}
         <div className={`tag ${q.inherited ? "inherited" : "view"}`}>{q.inherited ? "Inherited" : "View"}</div>
@@ -228,8 +228,8 @@ export default function DocPanel({
                   onChange={(e) => setClassDocDraft(e.target.value)}
                   disabled={disableActions}
                 />
-                {actionError ? <div style={{ color: "#b91c1c", fontSize: 13 }}>{actionError}</div> : null}
-                {blockedReason ? <div style={{ color: "#6b7280", fontSize: 13 }}>{blockedReason}</div> : null}
+                {actionError ? <div style={{ color: "var(--danger)", fontSize: 13 }}>{actionError}</div> : null}
+                {blockedReason ? <div style={{ color: "var(--muted)", fontSize: 13 }}>{blockedReason}</div> : null}
                 <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
                   <button className="btn" type="button" onClick={commitClassDoc} disabled={disableActions}>
                     Save changes

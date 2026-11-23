@@ -22,7 +22,7 @@ vi.mock('../src/client', () => {
 
 vi.mock('../src/FlowGraphView', () => ({
   __esModule: true,
-  default: () => <div>graph</div>,
+  default: ({ onInspect }: { onInspect?: () => void }) => <button onClick={onInspect}>Inspect canvas class</button>,
 }));
 
 const profile = {
@@ -63,6 +63,29 @@ describe('right panel', () => {
     expect(right.contains(under)).toBe(true);
     expect(documentation.compareDocumentPosition(under) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(document.querySelector('aside.sidebar')!.contains(document.getElementById('section-audit'))).toBe(true);
+  });
+
+  it('keeps setup inert until opened from the navigation rail', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const toggle = screen.getByRole('button', { name: 'Toggle workspace settings' });
+    const sidebar = document.getElementById('mobile-workspace')!;
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(sidebar).toHaveAttribute('inert');
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(sidebar).not.toHaveAttribute('inert');
+    await user.click(toggle);
+    expect(sidebar).toHaveAttribute('inert');
+  });
+
+  it('opens the inspector when a canvas class is inspected', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /\+ Start from empty canvas/i }));
+    await user.click(await screen.findByRole('button', { name: 'Inspect canvas class' }));
+    expect(document.getElementById('right-panel-sections')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Collapse right panel' })).toBeInTheDocument();
   });
 
   it('starts collapsed and opens from the labelled tab', async () => {

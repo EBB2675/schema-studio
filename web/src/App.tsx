@@ -18,6 +18,8 @@ import {
 } from "./components/quantityShared";
 import CollapsibleSection from "./components/CollapsibleSection";
 import HomeButton from "./components/HomeButton";
+import WorkbenchIcon from "./components/WorkbenchIcon";
+import "./workbench.css";
 import { useSelection } from "./store/selection";
 import { jsPDF } from "jspdf";
 import type { AuditTrailEntry, QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
@@ -146,6 +148,7 @@ export default function App() {
     return Number.isFinite(stored) ? stored : 380;
   });
   // The right panel starts collapsed; the canvas gets the room until someone opens it.
+  const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
   const [docPanelCollapsed, setDocPanelCollapsed] = useState<boolean>(true);
   const { isMobile, mobilePanel, setMobilePanel } = useMobilePanels();
   const detailsHidden = isMobile ? mobilePanel !== "details" : docPanelCollapsed;
@@ -524,7 +527,7 @@ export default function App() {
     const offsetLeft = rect?.left ?? 0;
 
     const onMove = (evt: MouseEvent) => {
-      const next = evt.clientX - offsetLeft;
+      const next = evt.clientX - offsetLeft - 72;
       setSidebarWidthClamped(next);
     };
 
@@ -565,6 +568,7 @@ export default function App() {
     };
 
     if (isMobile) setMobilePanel(section === "documentation" || section === "under" ? "details" : "workspace");
+    if (section === "workspace" || section === "audit") setWorkspaceExpanded(true);
     const target = mapping[section];
     target.setter(true);
     if (section === "documentation" || section === "under") setDocPanelCollapsed(false);
@@ -2081,10 +2085,17 @@ export default function App() {
 
   return (
     <main
-      className={`app-shell ${"responsive-studio"} ${mobilePanel ? `mobile-${mobilePanel}-open` : ""}`}
+      className={`app-shell responsive-studio canvas-studio ${workspaceExpanded ? "workspace-expanded" : "workspace-collapsed"} ${mobilePanel ? `mobile-${mobilePanel}-open` : ""}`}
       ref={appShellRef}
-      style={{ gridTemplateColumns: `${sidebarWidth}px 10px 1fr` }}
+      style={{ gridTemplateColumns: `${workspaceExpanded ? sidebarWidth + 72 : 72}px ${workspaceExpanded ? 10 : 0}px minmax(0, 1fr)` }}
     >
+      <nav className="workbench-rail" aria-label="Studio navigation">
+        <button className="rail-brand" type="button" onClick={returnToHome} title="Schema home" aria-label="Schema home"><WorkbenchIcon name="schema" /></button>
+        <span className="rail-divider" />
+        <button type="button" aria-label="Toggle workspace settings" title="Workspace settings" aria-expanded={workspaceExpanded} aria-controls="mobile-workspace" onClick={() => setWorkspaceExpanded(v => !v)}><WorkbenchIcon name="controls" /><span>Setup</span></button>
+        <button type="button" aria-label="Show edit history" title="Edit history" onClick={() => focusAndOpen("audit")}><WorkbenchIcon name="history" /><span>History</span></button>
+        <button className="rail-theme" type="button" aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} title="Switch appearance" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}><WorkbenchIcon name="theme" /><span>Theme</span></button>
+      </nav>
       {<header className="mobile-bar">
         <button type="button" aria-label="Open workspace" aria-expanded={mobilePanel === "workspace"} aria-controls="mobile-workspace" onClick={() => setMobilePanel("workspace")}>☰</button>
         <strong>SchemaStudio</strong>
@@ -2092,7 +2103,7 @@ export default function App() {
         <button type="button" aria-expanded={mobilePanel === "details"} aria-controls="mobile-details" onClick={() => { setOpenDocumentation(true); setMobilePanel("details"); }}>Details</button>
       </header>}
       {isMobile && mobilePanel && <button className="mobile-backdrop" type="button" aria-label="Close panel" tabIndex={-1} onClick={() => setMobilePanel(null)} />}
-      <aside id="mobile-workspace" className="sidebar" data-mobile-panel="workspace" role={isMobile && mobilePanel === "workspace" ? "dialog" : undefined} aria-modal={isMobile && mobilePanel === "workspace" || undefined} aria-label="Workspace" tabIndex={-1}>
+      <aside id="mobile-workspace" className="sidebar" inert={!isMobile && !workspaceExpanded} data-mobile-panel="workspace" role={isMobile && mobilePanel === "workspace" ? "dialog" : undefined} aria-modal={isMobile && mobilePanel === "workspace" || undefined} aria-label="Workspace" tabIndex={-1}>
         <div className="mobile-panel-heading"><strong>Workspace</strong><button type="button" onClick={() => setMobilePanel(null)} aria-label="Close workspace">✕</button></div>
         <div className="brand-card">
           <h3 className="brand-title">
@@ -2227,12 +2238,12 @@ export default function App() {
                 ) : null}
               </div>
               {linkmlStatus ? (
-                <div className="small" style={{ color: linkmlStatus.startsWith("LinkML export failed") ? "#fca5a5" : "var(--muted)", textAlign: "right" }}>
+                <div className="small" style={{ color: linkmlStatus.startsWith("LinkML export failed") ? "var(--danger)" : "var(--muted)", textAlign: "right" }}>
                   {linkmlStatus}
                 </div>
               ) : null}
               {importStatus ? (
-                <div className="small" style={{ color: importStatus.startsWith("Import failed") ? "#fca5a5" : "var(--muted)", textAlign: "right" }}>
+                <div className="small" style={{ color: importStatus.startsWith("Import failed") ? "var(--danger)" : "var(--muted)", textAlign: "right" }}>
                   {importStatus}
                 </div>
               ) : null}
@@ -2244,7 +2255,7 @@ export default function App() {
             ) : null}
 
             {err ? (
-              <p style={{ color: "#fca5a5", marginTop: 10, whiteSpace: "pre-wrap" }}>{err}</p>
+              <p style={{ color: "var(--danger)", marginTop: 10, whiteSpace: "pre-wrap" }}>{err}</p>
             ) : null}
           </div>
         </CollapsibleSection>
@@ -2277,7 +2288,7 @@ export default function App() {
               </button>
             </div>
             {graph?.edit_conflicts?.length ? (
-              <div className="small" role="status" style={{ color: "#b45309" }}>
+              <div className="small" role="status" style={{ color: "var(--pill-warning-fg)" }}>
                 <div>
                   {graph.edit_conflicts.filter((c) => !c.applied).length} stored edit(s) could not be applied,{" "}
                   {graph.edit_conflicts.filter((c) => c.applied).length} applied over a change in the schema source:
@@ -2422,6 +2433,10 @@ export default function App() {
             overflow: mode === "overview" ? "auto" : "hidden",
           }}
         >
+          {graph && mode !== "overview" && <header className="canvas-heading">
+            <div><span className="canvas-kicker">SCHEMA STUDIO / EXPLORER</span><h1>{selectedDatabaseLabel || graph.package || "Untitled schema"}</h1></div>
+            <div className="canvas-summary"><span>{umlState?.classes.length ?? 0} classes</span><span>{umlState?.edges.length ?? 0} relationships</span></div>
+          </header>}
           {mode === "overview" ? (
             <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 12 }}>
               <div className="workspace-toolbar">
@@ -2499,7 +2514,7 @@ export default function App() {
                         Reset canvas
                       </button>
                       {canvasStatus ? (
-                        <span className="small" style={{ color: canvasStatus.startsWith("Reset failed") ? "#fca5a5" : "var(--muted)" }}>
+                        <span className="small" style={{ color: canvasStatus.startsWith("Reset failed") ? "var(--danger)" : "var(--muted)" }}>
                           {canvasStatus}
                         </span>
                       ) : null}
@@ -2513,6 +2528,7 @@ export default function App() {
                   key={`flow-${canvasKey}`}
                   positionStorageKey={canvasPositionKey(schemaProfileKey || "default", graph.package, layoutDirection)}
                   mobile={isMobile}
+                  onInspect={() => { if (!isMobile) { setOpenDocumentation(true); setDocPanelCollapsed(false); } }}
                   onRenameClass={renameClassOnCanvas}
                   onEditQuantity={editQuantity}
                   nodes={graph.nodes}
@@ -2545,7 +2561,11 @@ export default function App() {
             </>
           ) : (
             <div className="start-page">
-              <h1 className="start-title">Pick a schema to get started</h1>
+              <div className="start-heading">
+                <p className="eyebrow">Schema Studio / Workbench</p>
+                <h1 className="start-title">Pick a schema to get started</h1>
+                <p className="subdued">Explore classes, inspect relationships, and edit your schema.</p>
+              </div>
               <div className="start-choices">
                 <div className="schema-grid">
                   {databases.map((profile) => {
@@ -2585,12 +2605,12 @@ export default function App() {
                   </div>
                 ) : null}
                 {currentSchemaProfile && !currentSchemaProfile.available ? (
-                  <div className="small" style={{ color: "#fca5a5" }}>
+                  <div className="small" style={{ color: "var(--danger)" }}>
                     {currentSchemaProfile.error || "This schema has no snapshot in this site build."}
                   </div>
                 ) : null}
                 {schemaProfileError ? (
-                  <div className="small" style={{ color: "#fca5a5" }}>{schemaProfileError}</div>
+                  <div className="small" style={{ color: "var(--danger)" }}>{schemaProfileError}</div>
                 ) : null}
                 <button className="btn ghost start-empty" type="button" onClick={() => toggleEmptyMode()}>
                   {emptyCanvasActive ? "Back to schema graph" : "+ Start from empty canvas"}

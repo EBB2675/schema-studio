@@ -79,13 +79,13 @@ export default function AddQuantityForm({ enabled, targetClass, onSubmit, submit
       </div>
 
       {error && (
-        <div style={{ color: "#b91c1c", fontSize: 13 }}>
+        <div style={{ color: "var(--danger)", fontSize: 13 }}>
           {error}
         </div>
       )}
 
       {disabledReason && (
-        <div style={{ color: "#6b7280", fontSize: 13 }}>
+        <div style={{ color: "var(--muted)", fontSize: 13 }}>
           {disabledReason}
         </div>
       )}
