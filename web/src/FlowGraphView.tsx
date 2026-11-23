@@ -24,10 +24,10 @@ const EditorContext = createContext<FlowGraphProps | null>(null);
 const touchEditing = () => typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 // Before React Flow measures a card: inherited quantities start collapsed behind one toggle row.
 function estimatedCardHeight(cls: UmlClassNode, compact?: boolean) {
-  if (compact) return 135;
+  if (compact) return 181;
   const own = cls.quantities.filter(q => !q.inherited).length;
   const toggle = own < cls.quantities.length ? 1 : 0;
-  return touchEditing() ? 210 + (own + toggle) * 44 : 140 + own * 26 + toggle * 26;
+  return touchEditing() ? 256 + (own + toggle) * 44 : 186 + own * 26 + toggle * 26;
 }
 function useEditor() { return useContext(EditorContext)!; }
 const qtySelection = (q: QuantityNode) => ({ ...q, owner: q.ownerId, doc: q.doc ?? "", path: q.path ?? undefined, line: q.line ?? undefined });
@@ -122,15 +122,16 @@ function ClassCard({ data, selected }: NodeProps<CardNode>) {
   const { cls } = data;
   const flow = useReactFlow();
   const [rename, setRename] = useState(false);
+  const [addingSubclass, setAddingSubclass] = useState(false);
   const [editing, setEditing] = useState<QuantityNode | "new" | null>(null);
   // Bring the form into view, including cards near the bottom of the canvas.
   useEffect(() => {
-    if (!rename && (!editing || props.mobile)) return;
+    if (!rename && ((!editing && !addingSubclass) || props.mobile)) return;
     let frame = requestAnimationFrame(() => {
       frame = requestAnimationFrame(() => { void flow.fitView({ nodes: [{ id: cls.id }], padding: 0.3, maxZoom: 1, duration: 180 }); });
     });
     return () => cancelAnimationFrame(frame);
-  }, [rename, editing, cls.id, flow, props.mobile]);
+  }, [rename, editing, addingSubclass, cls.id, flow, props.mobile]);
   const expanded = props.expandedClassIds?.includes(cls.id);
   const [expandError, setExpandError] = useState("");
   const direction = props.layoutDirection ?? "UP";
@@ -153,7 +154,8 @@ function ClassCard({ data, selected }: NodeProps<CardNode>) {
         <button className="flow-title nodrag" onClick={() => { if (editable && touchEditing()) setRename(true); }} title={editable ? "Double-click to rename · Enter to edit" : cls.name} onKeyDown={e => { if (e.key === "Enter" && editable) { e.preventDefault(); setRename(true); } }}>{cls.name}</button>}
     </header>
     {!props.compact && <div className="flow-quantities">{ownQuantities.map(renderQuantity)}{inheritedQuantities.length > 0 && <button className="flow-inherited-toggle nodrag" aria-expanded={showInherited} onClick={e => { e.stopPropagation(); setShowInherited(v => !v); }}>{showInherited ? "▾ Hide" : "▸"} {inheritedQuantities.length} inherited</button>}{showInherited && inheritedQuantities.map(renderQuantity)}{!cls.quantities.length && <div className="flow-empty">No quantities yet</div>}</div>}
-    {editing && editable ? props.mobile ? <MobileEditSheet title={editing === "new" ? "Add quantity" : "Edit quantity"} onClose={() => setEditing(null)}><QuantityForm key={typeof editing === "string" ? editing : editing.id} cls={cls} quantity={editing === "new" ? undefined : editing} props={props} onClose={() => setEditing(null)} /></MobileEditSheet> : <QuantityForm key={typeof editing === "string" ? editing : editing.id} cls={cls} quantity={editing === "new" ? undefined : editing} props={props} onClose={() => setEditing(null)} /> : editable && <button className="flow-add nodrag" onClick={e => { e.stopPropagation(); selectClass(cls, props); setEditing("new"); }}>+ Add {props.editRules?.codes && cls.quantities.some(q => q.dtype === VOCAB_TERM) ? "term" : "quantity"}</button>}
+    {editing && editable ? props.mobile ? <MobileEditSheet title={editing === "new" ? "Add quantity" : "Edit quantity"} onClose={() => setEditing(null)}><QuantityForm key={typeof editing === "string" ? editing : editing.id} cls={cls} quantity={editing === "new" ? undefined : editing} props={props} onClose={() => setEditing(null)} /></MobileEditSheet> : <QuantityForm key={typeof editing === "string" ? editing : editing.id} cls={cls} quantity={editing === "new" ? undefined : editing} props={props} onClose={() => setEditing(null)} /> : editable && <button className="flow-add nodrag" onClick={e => { e.stopPropagation(); selectClass(cls, props); setAddingSubclass(false); setEditing("new"); }}>+ Add {props.editRules?.codes && cls.quantities.some(q => q.dtype === VOCAB_TERM) ? "term" : "quantity"}</button>}
+    {editable && (addingSubclass ? props.mobile ? <MobileEditSheet title="Add subclass" onClose={() => setAddingSubclass(false)}><NewClassForm props={props} parent={cls} onClose={() => setAddingSubclass(false)} /></MobileEditSheet> : <NewClassForm props={props} parent={cls} onClose={() => setAddingSubclass(false)} /> : <button className="flow-add nodrag" onClick={e => { e.stopPropagation(); selectClass(cls, props); setEditing(null); setAddingSubclass(true); }}>+ Add subclass</button>)}
     {(expanded || (cls.subclasses ?? 0) > 0) && <button className="flow-expand nodrag" onClick={async e => { e.stopPropagation(); try { await props.onToggleSubclasses?.(cls.id); setExpandError(""); } catch { setExpandError("Could not load subclasses."); } }}>{expanded ? "− Hide subclasses" : `+ Show subclasses${cls.subclasses ? ` (${cls.subclasses})` : ""}`}</button>}
     {expandError && <small role="alert">{expandError}</small>}
     <Handle type="source" position={source} isConnectable={false} />
@@ -161,25 +163,26 @@ function ClassCard({ data, selected }: NodeProps<CardNode>) {
 }
 const nodeTypes = { schemaClass: ClassCard };
 
-function NewClassForm({ props, onClose }: { props: FlowGraphProps; onClose: () => void }) {
+export function NewClassForm({ props, parent, onClose }: { props: FlowGraphProps; parent?: UmlClassNode; onClose: () => void }) {
   const [name, setName] = useState("");
-  const [parentId, setParent] = useState(props.selectedClassId ?? "");
+  const [parentId, setParent] = useState("");
   const [relation, setRelation] = useState<"inherits" | "hasSubSection">("inherits");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
-  return <form className="flow-form flow-new-class" aria-label="Add class" onSubmit={async e => {
+  const title = parent ? "Add subclass" : "Add class";
+  return <form className={`flow-form nodrag nowheel ${parent ? "" : "flow-new-class"}`} aria-label={title} onClick={e => e.stopPropagation()} onKeyDown={e => { e.stopPropagation(); if (e.key === "Escape" && !busy) onClose(); }} onSubmit={async e => {
     e.preventDefault(); if (saving.current) return; saving.current = true; setBusy(true);
-    try { await props.onCreateClass?.({ name: name.trim(), parentId: parentId || null, relation }); onClose(); }
+    try { await props.onCreateClass?.({ name: name.trim(), parentId: parent?.id ?? (parentId || null), relation: parent ? "inherits" : relation }); onClose(); }
     catch (err) { setError(err instanceof Error ? err.message : "Could not add class."); }
     finally { saving.current = false; setBusy(false); }
   }}>
-    <strong>Add class</strong><fieldset disabled={busy}>
+    <strong>{title}</strong>{parent && <span>Inherits from {parent.name}</span>}<fieldset disabled={busy}>
       <label>{props.editRules?.codes ? "Code" : "Name"}<input autoFocus required value={name} onChange={e => setName(e.target.value)} /></label>
-      <label>Parent<select value={parentId} onChange={e => setParent(e.target.value)}><option value="">No parent</option>{props.umlState?.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
-      {parentId && !props.editRules?.codes && <label>Relationship<select value={relation} onChange={e => setRelation(e.target.value as typeof relation)}><option value="inherits">Inherits from parent</option><option value="hasSubSection">Subsection of parent</option></select></label>}
+      {!parent && <label>Parent<select value={parentId} onChange={e => setParent(e.target.value)}><option value="">No parent</option>{props.umlState?.classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+      {!parent && parentId && !props.editRules?.codes && <label>Relationship<select value={relation} onChange={e => setRelation(e.target.value as typeof relation)}><option value="inherits">Inherits from parent</option><option value="hasSubSection">Subsection of parent</option></select></label>}
     </fieldset>{error && <div role="alert">{error}</div>}
-    <div className="flow-form-actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button><button disabled={busy || !name.trim()}>{busy ? "Adding…" : "Add class"}</button></div>
+    <div className="flow-form-actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button><button disabled={busy || !name.trim()}>{busy ? "Adding…" : title}</button></div>
   </form>;
 }
 
@@ -318,8 +321,8 @@ function FlowCanvas(props: FlowGraphProps) {
     }} onNodeClick={(_, node) => selectClass(node.data.cls, props)} onPaneClick={() => { props.onClearSelection?.(); useSelection.getState().setSelected(null); }} nodesConnectable={false} deleteKeyCode={null} zoomOnDoubleClick={false} minZoom={0.05} maxZoom={2} colorMode={props.theme ?? "light"} fitView>
       {positionError && <Panel position="bottom-center" className="flow-position-error" role="status">Could not save box positions in this browser.</Panel>}
       <Background gap={24} size={1} /><Controls showInteractive={false} position="bottom-left" />
-      <Panel position="top-right" className="flow-actions"><button onClick={() => setLayoutVersion(v => v + 1)}>Arrange</button>{props.editableMode && <button className="flow-primary" onClick={() => setAddingClass(v => !v)}>+ Add class</button>}{addingClass && props.editableMode && (props.mobile ? <MobileEditSheet title="Add class" onClose={() => setAddingClass(false)}><NewClassForm props={props} onClose={() => setAddingClass(false)} /></MobileEditSheet> : <NewClassForm props={props} onClose={() => setAddingClass(false)} />)}</Panel>
-      <Panel position="bottom-center" className="flow-hint">{layoutError || (props.editableMode ? (touchEditing() ? "Tap to edit · Drag to move · Pinch to zoom" : "Double-click to edit · Drag to move · Scroll to zoom") : "Select a class to explore · Switch to Edit to make changes")}</Panel>
+      <Panel position="top-right" className="flow-actions"><button onClick={() => setLayoutVersion(v => v + 1)}>Arrange</button>{classes.length === 0 && props.editableMode && <button className="flow-primary" onClick={() => setAddingClass(v => !v)}>+ Add class</button>}{classes.length === 0 && addingClass && props.editableMode && (props.mobile ? <MobileEditSheet title="Add class" onClose={() => setAddingClass(false)}><NewClassForm props={props} onClose={() => setAddingClass(false)} /></MobileEditSheet> : <NewClassForm props={props} onClose={() => setAddingClass(false)} />)}</Panel>
+      <Panel position="bottom-center" className="flow-hint">{layoutError || (props.editableMode ? (touchEditing() ? "Tap to edit · Drag to move · Pinch to zoom" : "Double-click to edit · Drag to move · Scroll to zoom") : "Select a class to explore")}</Panel>
     </ReactFlow>
   </div></EditorContext.Provider>;
 }

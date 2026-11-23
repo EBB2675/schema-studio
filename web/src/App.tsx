@@ -209,7 +209,7 @@ export default function App() {
   });
 
   // editable mode
-  const [editableMode, setEditableMode] = useState<boolean>(true);
+  const editableMode = true;
 
   const [quantityActionErr, setQuantityActionErr] = useState<string | null>(null);
   const [creatingQuantityFor, setCreatingQuantityFor] = useState<string | null>(null);
@@ -542,7 +542,7 @@ export default function App() {
       const lines = [
         "Start page (center): pick a schema; its bird's-eye view lists every module with its classes, and a class opens its diagram.",
         "Workspace (left): diagram options, Build graph, import and export.",
-        "Graph canvas (center): pan/zoom, select classes; switch from UML to Edit to add, rename or remove classes and quantities.",
+        "Graph canvas (center): pan/zoom, select classes; add, rename or remove classes and quantities directly.",
         "Documentation (right): class and quantity docs; edit quantities in Edit mode.",
         "Under the hood (right, below Documentation): where the selected class is used in code.",
         "Audit trail (left): log of your edits to communicate them; export or clear it anytime.",
@@ -680,7 +680,6 @@ export default function App() {
     const useEmpty = overrides?.forceEmpty ?? startEmpty;
     if (!useEmpty) {
       setStartEmpty(false);
-      setEditableMode(true);
       setCanvasStatus(null);
     }
     setErr(null);
@@ -862,7 +861,6 @@ export default function App() {
       setSelectedQuantityId(null);
       setRoot("");
       setPkg(targetPkg);
-      setEditableMode(true);
       setCanvasStatus(null);
       await loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, forceEmpty: true, expand: [] });
     } else {
@@ -1503,7 +1501,6 @@ export default function App() {
   useEffect(() => {
     if (startEmpty && pkg !== scratchPackage) {
       setStartEmpty(false);
-      setEditableMode(true);
       setCanvasStatus(null);
     }
   }, [pkg, scratchPackage, setStartEmpty, startEmpty]);
@@ -1641,7 +1638,6 @@ export default function App() {
     setQuantityActionErr(null);
     setCreatingQuantityFor(null);
     setCreatingClass(false);
-    setEditableMode(false);
   }, [setSelected]);
 
   const handleOverviewClassSelect = (pkgName: string, className: string) => {
@@ -1672,10 +1668,6 @@ export default function App() {
   const ensureEditableReady = () => {
     if (addBlockedReason) {
       setQuantityActionErr(addBlockedReason);
-      return null;
-    }
-    if (!editableMode) {
-      setQuantityActionErr("Enable editable mode to make changes.");
       return null;
     }
     if (!graph) {
@@ -2495,30 +2487,6 @@ export default function App() {
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
-                  <div className="label" id="canvas-mode-label" style={{ marginBottom: 4 }}>Canvas mode</div>
-                  <div className="toggle-group" role="group" aria-labelledby="canvas-mode-label">
-                    <button
-                      className={`toggle-chip ${!editableMode ? "active" : ""}`}
-                      type="button"
-                      onClick={() => setEditableMode(false)}
-                      aria-pressed={!editableMode}
-                    >
-                      UML
-                    </button>
-                    <button
-                      className={`toggle-chip ${editableMode ? "active" : ""}`}
-                      type="button"
-                      onClick={() => {
-                        setEditableMode(true);
-                        setQuantityActionErr(null);
-                      }}
-                      disabled={!!addBlockedReason}
-                      aria-pressed={editableMode}
-                      title={addBlockedReason || "Toggle editing"}
-                    >
-                      Edit
-                    </button>
-                  </div>
                   {startEmpty ? (
                     <div className="row" style={{ gap: 8, alignItems: "center" }}>
                       <button

@@ -181,14 +181,8 @@ describe('App editable quantity add flow', () => {
     // Build an empty canvas graph.
     await user.click(await screen.findByRole('button', { name: /\+ Start from empty canvas/i }));
 
-    // Enable editable mode.
-    const editToggle =
-      (
-        await screen.findAllByRole('button', {
-          name: /^Edit$/i,
-        })
-      ).find((btn) => btn.getAttribute('title')?.includes('Toggle editing')) ?? (await screen.findByRole('button', { name: /^Edit$/i }));
-    await user.click(editToggle);
+    // Editing is available without a mode switch.
+    expect(screen.queryByRole('button', { name: /^UML$/i })).not.toBeInTheDocument();
 
     // First call succeeds.
     await user.click(await screen.findByRole('button', { name: /^Trigger quantity add$/i }));
@@ -222,13 +216,7 @@ describe('App editable quantity add flow', () => {
   const addOneQuantity = async (user: ReturnType<typeof userEvent.setup>) => {
     render(<App />);
     await user.click(await screen.findByRole('button', { name: /\+ Start from empty canvas/i }));
-    const editToggle =
-      (
-        await screen.findAllByRole('button', {
-          name: /^Edit$/i,
-        })
-      ).find((btn) => btn.getAttribute('title')?.includes('Toggle editing')) ?? (await screen.findByRole('button', { name: /^Edit$/i }));
-    await user.click(editToggle);
+    expect(screen.queryByRole('button', { name: /^UML$/i })).not.toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: /^Trigger quantity add$/i }));
     // The audit trail starts closed; open it to reach its undo and clear buttons.
     await user.click(screen.getByRole('button', { name: /^Audit trail/, expanded: false }));

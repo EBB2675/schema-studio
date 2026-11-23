@@ -40,7 +40,7 @@ The development server serves the same static application. Python is used only f
 
 ## GitHub Pages
 
-Set the repository's Pages source to **GitHub Actions**. The workflow in `.github/workflows/pages.yml` builds the frontend, refreshes the schema environments, generates snapshots, and uploads `web/dist`. It runs on published releases, nightly, or manually.
+Set the repository's Pages source to **GitHub Actions**. The workflow in `.github/workflows/pages.yml` builds the frontend, refreshes the schema environments, generates snapshots, and uploads `web/dist`. It runs on pushes to `main`, published releases, nightly, or manually.
 
 `web/.env.pages` sets the project URL prefix to `/ss-test/`. Change `VITE_BASE_PATH` for another repository, or use `/` for a user/organization root site. Assets, snapshots, and Pyodide resolve relative to this prefix.
 

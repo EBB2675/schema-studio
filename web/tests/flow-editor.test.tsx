@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { InlineName, QuantityForm, type FlowGraphProps } from '../src/FlowGraphView';
+import { InlineName, NewClassForm, QuantityForm, type FlowGraphProps } from '../src/FlowGraphView';
 import type { UmlClassNode } from '../src/types/uml';
 
 const cls: UmlClassNode = { id: 'pkg.Sample', name: 'Sample', module: 'pkg', quantities: [] };
@@ -62,6 +62,21 @@ describe('canvas quantity editing', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Duplicate quantity');
     expect(close).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
+  });
+});
+
+ describe('subclass creation', () => {
+  it('inherits from the card even when a different class is selected', async () => {
+    const user = userEvent.setup();
+    const editor = { ...props(), selectedClassId: 'pkg.Other', onCreateClass: vi.fn().mockResolvedValue(undefined) };
+    const close = vi.fn();
+    render(<NewClassForm props={editor} parent={cls} onClose={close} />);
+    expect(screen.getByText('Inherits from Sample')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Parent')).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText('Name'), 'Child');
+    await user.click(screen.getByRole('button', { name: 'Add subclass' }));
+    expect(editor.onCreateClass).toHaveBeenCalledWith({ name: 'Child', parentId: cls.id, relation: 'inherits' });
     await waitFor(() => expect(close).toHaveBeenCalledOnce());
   });
 });

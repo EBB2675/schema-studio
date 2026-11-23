@@ -1,9 +1,11 @@
 name: GitHub Pages
 
 # The static site: the web app without a server, with snapshot files of every schema profile and
-# the Python core running in the browser (Pyodide). Published when a release is published, every
-# night (to pick up the latest commits of the schema branches), or started by hand.
+# the Python core running in the browser (Pyodide). Publish main pushes and releases,
+# refresh schema snapshots nightly, or start a build manually.
 on:
+  push:
+    branches: [main]
   release:
     types: [published]
   schedule:
