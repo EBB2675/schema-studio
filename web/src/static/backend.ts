@@ -1,11 +1,10 @@
 /**
  * The backend of the static site, inside the browser: it answers the requests the web app sends
- * to a Light Mode server, from the site's snapshot files, the Python core and the edits stored
+ * through the browser-local client, from the site's snapshot files, the Python core and the edits stored
  * in this browser.
  *
  * Graphs for a module without edits come ready-made from the site when the build made them;
- * everything else goes to the Python core (see `pythonRunner.ts`). Requests that need a server
- * (schema updates, Send design, branches, login) are answered with an error.
+ * everything else goes to the Python core (see `pythonRunner.ts`).
  */
 import type { CoreAnswer, CoreRequest } from "./pythonRunner";
 import { createEditStore, type EditStore, type StoredEdit } from "./editStore";
@@ -64,10 +63,8 @@ type Workspace = { profile: string; branch: string; package: string; base_namesp
 type Params = Record<string, unknown>;
 
 export const WORKSPACE_STORAGE_KEY = "schema-studio-static-workspace";
-export const STATIC_USER = "local";
 const SCRATCH_SUFFIX = ".custom_schema";
 const FLAG_NAMES = ["include_quantities", "include_subsections", "include_inheritance", "allow_cross_module"] as const;
-const UNAVAILABLE = "This needs the Schema Studio server; it is not available on the static site.";
 
 function flag(value: unknown, fallback: boolean): boolean {
   if (value === undefined || value === null || value === "") return fallback;
@@ -79,7 +76,7 @@ function text(value: unknown): string | undefined {
   return value === undefined || value === null || value === "" ? undefined : String(value);
 }
 
-/** The namespace the server falls back to for a module: its first three dotted parts. */
+/** The namespace used for a module: its first three dotted parts. */
 function rootNamespace(pkg: string): string {
   return pkg.split(".").slice(0, 3).join(".");
 }
@@ -109,7 +106,7 @@ export function createStaticBackend(options: StaticBackendOptions) {
     return site;
   };
 
-  /** The profile of a module (or the one whose namespace is given), as the server picks it. */
+  /** The profile of a module (or the one whose namespace is given). */
   const profileFor = (data: SiteIndex, pkg?: string, namespace?: string): SiteProfile => {
     const byNamespace = namespace ? data.profiles.find(p => namespace.split(",").some(ns => inNamespace(ns.trim(), p.default_base_namespace))) : undefined;
     const byPackage = pkg ? data.profiles.find(p => inNamespace(pkg, p.default_base_namespace)) : undefined;
@@ -196,7 +193,7 @@ export function createStaticBackend(options: StaticBackendOptions) {
     const root = text(params.root);
     const empty = flag(params.empty, false);
     const snapshot = snapshotOf(profile, pkg);
-    if (!snapshot) return emptyGraph(pkg, root); // not a module of the site, like a module the server cannot import
+    if (!snapshot) return emptyGraph(pkg, root); // not a module of the site
     const flags = graphFlags(params, root, namespace);
     const plain = FLAG_NAMES.every(name => flags[name]) && flags.expand.length === 0
       && namespace === profile.default_base_namespace;
@@ -219,16 +216,11 @@ export function createStaticBackend(options: StaticBackendOptions) {
     const ok = (value: unknown, contentType?: string): StaticAnswer => ({ status: 200, data: value, contentType });
     const route = `${method.toUpperCase()} ${path}`;
 
-    if (["POST /schema/update", "POST /send-design", "GET /git/branches", "POST /auth/login", "POST /auth/register"].includes(route)
-      || path.startsWith("/tasks") || path.startsWith("/graph")) {
-      throw new StaticHttpError(route === "GET /git/branches" ? 410 : 503, UNAVAILABLE);
-    }
-
     if (route === "GET /health") {
-      return ok({ ok: true, mode: "light", static: true, workspace: workspacePayload(ws), ...statusPayload(data, ws), send_design_enabled: false });
+      return ok({ ok: true, mode: "static", static: true, workspace: workspacePayload(ws), ...statusPayload(data, ws) });
     }
     if (route === "GET /workspace") {
-      return ok({ workspace: workspacePayload(ws), user: { username: STATIC_USER }, ...statusPayload(data, ws) });
+      return ok({ workspace: workspacePayload(ws), ...statusPayload(data, ws) });
     }
     if (route === "PUT /workspace") {
       const pkg = text(query.package) ?? text(payload.package) ?? ws.package;
@@ -236,10 +228,10 @@ export function createStaticBackend(options: StaticBackendOptions) {
       const branch = text(query.branch) ?? text(payload.branch);
       const profile = profileFor(data, pkg, namespace);
       if (branch && branch !== profile.default_branch) {
-        throw new StaticHttpError(400, `Branch switching is disabled in Light Mode; only '${profile.default_branch}' is allowed for the selected schema profile.`);
+        throw new StaticHttpError(400, `Snapshots have fixed branches; only '${profile.default_branch}' is allowed for the selected schema profile.`);
       }
       ws = setWorkspace(data, pkg, namespace);
-      return ok({ workspace: workspacePayload(ws), user: { username: STATIC_USER } });
+      return ok({ workspace: workspacePayload(ws) });
     }
     if (route === "GET /schema/profiles") {
       const current = profileFor(data, ws.package, ws.base_namespace);
@@ -257,7 +249,6 @@ export function createStaticBackend(options: StaticBackendOptions) {
           version: profile.version,
           source: "static",
           error: null,
-          packaged: true,
           linkml_export: true,
           capabilities: profile.capabilities,
           editable: true,
@@ -275,14 +266,14 @@ export function createStaticBackend(options: StaticBackendOptions) {
     }
     if (route === "GET /schema/version") {
       const profile = profileFor(data, ws.package, ws.base_namespace);
-      return ok({ version: profile.version, source: "static", schema_profile: profile.key, send_design_enabled: false });
+      return ok({ version: profile.version, source: "static", schema_profile: profile.key });
     }
     if (route === "GET /git/packages") {
       const base = text(query.base_package) ?? ws.base_namespace;
       const profile = profileFor(data, ws.package, base);
       const branch = text(query.branch);
       if (branch && branch !== profile.default_branch) {
-        throw new StaticHttpError(400, `Branch switching is disabled in Light Mode; only '${profile.default_branch}' is allowed for the selected schema profile.`);
+        throw new StaticHttpError(400, `Snapshots have fixed branches; only '${profile.default_branch}' is allowed for the selected schema profile.`);
       }
       const packages = base === profile.default_base_namespace
         ? profile.overview.map(m => m.package).sort()
@@ -362,7 +353,7 @@ export function createStaticBackend(options: StaticBackendOptions) {
       if (!sectionId) throw new StaticHttpError(422, "section_id is required");
       const profile = profileFor(data, sectionId, ws.base_namespace);
       const own = profileFor(data, ws.package, ws.base_namespace);
-      // The usage comes from the module's snapshot, else the profile's, as on the server.
+      // The usage comes from the module's snapshot, else the profile's.
       const usageSnapshots = [own.key === profile.key ? snapshotOf(profile, ws.package) : undefined, profile.snapshot]
         .filter((p, i, all): p is string => Boolean(p) && all.indexOf(p) === i);
       const snapshot = snapshotOf(own, ws.package);

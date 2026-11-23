@@ -1,3 +1,4 @@
+vi.mock('../src/components/StaticSitePanel', () => ({ default: () => <div data-testid="static-site-panel" /> }));
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -37,7 +38,7 @@ const mockGet = vi.fn();
 const mockPost = vi.fn();
 const mockPut = vi.fn();
 
-vi.mock('axios', () => {
+vi.mock('../src/client', () => {
   const create = () => ({
     get: mockGet,
     post: mockPost,
@@ -45,7 +46,7 @@ vi.mock('axios', () => {
     delete: vi.fn(),
     interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
   });
-  return { default: Object.assign(create, { create, post: vi.fn() }) };
+  return { createApiClient: create, apiFetch: vi.fn(async () => new Response("[]")) };
 });
 
 // What the canvas was given on each render.
@@ -53,8 +54,8 @@ const { renders } = vi.hoisted(() => ({
   renders: [] as Array<{ nodes: string[]; classes: string[]; layoutKey: unknown }>,
 }));
 
-// GraphView reduced to the subclass toggles and what it is given.
-vi.mock('../src/GraphView', () => ({
+// FlowGraphView reduced to the subclass toggles and what it is given.
+vi.mock('../src/FlowGraphView', () => ({
   __esModule: true,
   default: ({ nodes, umlState, layoutKey, expandedClassIds, onToggleSubclasses }: {
     nodes: { id: string; kind: string }[];
@@ -91,8 +92,6 @@ describe('App subclass toggle', () => {
     useWorkspaceStore.getState().setBaseNamespace('pkg');
     useWorkspaceStore.getState().setStartEmpty(true);
     window.localStorage.removeItem('schema-uml-audit');
-    window.localStorage.setItem('schema-uml-token', 't0k');
-    window.localStorage.setItem('schema-uml-username', 'user');
     held = false;
     schemaGraph = graph;
     queue.length = 0;

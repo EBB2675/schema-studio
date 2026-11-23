@@ -6,18 +6,14 @@ type OverviewItem = { package: string; classes: string[] };
 type OverviewResp = { branch: string; base: string; items: OverviewItem[] };
 
 export default function OverviewGrid({
-  apiBase,
   branch,
   base = DEFAULT_OVERVIEW_NAMESPACE,
-  token,
   onClassSelect,
   query,
   onQueryChange,
 }: {
-  apiBase: string;
   branch: string;
   base?: string;
-  token?: string;
   onClassSelect?: (pkg: string, className: string) => void;
   // Passing the filter in keeps it when the caller leaves and comes back.
   query?: string;
@@ -36,7 +32,7 @@ export default function OverviewGrid({
     let cancelled = false;
     setLoading(true);
     setErr(null);
-    apiFetch(path, {}, { baseURL: apiBase, token: token ?? "" })
+    apiFetch(path, {})
       .then(async (r) => {
         if (!r.ok) throw new Error((await r.text()) || `HTTP ${r.status}`);
         return r.json();
@@ -48,7 +44,7 @@ export default function OverviewGrid({
     return () => {
       cancelled = true;
     };
-  }, [apiBase, branch, base, token]);
+  }, [branch, base]);
 
   const items = useMemo(() => {
     if (!data) return [];

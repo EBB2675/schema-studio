@@ -1,3 +1,4 @@
+vi.mock('../src/components/StaticSitePanel', () => ({ default: () => <div data-testid="static-site-panel" /> }));
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +10,7 @@ import { useWorkspaceStore } from '../src/store/workspace';
 const mockGet = vi.fn();
 const mockPut = vi.fn();
 
-vi.mock('axios', () => {
+vi.mock('../src/client', () => {
   const create = () => ({
     get: mockGet,
     post: vi.fn(async () => ({ data: {} })),
@@ -17,10 +18,10 @@ vi.mock('axios', () => {
     delete: vi.fn(),
     interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
   });
-  return { default: Object.assign(create, { create, post: vi.fn() }) };
+  return { createApiClient: create, apiFetch: vi.fn(async () => new Response("[]")) };
 });
 
-vi.mock('../src/GraphView', () => ({
+vi.mock('../src/FlowGraphView', () => ({
   __esModule: true,
   default: () => <div>graph view</div>,
 }));
@@ -91,8 +92,6 @@ describe('Start page databases', () => {
     useWorkspaceStore.getState().setPkg(`${SIM}.model_method`);
     useWorkspaceStore.getState().setBaseNamespace(SIM);
     useWorkspaceStore.getState().setStartEmpty(false);
-    window.localStorage.setItem('schema-uml-token', 't0k');
-    window.localStorage.setItem('schema-uml-username', 'user');
   });
 
   afterEach(() => cleanup());
@@ -180,13 +179,13 @@ describe('Start page databases', () => {
     expect(screen.getByRole('button', { name: database('bam-masterdata v0') })).not.toHaveTextContent('draft');
   });
 
-  it('marks bam-masterdata v1 as a draft when the server lists no profiles, as in Dev Mode', async () => {
+  it('marks bam-masterdata v1 as a draft when the server lists no profiles, while the snapshot index loads', async () => {
     answer(null);
     render(<App />);
     expect(await screen.findByRole('button', { name: database('bam-masterdata v1 \\(draft\\)') })).toBeInTheDocument();
   });
 
-  it('offers the four databases when the server lists no profiles, as in Dev Mode', async () => {
+  it('offers the four databases when the server lists no profiles, while the snapshot index loads', async () => {
     answer(null);
     render(<App />);
     for (const label of ['nomad-simulations', 'nomad-measurements', 'bam-masterdata v0', 'bam-masterdata v1']) {

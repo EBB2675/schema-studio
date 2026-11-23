@@ -3,8 +3,7 @@
 The static site has no server: its web worker loads the snapshot files of the
 site into `add_snapshot` and sends each request to `handle` as JSON text,
 getting JSON text back. Stored edits live in the browser and come with each
-request. The answers are those of the Light Mode server for the same snapshot
-and edits.
+request. The core applies them to the selected snapshot.
 
 Standard library only, like `core`; YAML needs PyYAML.
 """

@@ -6,11 +6,9 @@ type OverviewItem = { package: string; classes: string[] };
 type OverviewResp = { branch: string; base: string; items: OverviewItem[] };
 
 export default function OverviewList({
-  apiBase,
   branch,
   base = DEFAULT_OVERVIEW_NAMESPACE,
 }: {
-  apiBase: string;
   branch: string;
   base?: string;
 }) {
@@ -27,7 +25,7 @@ export default function OverviewList({
     setErr(null);
     setData(null);
 
-    apiFetch(path, { method: "GET" }, { baseURL: apiBase, token: "" })
+    apiFetch(path, { method: "GET" })
       .then(async (r) => {
         if (!r.ok) {
           const text = await r.text().catch(() => "");
@@ -51,7 +49,7 @@ export default function OverviewList({
     return () => {
       cancelled = true;
     };
-  }, [apiBase, branch, base]);
+  }, [branch, base]);
 
   if (loading) return <div className="p-2 text-sm">Loading…</div>;
   if (err) return <div className="p-2 text-sm" style={{ color: "#b91c1c" }}>{err}</div>;

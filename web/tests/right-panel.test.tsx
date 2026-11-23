@@ -1,3 +1,4 @@
+vi.mock('../src/components/StaticSitePanel', () => ({ default: () => <div data-testid="static-site-panel" /> }));
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,7 +9,7 @@ import { useWorkspaceStore } from '../src/store/workspace';
 // labelled tab, and opens from it; the Audit trail sits in the left sidebar.
 const mockGet = vi.fn();
 
-vi.mock('axios', () => {
+vi.mock('../src/client', () => {
   const create = () => ({
     get: mockGet,
     post: vi.fn(async () => ({ data: {} })),
@@ -16,10 +17,10 @@ vi.mock('axios', () => {
     delete: vi.fn(),
     interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
   });
-  return { default: Object.assign(create, { create, post: vi.fn() }) };
+  return { createApiClient: create, apiFetch: vi.fn(async () => new Response("[]")) };
 });
 
-vi.mock('../src/GraphView', () => ({
+vi.mock('../src/FlowGraphView', () => ({
   __esModule: true,
   default: () => <div>graph</div>,
 }));
@@ -44,8 +45,6 @@ describe('right panel', () => {
     useWorkspaceStore.getState().setPkg('pkg');
     useWorkspaceStore.getState().setBaseNamespace('pkg');
     useWorkspaceStore.getState().setStartEmpty(true);
-    window.localStorage.setItem('schema-uml-token', 't0k');
-    window.localStorage.setItem('schema-uml-username', 'user');
   });
 
   afterEach(() => cleanup());

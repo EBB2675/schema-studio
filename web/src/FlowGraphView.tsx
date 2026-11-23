@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Background, Controls, Handle, MarkerType, Panel, Position, ReactFlow, ReactFlowProvider, applyNodeChanges, useNodesInitialized, useReactFlow, type Node, type NodeProps } from "@xyflow/react";
-import ELK from "elkjs/lib/elk.bundled.js";
+import { arrangeGraph } from "./utils/arrangeGraph";
 import { toPng } from "html-to-image";
-import type { GraphExportHandle, GraphViewProps } from "./GraphView";
+import type { GraphExportHandle, GraphViewProps } from "./types/graph";
 import type { QuantityNode, UmlClassNode } from "./types/uml";
 import { useSelection } from "./store/selection";
 import { canvasEdges } from "./utils/canvasEdges";
@@ -236,6 +236,7 @@ function FlowCanvas(props: FlowGraphProps) {
     });
   }, [classes, props.selectedClassId, props.umlState, props.compact, props.layoutDirection]);
 
+  const onReady = props.onReady;
   useEffect(() => {
     const handle: GraphExportHandle = {
       refit: () => { void flow.fitView({ padding: 0.25, duration: 250 }); },
@@ -253,9 +254,9 @@ function FlowCanvas(props: FlowGraphProps) {
         return toPng(viewport, { backgroundColor: getComputedStyle(container.current!).getPropertyValue("--graph-bg").trim(), width: bounds.width + 80, height: bounds.height + 80, style: { transform: `translate(${-bounds.x + 40}px, ${-bounds.y + 40}px)` }, filter: element => !(element instanceof Element && element.classList.contains("react-flow__handle")) });
       },
     };
-    handleRef.current = handle; props.onReady?.(handle);
-    return () => { props.onReady?.(null); handleRef.current = null; };
-  }, [flow, props.onReady]);
+    handleRef.current = handle; onReady?.(handle);
+    return () => { onReady?.(null); handleRef.current = null; };
+  }, [flow, onReady]);
 
   // Layout only on document/direction changes or an explicit request. Saves keep positions.
   useEffect(() => {
@@ -273,11 +274,12 @@ function FlowCanvas(props: FlowGraphProps) {
       });
       return () => { cancelled = true; };
     }
-    const elk = new ELK();
-    void elk.layout({ id: "root", layoutOptions: { "elk.algorithm": "layered", "elk.direction": props.layoutDirection ?? "UP", "elk.spacing.nodeNode": "70", "elk.layered.spacing.nodeNodeBetweenLayers": "100" }, children: classes.map(c => ({ id: c.id, width: 290, height: flow.getNode(c.id)?.measured?.height ?? (estimatedCardHeight(c, props.compact)) })), edges: edges.map(e => ({ id: e.id, sources: [e.source], targets: [e.target] })) }).then(result => {
+    Promise.resolve().then(() => arrangeGraph(
+      classes.map(c => ({ id: c.id, width: 290, height: flow.getNode(c.id)?.measured?.height ?? estimatedCardHeight(c, props.compact) })),
+      edges, props.layoutDirection ?? "UP",
+    )).then(targets => {
       if (cancelled || run !== layoutGeneration.current) return;
       laidOut.current = key;
-      const targets = new Map(result.children?.map(n => [n.id, { x: n.x ?? 0, y: n.y ?? 0 }]));
       setNodes(current => current.map(n => {
         const before = startingPositions.get(n.id);
         if (n.dragging || (before && (n.position.x !== before.x || n.position.y !== before.y))) return n;
@@ -316,7 +318,7 @@ function FlowCanvas(props: FlowGraphProps) {
     }} onNodeClick={(_, node) => selectClass(node.data.cls, props)} onPaneClick={() => { props.onClearSelection?.(); useSelection.getState().setSelected(null); }} nodesConnectable={false} deleteKeyCode={null} zoomOnDoubleClick={false} minZoom={0.05} maxZoom={2} colorMode={props.theme ?? "light"} fitView>
       {positionError && <Panel position="bottom-center" className="flow-position-error" role="status">Could not save box positions in this browser.</Panel>}
       <Background gap={24} size={1} /><Controls showInteractive={false} position="bottom-left" />
-      <Panel position="top-right" className="flow-actions"><span className="flow-badge">New editor</span><button onClick={() => setLayoutVersion(v => v + 1)}>Arrange</button>{props.editableMode && <button className="flow-primary" onClick={() => setAddingClass(v => !v)}>+ Add class</button>}{addingClass && props.editableMode && (props.mobile ? <MobileEditSheet title="Add class" onClose={() => setAddingClass(false)}><NewClassForm props={props} onClose={() => setAddingClass(false)} /></MobileEditSheet> : <NewClassForm props={props} onClose={() => setAddingClass(false)} />)}</Panel>
+      <Panel position="top-right" className="flow-actions"><button onClick={() => setLayoutVersion(v => v + 1)}>Arrange</button>{props.editableMode && <button className="flow-primary" onClick={() => setAddingClass(v => !v)}>+ Add class</button>}{addingClass && props.editableMode && (props.mobile ? <MobileEditSheet title="Add class" onClose={() => setAddingClass(false)}><NewClassForm props={props} onClose={() => setAddingClass(false)} /></MobileEditSheet> : <NewClassForm props={props} onClose={() => setAddingClass(false)} />)}</Panel>
       <Panel position="bottom-center" className="flow-hint">{layoutError || (props.editableMode ? (touchEditing() ? "Tap to edit · Drag to move · Pinch to zoom" : "Double-click to edit · Drag to move · Scroll to zoom") : "Select a class to explore · Switch to Edit to make changes")}</Panel>
     </ReactFlow>
   </div></EditorContext.Provider>;

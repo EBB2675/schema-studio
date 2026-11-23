@@ -32,7 +32,7 @@ COMPARED_MODULES = {
 @pytest.fixture()
 def profile(request, tmp_path, monkeypatch):
     monkeypatch.setenv("SCHEMA_STUDIO_HOME", str(tmp_path / "home"))
-    from api.light_mode import schema_source
+    from api.sources import schema_source
 
     selected = schema_source.SCHEMA_PROFILES[request.param]
     if not schema_source.schema_available(selected):
@@ -53,7 +53,7 @@ def _legacy(profile, command: str, **arguments):
 
 @pytest.mark.parametrize("profile", ["nomad-simulations", "nomad-measurements"], indirect=True)
 def test_the_whole_profile_is_read_into_a_valid_document(profile):
-    from api.light_mode import schema_source
+    from api.sources import schema_source
 
     arguments = ["--base", profile.default_base_namespace]
     for method in profile.discovery:

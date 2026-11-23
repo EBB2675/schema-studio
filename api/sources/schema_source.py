@@ -5,17 +5,14 @@ Policy:
   project that installs only that schema package from its tracked branch.
 - The app never installs or imports a schema package. It reads a schema by
   running a script from `extractor/scripts/` with the environment's interpreter.
-- Creating or updating an environment is an explicit action (`update_schema`).
-- Light mode branch is fixed by profile (for example develop/main).
+- Environments are prepared by the snapshot build workflow.
+- Snapshot branch is fixed by profile (for example develop/main).
 - Never use local checkouts/worktrees.
 """
 from __future__ import annotations
 
 import json
 import os
-import shutil
-import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
@@ -27,7 +24,6 @@ LEGACY_SCRIPT = REPO_ROOT / "extractor" / "scripts" / "legacy.py"
 NOMAD_SCRIPT = REPO_ROOT / "extractor" / "scripts" / "nomad.py"
 BAM_SCRIPT = REPO_ROOT / "extractor" / "scripts" / "bam.py"
 INFO_TIMEOUT_SECONDS = 60
-UPDATE_TIMEOUT_SECONDS = int(os.getenv("SCHEMA_STUDIO_UPDATE_TIMEOUT_SECONDS", "1800"))
 
 
 @dataclass(frozen=True)
@@ -182,7 +178,7 @@ def _profile_for_hint(hint: str) -> SchemaProfile | None:
 
 def _select_profile() -> SchemaProfile:
     """Select active schema profile from env override, then package hint, then default."""
-    requested = os.getenv("SCHEMA_STUDIO_LIGHT_SCHEMA_PROFILE", "").strip().lower()
+    requested = os.getenv("SCHEMA_STUDIO_SCHEMA_PROFILE", "").strip().lower()
     if requested in SCHEMA_PROFILES:
         return SCHEMA_PROFILES[requested]
 
@@ -196,7 +192,7 @@ def _select_profile() -> SchemaProfile:
 
 
 ACTIVE_PROFILE = _select_profile()
-LIGHT_PROFILE_KEY = ACTIVE_PROFILE.key
+PROFILE_KEY = ACTIVE_PROFILE.key
 PACKAGE_IMPORT = ACTIVE_PROFILE.package_import
 PACKAGE_DIST = ACTIVE_PROFILE.package_dist
 DEFAULT_BRANCH = ACTIVE_PROFILE.default_branch
@@ -250,11 +246,6 @@ def _resolve_profile(profile: SchemaProfile | str | None, *, package: str | None
     return schema_profile_for_package(package, base_namespace)
 
 
-def _is_packaged_backend() -> bool:
-    """Return whether Light Mode is running from a packaged desktop backend."""
-    return getattr(sys, "frozen", False) or os.getenv("SCHEMA_STUDIO_PACKAGED_BACKEND") == "1"
-
-
 def _normalize_repo(url: str) -> str:
     """Normalize git URL for comparisons by trimming trailing slash and `.git` suffix."""
     base = url.rstrip("/")
@@ -264,7 +255,7 @@ def _normalize_repo(url: str) -> str:
 def setup_hint(profile: SchemaProfile) -> str:
     """One sentence that tells the user how to create the profile environment."""
     return (
-        f"Load it from the schema selection in the app, or run `uv sync --project {profile.environment.directory}`."
+        f"Run `uv sync --project {profile.environment.directory}`."
     )
 
 
@@ -302,11 +293,11 @@ def _schema_info_from_payload(profile: SchemaProfile, payload: dict) -> SchemaIn
 
     source_url = direct_url.get("url")
     if not isinstance(source_url, str) or source_url.startswith("file://"):
-        raise SchemaUnavailable(f"Light Mode does not support local {profile.package_dist} sources.")
+        raise SchemaUnavailable(f"Snapshot build does not support local {profile.package_dist} sources.")
 
     if _normalize_repo(source_url) != _normalize_repo(profile.default_remote_repo):
         raise SchemaUnavailable(
-            f"Light Mode profile '{profile.key}' must use repository {profile.default_remote_repo}."
+            f"Snapshot build profile '{profile.key}' must use repository {profile.default_remote_repo}."
         )
 
     vcs_info = direct_url.get("vcs_info")
@@ -316,7 +307,7 @@ def _schema_info_from_payload(profile: SchemaProfile, payload: dict) -> SchemaIn
     requested = vcs_info.get("requested_revision")
     if requested and requested != profile.default_branch:
         raise SchemaUnavailable(
-            f"Light Mode profile '{profile.key}' is pinned to remote {profile.default_branch}; found revision {requested!r}."
+            f"Snapshot build profile '{profile.key}' is pinned to remote {profile.default_branch}; found revision {requested!r}."
         )
 
     commit = vcs_info.get("commit_id")
@@ -331,11 +322,6 @@ def _schema_info_from_payload(profile: SchemaProfile, payload: dict) -> SchemaIn
 
 def _schema_info_from_environment(profile: SchemaProfile) -> SchemaInfo:
     """Ask the profile environment which schema package version it holds."""
-    if _is_packaged_backend():
-        raise SchemaUnavailable(
-            f"The {profile.label} schema is not bundled with this desktop build."
-        )
-
     stamp = _environment_stamp(profile)
     with _info_lock:
         cached = _info_cache.get(profile.key)
@@ -375,47 +361,3 @@ def current_schema_info(profile: SchemaProfile | str | None = None, *, package: 
     """Return current schema metadata for the selected profile."""
     return _schema_info_from_environment(_resolve_profile(profile, package=package, base_namespace=base_namespace))
 
-
-def _run_uv(arguments: list[str], profile: SchemaProfile) -> None:
-    uv = shutil.which("uv")
-    if not uv:
-        raise SchemaUnavailable(
-            "Schema environments are managed with `uv`, which was not found on PATH. "
-            "Install it (https://docs.astral.sh/uv/) and try again."
-        )
-    # The environment is selected by --project; do not let the app's own
-    # virtual environment leak into the command.
-    env = {k: v for k, v in os.environ.items() if k not in {"VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT", "PYTHONPATH"}}
-    try:
-        proc = subprocess.run(
-            [uv, *arguments, "--project", str(profile.environment.directory)],
-            capture_output=True, text=True, env=env, timeout=UPDATE_TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise SchemaUnavailable(f"Schema update timed out after {UPDATE_TIMEOUT_SECONDS}s.") from exc
-    if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "").strip()
-        raise SchemaUnavailable(f"Schema update failed: {detail or 'uv failed'}")
-
-
-def update_schema(profile: SchemaProfile | str | None = None, *, package: str | None = None, base_namespace: str | None = None) -> SchemaInfo:
-    """
-    Create the profile environment, or move it to the latest commit of its
-    tracked branch. Keeps local Light Mode edits in SQLite.
-    """
-    resolved = _resolve_profile(profile, package=package, base_namespace=base_namespace)
-    if _is_packaged_backend():
-        raise SchemaUnavailable(
-            "Schema updates are disabled in the packaged desktop build. Reinstall a newer desktop release to get a newer bundled schema."
-        )
-    if not (resolved.environment.directory / "pyproject.toml").is_file():
-        raise SchemaUnavailable(
-            f"No environment definition found for profile '{resolved.key}' in {resolved.environment.directory}."
-        )
-
-    _run_uv(["lock", "--upgrade-package", resolved.package_dist], resolved)
-    _run_uv(["sync"], resolved)
-
-    with _info_lock:
-        _info_cache.pop(resolved.key, None)
-    return _schema_info_from_environment(resolved)

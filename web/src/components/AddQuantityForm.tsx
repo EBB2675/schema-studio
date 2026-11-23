@@ -98,4 +98,3 @@ export default function AddQuantityForm({ enabled, targetClass, onSubmit, submit
     </form>
   );
 }
-

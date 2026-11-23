@@ -1,47 +1,21 @@
-/**
- * The one place the web app talks to the backend.
- *
- * Every request goes through `createApiClient` (an Axios instance) or
- * `apiFetch` (a `fetch` with the same headers). Normally both send it over
- * HTTP to the server at `DEFAULT_API`. In a static build (`VITE_STATIC_MODE`)
- * there is no server: the same requests are answered inside the browser by the
- * static backend (`static/backend.ts`).
- */
 import axios, { AxiosError, AxiosHeaders, type AxiosInstance, type InternalAxiosRequestConfig } from "axios";
 
 import { API_FEATURE_HEADER, API_VERSION, API_VERSION_HEADER, DEFAULT_FEATURE_FLAGS } from "./constants/api";
-import { DEFAULT_API, STATIC_MODE } from "./constants/defaults";
+import { DEFAULT_API } from "./constants/defaults";
 import type { StaticAnswer, StaticBackend } from "./static/backend";
 
-export const TOKEN_KEY = "schema-uml-token";
-
-function storedToken(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return window.localStorage.getItem(TOKEN_KEY) || "";
-  } catch {
-    return "";
-  }
-}
-
-/** The headers every request carries: API version, features and, with a token, the login. */
-export function apiHeaders(token: string = storedToken()): Record<string, string> {
-  const headers: Record<string, string> = {
-    [API_VERSION_HEADER]: API_VERSION,
-    [API_FEATURE_HEADER]: DEFAULT_FEATURE_FLAGS.join(","),
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  return headers;
+/** Version headers for the browser-local request contract. */
+export function apiHeaders(): Record<string, string> {
+  return { [API_VERSION_HEADER]: API_VERSION, [API_FEATURE_HEADER]: DEFAULT_FEATURE_FLAGS.join(",") };
 }
 
 // ---------- static site ----------
 
-// Loaded only by static builds, so the server builds do not carry the static backend and its worker.
+// The browser backend and worker are loaded on first use.
 let staticBackend: Promise<StaticBackend> | null = null;
 
 /** The backend of the static site (created on first use). */
 export function getStaticBackend(): Promise<StaticBackend> {
-  if (!STATIC_MODE) return Promise.reject(new Error("Not a static build."));
   staticBackend ??= Promise.all([import("./static/backend"), import("./static/workerCore")]).then(
     ([{ StaticHttpError, createStaticBackend }, { runInWorker }]) => createStaticBackend({
       readJson: async (path) => {
@@ -102,12 +76,12 @@ async function staticAdapter(config: InternalAxiosRequestConfig) {
 // ---------- the client ----------
 
 /** An Axios instance for the backend; paths are relative to `baseURL`. */
-export function createApiClient(baseURL: string = DEFAULT_API, token?: string): AxiosInstance {
+export function createApiClient(baseURL: string = DEFAULT_API): AxiosInstance {
   const instance = axios.create({ baseURL });
-  if (STATIC_MODE) instance.defaults.adapter = staticAdapter;
+  instance.defaults.adapter = staticAdapter;
   instance.interceptors.request.use((config) => {
     config.headers = config.headers ?? {};
-    for (const [name, value] of Object.entries(apiHeaders(token ?? ""))) {
+    for (const [name, value] of Object.entries(apiHeaders())) {
       config.headers[name] = value;
     }
     return config;
@@ -116,13 +90,8 @@ export function createApiClient(baseURL: string = DEFAULT_API, token?: string): 
 }
 
 /** `fetch` for a backend path (`/overview?...`), with the API headers added to `init`. */
-export async function apiFetch(path: string, init: RequestInit = {}, options: { baseURL?: string; token?: string } = {}) {
-  if (STATIC_MODE) {
-    const answer = await answerStatically((init.method || "GET").toUpperCase(), path, undefined, init.body);
-    const text = typeof answer.data === "string" ? answer.data : JSON.stringify(answer.data);
-    return new Response(text, { status: answer.status, headers: { "Content-Type": answer.contentType ?? "application/json" } });
-  }
-  const base = (options.baseURL ?? DEFAULT_API).replace(/\/$/, "");
-  const headers = { ...apiHeaders(options.token ?? storedToken()), ...(init.headers as Record<string, string> | undefined) };
-  return fetch(`${base}${path}`, { ...init, headers });
+export async function apiFetch(path: string, init: RequestInit = {}) {
+  const answer = await answerStatically((init.method || "GET").toUpperCase(), path, undefined, init.body);
+  const text = typeof answer.data === "string" ? answer.data : JSON.stringify(answer.data);
+  return new Response(text, { status: answer.status, headers: { "Content-Type": answer.contentType ?? "application/json" } });
 }

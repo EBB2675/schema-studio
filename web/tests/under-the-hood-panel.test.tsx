@@ -18,7 +18,7 @@ describe('UnderTheHoodPanel', () => {
 
   it('lists methods the usage index does not cover, once each', async () => {
     useSelection.getState().setSelected({ id: 'pkg.Atoms', kind: 'class', name: 'Atoms', doc: '' });
-    render(<UnderTheHoodPanel apiBase="" methods={['get_label', 'normalize']} />);
+    render(<UnderTheHoodPanel  methods={['get_label', 'normalize']} />);
     expect(await screen.findByText('Section.normalize()')).toBeInTheDocument();
     expect(screen.getByText('Method')).toBeInTheDocument();
     expect(screen.getByText('get_label')).toBeInTheDocument();

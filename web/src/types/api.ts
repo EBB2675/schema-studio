@@ -52,22 +52,6 @@ export type ApiGraph = {
   persisted_edits?: AppliedEdit[];
 };
 
-export type BranchGraphPayload = {
-  branch: string;
-  sha: string;
-  graph: ApiGraph;
-};
-
-export type DiffResponse = {
-  base: BranchGraphPayload;
-  head: BranchGraphPayload;
-  diff: {
-    nodes: { added: ApiNode[]; removed: ApiNode[]; changed: { id: string; before?: ApiNode; after?: ApiNode }[] };
-    edges: { added: ApiEdge[]; removed: ApiEdge[] };
-  };
-  workspace?: WorkspaceState;
-};
-
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -239,59 +223,5 @@ export const ensureGraphResponse = (payload: unknown): ApiGraph => {
     persisted_edits: Array.isArray(payload.persisted_edits)
       ? payload.persisted_edits.map(ensureAppliedEdit)
       : undefined,
-  };
-};
-
-const ensureBranchGraphPayload = (value: unknown): BranchGraphPayload => {
-  if (!isRecord(value)) throw new Error("Branch payload is not an object");
-  const branch = asString(value.branch);
-  const sha = asString(value.sha);
-  if (!branch || !sha) throw new Error("Branch payload missing branch or sha");
-  return {
-    branch,
-    sha,
-    graph: ensureGraphResponse(value.graph),
-  };
-};
-
-export const ensureDiffResponse = (payload: unknown): DiffResponse => {
-  if (!isRecord(payload)) throw new Error("Diff response is not an object");
-  const diff = payload.diff;
-  if (!isRecord(diff)) throw new Error("Diff response missing diff block");
-
-  const nodes = diff.nodes;
-  const edges = diff.edges;
-  if (!isRecord(nodes) || !isRecord(edges)) throw new Error("Diff response missing node/edge diffs");
-
-  const addedNodes = Array.isArray(nodes.added) ? nodes.added.map(ensureNode) : [];
-  const removedNodes = Array.isArray(nodes.removed) ? nodes.removed.map(ensureNode) : [];
-  const changedNodes = Array.isArray(nodes.changed)
-    ? nodes.changed.map((c: unknown) => {
-        if (!isRecord(c)) {
-          return { id: asString((c as Record<string, unknown>)?.id) };
-        }
-        const id = asString(c.id);
-        const result: { id: string; before?: ApiNode; after?: ApiNode } = { id };
-        if ("before" in c && c.before != null) {
-          result.before = ensureNode(c.before);
-        }
-        if ("after" in c && c.after != null) {
-          result.after = ensureNode(c.after);
-        }
-        return result;
-      })
-    : [];
-
-  const addedEdges = Array.isArray(edges.added) ? edges.added.map(ensureEdge) : [];
-  const removedEdges = Array.isArray(edges.removed) ? edges.removed.map(ensureEdge) : [];
-
-  return {
-    base: ensureBranchGraphPayload(payload.base),
-    head: ensureBranchGraphPayload(payload.head),
-    diff: {
-      nodes: { added: addedNodes, removed: removedNodes, changed: changedNodes },
-      edges: { added: addedEdges, removed: removedEdges },
-    },
-    workspace: ensureWorkspace(payload.workspace),
   };
 };

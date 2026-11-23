@@ -24,14 +24,14 @@ from typing import Any
 from extractor.contract import CONTRACT_VERSION, validate_document
 from extractor.runner import EnvironmentMissing, ExtractorError, run_script
 
-from ..light_mode.schema_source import (
+from .schema_source import (
     SchemaProfile,
     SchemaUnavailable,
     current_schema_info,
     setup_hint,
 )
-from ..light_mode.store import config_root
-from .legacy import EXTRACTOR_TIMEOUT_SECONDS, raise_script_error
+from .cache import config_root
+from .extractor_errors import EXTRACTOR_TIMEOUT_SECONDS, raise_script_error
 from .core import snapshot_yaml  # noqa: F401  (re-exported)
 from .to_linkml import Conversion, convert as convert_document
 
@@ -117,15 +117,10 @@ def _cache_path(profile: SchemaProfile, schema_version: str, scope: str) -> Path
     return cache_root() / profile.key / safe_version / f"{safe_scope}-{digest}.json"
 
 
-def _extract(profile: SchemaProfile, scope: str, source_root: Path | None = None) -> dict[str, Any]:
+def _extract(profile: SchemaProfile, scope: str) -> dict[str, Any]:
     """Run the profile's contract script for one module, or the whole profile when scope is its base.
-
-    `source_root` makes the script import the schema from that folder (a git
-    worktree in Dev Mode) instead of the installed package.
     """
     arguments = ["--dist", profile.package_dist]
-    if source_root is not None:
-        arguments += ["--source-root", str(source_root)]
     if scope == profile.default_base_namespace:
         arguments += ["--base", scope]
         for discovery in profile.discovery:
@@ -154,34 +149,25 @@ def _remember(path: Path, snapshot: dict[str, Any]) -> None:
 def get_snapshot(
     profile: SchemaProfile,
     scope: str | None = None,
-    *,
-    source_root: Path | None = None,
-    source_version: str | None = None,
 ) -> dict[str, Any]:
     """The snapshot for a module of the profile (default: the whole profile), from cache when possible.
-
-    With `source_root` the schema is read from that folder (a git worktree)
-    instead of the installed package; `source_version` is the worktree's
-    commit, and without it the snapshot is not cached.
     """
     if not supports_linkml(profile):
         raise LinkMLUnavailable(f"LinkML export is not available for {profile.label} yet.")
     scope = scope or profile.default_base_namespace
-    if source_root is not None and not source_version:
-        return make_snapshot(profile, scope, _extract(profile, scope, source_root))
     info = current_schema_info(profile)
-    version = info.version if source_root is None else f"{info.version}-worktree-{source_version}"
+    version = info.version
     path = _cache_path(profile, version, scope)
     fingerprint = converter_fingerprint()
     extractor = extractor_fingerprint()
     with _LOCK:
         path_lock = _PATH_LOCKS.setdefault(path, Lock())
     with path_lock:
-        return _load_or_make(profile, scope, path, fingerprint, extractor, source_root)
+        return _load_or_make(profile, scope, path, fingerprint, extractor)
 
 
 def _load_or_make(
-    profile: SchemaProfile, scope: str, path: Path, fingerprint: str, extractor: str, source_root: Path | None,
+    profile: SchemaProfile, scope: str, path: Path, fingerprint: str, extractor: str,
 ) -> dict[str, Any]:
     with _LOCK:
         cached = _MEMORY.get(path)
@@ -197,7 +183,7 @@ def _load_or_make(
     if reusable and stored.get("converter") == fingerprint:
         snapshot = stored
     else:
-        document = stored["extraction"] if reusable else _extract(profile, scope, source_root)
+        document = stored["extraction"] if reusable else _extract(profile, scope)
         snapshot = make_snapshot(profile, scope, document)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)

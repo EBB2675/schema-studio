@@ -16,7 +16,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from api.light_mode.schema_source import SCHEMA_PROFILES  # noqa: E402
+from api.sources.schema_source import SCHEMA_PROFILES  # noqa: E402
 from extractor.contract import validate_document  # noqa: E402
 from extractor.runner import run_script  # noqa: E402
 

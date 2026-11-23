@@ -5,52 +5,25 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "schema-studio"
 version = "0.1.0"
-description = "Schema Studio Light Mode"
+description = "Static schema studio snapshot builder"
 authors = [{name = "Schema Studio Team"}]
 requires-python = ">=3.11"
 dependencies = [
-  "fastapi>=0.110",
-  "uvicorn[standard]>=0.23",
-  "pydantic>=2,<3",
-  "networkx",
-  "gitpython",
-  "orjson",
-  "httpx",
   "platformdirs",
   "jsonschema>=4.0",
   "linkml-runtime==1.11.1",
   "pyyaml>=6",
 ]
 
-[project.optional-dependencies]
-full = [
-  "motor>=3.3.1",
-  "PyJWT",
-  "celery[redis]>=5.3,<6",
-  "redis>=5,<6",
-]
-
-[project.scripts]
-schema-studio = "api.light_mode.cli:main"
-
-[tool.setuptools]
-include-package-data = true
-
 [tool.setuptools.packages.find]
 include = ["api", "api.*", "extractor", "extractor.*"]
 
 [tool.setuptools.package-data]
-"api" = ["light_mode/static/**", "../web/dist/**"]
 "extractor" = ["contract.schema.json"]
 
 [dependency-groups]
-dev = [
-    "pyinstaller>=6.19.0",
-    "pytest>=7",
-]
+dev = ["pytest>=7"]
 
 [tool.pytest.ini_options]
-markers = [
-    "slow: needs the real schema environments under environments/ (run with `pytest -m slow`)",
-]
+markers = ["slow: needs the real schema environments under environments/ (run with `pytest -m slow`)"]
 addopts = "-m 'not slow'"

@@ -6,7 +6,7 @@ import { useMobilePanels } from '../src/hooks/useMobilePanels';
 let change: (() => void) | undefined;
 let matches = true;
 function Harness() {
-  const { isMobile, mobilePanel, setMobilePanel } = useMobilePanels(true);
+  const { isMobile, mobilePanel, setMobilePanel } = useMobilePanels();
   return <><span>{isMobile ? 'Phone' : 'Desktop'}</span><button onClick={() => setMobilePanel('workspace')}>Open workspace</button><button onClick={() => setMobilePanel('details')}>Open details</button>
     {mobilePanel && <div role="dialog" data-mobile-panel={mobilePanel} tabIndex={-1}><button onClick={() => setMobilePanel(null)}>Close {mobilePanel}</button><input aria-label="Field" /></div>}
   </>;

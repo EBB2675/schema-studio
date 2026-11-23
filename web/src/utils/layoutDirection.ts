@@ -1,6 +1,4 @@
-// The value ELK's layered algorithm takes as `elk.direction`. Edges run in that
-// direction, and `inherits` edges go from subclass to base, so the base sections
-// end up on the side the direction points to.
+// Edges point from subclasses toward their base classes.
 export type LayoutDirection = "UP" | "LEFT" | "RIGHT" | "DOWN";
 
 export const LAYOUT_DIRECTIONS: { value: LayoutDirection; label: string }[] = [

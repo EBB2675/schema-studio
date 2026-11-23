@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import OverviewGrid from '../src/components/OverviewGrid';
 
+vi.mock('../src/client', () => ({ apiFetch: (...args: unknown[]) => fetch(...args as [RequestInfo, RequestInit?]) }));
+
 const sampleResponse = {
   branch: 'develop',
   base: 'pkg.base',
@@ -30,18 +32,17 @@ describe('OverviewGrid', () => {
 
     render(
       <OverviewGrid
-        apiBase="http://api"
+
         branch="develop"
         base="pkg.base"
-        token="t0k"
+
         onClassSelect={onClassSelect}
       />
     );
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    const [url, options] = fetchMock.mock.calls[0]!;
-    expect(url).toBe('http://api/overview?branch=develop&base=pkg.base');
-    expect(options).toMatchObject({ headers: { Authorization: 'Bearer t0k' } });
+    const [url] = fetchMock.mock.calls[0]!;
+    expect(url).toBe('/overview?branch=develop&base=pkg.base');
 
     expect(await screen.findByText('pkg.one')).toBeInTheDocument();
     expect(screen.getByText('pkg.two')).toBeInTheDocument();
@@ -66,7 +67,7 @@ describe('OverviewGrid', () => {
 
     render(
       <OverviewGrid
-        apiBase="http://api"
+
         branch="develop"
       />
     );
@@ -78,7 +79,7 @@ describe('OverviewGrid', () => {
 
     render(
       <OverviewGrid
-        apiBase="http://api"
+
         branch="develop"
       />
     );

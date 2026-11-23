@@ -28,7 +28,7 @@ export type EditRules = {
 };
 
 // NOMAD's editable types, shown as NOMAD shows them. Profiles send their own
-// rules; these are used until they arrive (and in Dev Mode, which lists none).
+// rules; these are used until they arrive.
 export const NOMAD_EDIT_RULES: EditRules = {
   name: "nomad",
   codes: false,

@@ -4,16 +4,16 @@ export type MobilePanel = "workspace" | "details" | "tools" | null;
 const FOCUSABLE = 'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex="0"]';
 
 /** Mobile drawers share one modal layer; desktop panel sizes and collapse state stay independent. */
-export function useMobilePanels(enabled: boolean) {
-  const [isMobile, setMobile] = useState(() => enabled && typeof matchMedia === "function" && matchMedia("(max-width: 900px)").matches);
+export function useMobilePanels() {
+  const [isMobile, setMobile] = useState(() => typeof matchMedia === "function" && matchMedia("(max-width: 900px)").matches);
   const [panel, setPanel] = useState<MobilePanel>(null);
   useEffect(() => {
-    if (!enabled || typeof matchMedia !== "function") return;
+    if (typeof matchMedia !== "function") return;
     const query = matchMedia("(max-width: 900px)");
     const update = () => { setMobile(query.matches); if (!query.matches) setPanel(null); };
     update(); query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
-  }, [enabled]);
+  }, []);
 
   useEffect(() => {
     if (!isMobile || !panel) return;

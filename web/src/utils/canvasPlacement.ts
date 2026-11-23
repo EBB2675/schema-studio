@@ -1,6 +1,6 @@
 import { DEFAULT_LAYOUT_DIRECTION, type LayoutDirection } from "./layoutDirection";
 
-// Positions are node centres in Cytoscape model coordinates.
+// Positions are node centres in canvas coordinates.
 export type Point = { x: number; y: number };
 export type PlacedBox = Point & { w: number; h: number };
 export type NewNode = { id: string; w: number; h: number };

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createStaticBackend, StaticHttpError, type SiteIndex } from "../src/static/backend";
+import { createStaticBackend, type SiteIndex } from "../src/static/backend";
 import { createEditStore, EDITS_STORAGE_KEY } from "../src/static/editStore";
 import type { CoreRequest } from "../src/static/pythonRunner";
 
@@ -122,13 +122,6 @@ describe("static backend", () => {
     expect(overview.data).toMatchObject({ items: [{ package: "ns.pkg.a", classes: ["Other", "Root"] }] });
   });
 
-  it("refuses what needs a server", async () => {
-    const { backend } = setup();
-    for (const [method, path] of [["POST", "/schema/update"], ["POST", "/send-design"], ["GET", "/git/branches"], ["POST", "/auth/login"]]) {
-      await expect(backend.request(method, path)).rejects.toBeInstanceOf(StaticHttpError);
-    }
-    await expect(backend.request("PUT", "/workspace", {}, { package: "ns.pkg.a", branch: "main" })).rejects.toMatchObject({ status: 400 });
-  });
 
   it("turns core errors into HTTP-like errors", async () => {
     const { backend, runCore } = setup();

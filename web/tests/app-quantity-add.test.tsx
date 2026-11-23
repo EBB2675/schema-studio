@@ -1,3 +1,4 @@
+vi.mock('../src/components/StaticSitePanel', () => ({ default: () => <div data-testid="static-site-panel" /> }));
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -46,7 +47,7 @@ const mockPost = vi.fn();
 const mockPut = vi.fn();
 const mockDelete = vi.fn();
 
-vi.mock('axios', () => {
+vi.mock('../src/client', () => {
   const create = () => ({
     get: mockGet,
     post: mockPost,
@@ -55,16 +56,12 @@ vi.mock('axios', () => {
     interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
   });
 
-  const axios = Object.assign(create, {
-    create,
-    post: vi.fn(), // login, unused here
-  });
 
-  return { default: axios };
+  return { createApiClient: create, apiFetch: vi.fn(async () => new Response("[]")) };
 });
 
-// Simplify GraphView to expose a trigger for the add-quantity handler.
-vi.mock('../src/GraphView', () => {
+// Simplify FlowGraphView to expose a trigger for the add-quantity handler.
+vi.mock('../src/FlowGraphView', () => {
   return {
     __esModule: true,
     default: ({ onCreateQuantity }: { onCreateQuantity?: (classId: string, data: { quantityName: string; dtype: string; docstring: string }) => Promise<void> | void }) => (
@@ -123,8 +120,6 @@ describe('App editable quantity add flow', () => {
 
     // Prime localStorage with a token so App skips login form; no audit trail from earlier tests.
     window.localStorage.removeItem('schema-uml-audit');
-    window.localStorage.setItem('schema-uml-token', 't0k');
-    window.localStorage.setItem('schema-uml-username', 'user');
 
     if (!('ResizeObserver' in window)) {
       // minimal stub for layout observer

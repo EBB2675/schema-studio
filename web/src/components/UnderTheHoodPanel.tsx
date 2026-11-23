@@ -11,9 +11,6 @@ type UsageEntry = {
 };
 
 type Props = {
-  apiBase: string;
-  token?: string;
-  // Dev Mode: the branch the graph is drawn from, so usage comes from the same code.
   branch?: string;
   // Public methods of the selected class; those not in the usage index are listed as plain methods.
   methods?: string[];
@@ -26,7 +23,7 @@ const kindLabel: Record<string, string> = {
   method: 'Method',
 };
 
-const UnderTheHoodPanel: React.FC<Props> = ({ apiBase, token, branch, methods = [] }) => {
+const UnderTheHoodPanel: React.FC<Props> = ({ branch, methods = [] }) => {
   const { selected } = useSelection();
   const [usage, setUsage] = useState<UsageEntry[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -43,7 +40,7 @@ const UnderTheHoodPanel: React.FC<Props> = ({ apiBase, token, branch, methods = 
 
     setLoading(true);
     const branchParam = branch ? `&branch=${encodeURIComponent(branch)}` : '';
-    apiFetch(`/usage?section_id=${encodeURIComponent(sectionId)}${branchParam}`, {}, { baseURL: apiBase, token: token ?? '' })
+    apiFetch(`/usage?section_id=${encodeURIComponent(sectionId)}${branchParam}`, {})
       .then((res) => (res.ok ? res.json() : []))
       .then((data: UsageEntry[] | { usage?: UsageEntry[] }) => {
         const payload = Array.isArray(data) ? data : data?.usage;
@@ -54,7 +51,7 @@ const UnderTheHoodPanel: React.FC<Props> = ({ apiBase, token, branch, methods = 
         setUsage([]);
         setLoading(false);
       });
-  }, [selected, apiBase, token, branch]);
+  }, [selected, branch]);
 
   const indexed = new Set((usage ?? []).map((u) => u.short_name));
   const entries = [

@@ -1,14 +1,6 @@
-"""The static site gives the answers of the Light Mode server, for the same snapshots and edits.
-
-A small site is built with `scripts/build_snapshots.py` from the stored
-extraction documents. The core requests of the site (`browser.py`) are
-compared with the server here; the whole static backend of the web app
-(`web/src/static/backend.ts`, with this Python in Pyodide) is compared with
-the server by `web/tests/static-parity.test.ts`, which this test runs.
-"""
+"""Snapshot builds and the browser Python core, including Pyodide parity."""
 from __future__ import annotations
 
-import importlib
 import json
 import os
 import shutil
@@ -17,7 +9,6 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-import httpx
 import pytest
 
 from api.sources import browser, graph
@@ -53,22 +44,6 @@ def site(tmp_path, snapshots, monkeypatch):
     out = tmp_path / "site" / "data"
     assert build_snapshots.main(["--out", str(out), "--graphs", *[f"--profile={key}" for key in PROFILES]]) == 0
     return out
-
-
-@pytest.fixture()
-async def light(snapshots, monkeypatch):
-    for name in list(sys.modules):
-        if name == "api.light_mode.app":
-            sys.modules.pop(name)
-    import api.light_mode.app as app_mod
-    import api.sources.linkml_routes as routes
-
-    app_mod = importlib.reload(app_mod)
-    monkeypatch.setattr(routes, "get_snapshot", snapshots.get_snapshot)
-    monkeypatch.setattr(app_mod, "current_schema_info", lambda *a, **k: INFO)
-    transport = httpx.ASGITransport(app=app_mod.app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-        yield client
 
 
 def _index(site: Path) -> dict:
@@ -110,92 +85,42 @@ def test_index_lists_profiles_modules_and_ready_graphs(site):
             assert all((site / path).is_file() for path in module["graphs"].values())
 
 
-@pytest.mark.anyio
-async def test_ready_graph_is_the_servers(site, light):
-    profile = _profile(site, "nomad-measurements")
-    for module in profile["modules"]:
-        for root, path in module["graphs"].items():
-            served = (await light.get("/schema", params={
-                "package": module["package"], "root": root, "base_namespace": profile["default_base_namespace"],
-            })).json()
-            served.pop("workspace")
-            assert json.loads((site / path).read_text(encoding="utf-8")) == served
+
+def test_ready_graphs_match_browser_core(site):
+    for profile in _index(site)["profiles"]:
+        for module in profile["modules"]:
+            for root, path in module["graphs"].items():
+                request = _request(site, profile["key"], "graph", module["package"], stored=[], flags={"root": root, "base_namespace": profile["default_base_namespace"]})
+                assert _ask(site, request) == {"ok": json.loads((site / path).read_text())}
 
 
-@pytest.mark.anyio
-async def test_core_answers_match_the_server_with_edits(site, light):
+def test_browser_edits_and_errors(site):
     key, package = "nomad-measurements", "nomad_measurements.general"
-    namespace = _profile(site, key)["default_base_namespace"]
-    sections = (await light.get("/roots", params={"package": package})).json()["sections"]
-    root = sections[1]
-    whole = json.loads((site / _profile(site, key)["snapshot"]).read_text(encoding="utf-8"))
-    target = graph.entry_points(whole["linkml"], whole["extraction"], package)[1][root]
-    new = [
-        {"op": "add_class", "target": "", "payload": {"name": "Added", "is_a": target}},
-        {"op": "add_attribute", "target": f"{package}.Added", "payload": {"name": "extra", "kind": "quantity", "dtype": "float64"}},
-        {"op": "rename_class", "target": target, "payload": {"new_name": "Renamed"}},
-    ]
-    flags = {"root": root, "include_quantities": True, "include_subsections": True, "include_inheritance": True,
-             "allow_cross_module": True, "base_namespace": namespace}
-    served = (await light.post("/schema/edits", params={"root": root, "base_namespace": namespace},
-                               json={"package": package, "edits": new})).json()
-    stored = served["persisted_edits"]
-    answer = _ask(site, _request(site, key, "add_edits", package, stored=[], edits=new, flags=flags,
-                                 ids=[edit["id"] for edit in stored], created_at=stored[0]["created_at"]))
-    served.pop("workspace")
-    assert answer == {"ok": served}
-
-    shown = (await light.get("/schema", params={"package": package, "root": "Renamed", "base_namespace": namespace})).json()
-    shown.pop("workspace")
-    assert _ask(site, _request(site, key, "graph", package, stored=stored, flags={**flags, "root": "Renamed"})) == {"ok": shown}
-    roots = (await light.get("/roots", params={"package": package})).json()["sections"]
-    assert _ask(site, _request(site, key, "sections", package, stored=stored)) == {"ok": roots}
-    yaml_text = (await light.get("/schema/linkml", params={"package": package})).text
-    assert _ask(site, _request(site, key, "linkml_yaml", package, stored=stored)) == {"ok": yaml_text}
+    roots = _ask(site, _request(site, key, "sections", package, stored=[]))["ok"]
+    whole = json.loads((site / _profile(site, key)["snapshot"]).read_text())
+    target = graph.entry_points(whole["linkml"], whole["extraction"], package)[1][roots[0]]
+    new = [{"op": "rename_class", "target": target, "payload": {"new_name": "Renamed"}}]
+    answer = _ask(site, _request(site, key, "add_edits", package, stored=[], edits=new, flags={"root": roots[0]}, ids=["1"], created_at="2026-01-01"))
+    stored = answer["ok"]["persisted_edits"]
+    sections = _ask(site, _request(site, key, "sections", package, stored=stored))["ok"]
+    assert "Renamed" in sections and roots[0] not in sections
+    yaml_text = _ask(site, _request(site, key, "linkml_yaml", package, stored=stored))["ok"]
+    assert "Renamed" in yaml_text
+    error = _ask(site, _request(site, key, "graph", package, stored=[], flags={"root": "NoSuchRoot"}))
+    assert error["status"] == 400 and error["error"]
 
 
-@pytest.mark.anyio
-async def test_core_errors_match_the_server(site, light):
-    key, package = "bam-masterdata-v0", _profile(site, "bam-masterdata-v0")["default_package"]
-    flags = {"root": "NoSuchRoot", "include_quantities": True, "include_subsections": True, "include_inheritance": True,
-             "allow_cross_module": True, "base_namespace": None}
-    served = await light.get("/schema", params={"package": package, "root": "NoSuchRoot"})
-    assert served.status_code == 400
-    assert _ask(site, _request(site, key, "graph", package, stored=[], flags=flags)) == {
-        "error": served.json()["detail"], "status": 400}
-    bad = [{"op": "add_class", "target": "", "payload": {"code": "lower.case"}}]
-    refused = await light.post("/schema/edits", json={"package": package, "edits": bad})
-    assert refused.status_code == 400
-    answer = _ask(site, _request(site, key, "add_edits", package, stored=[], edits=bad, flags=flags, ids=[1], created_at=None))
-    assert answer == {"error": refused.json()["detail"], "status": 400}
-
-
-def _node() -> str | None:
-    node = shutil.which("node")
-    if node is None or not (WEB / "node_modules" / "pyodide").is_dir() or not (WEB / "node_modules" / "vitest").is_dir():
-        return None
-    return node
-
-
-@pytest.mark.anyio
-async def test_static_backend_in_the_browser_matches_the_server(site, light, tmp_path):
-    """Requests of the web app, answered by the server and by the static backend with Pyodide (in Node)."""
-    if _node() is None:
-        pytest.skip("needs Node with the web app's packages installed (npm ci in web/)")
-    scenario = json.loads((WEB / "tests" / "fixtures" / "static-parity-scenario.json").read_text(encoding="utf-8"))
-    answers = []
-    for step in scenario:
-        response = await light.request(step["method"], step["path"], params=step.get("params"), json=step.get("body"))
-        is_yaml = response.headers.get("content-type", "").startswith("application/yaml")
-        answers.append({"status": response.status_code, "data": response.text if is_yaml else response.json()})
-    (tmp_path / "expected.json").write_text(json.dumps({"scenario": scenario, "answers": answers}), encoding="utf-8")
+def test_python_core_in_pyodide(site, tmp_path):
+    if not shutil.which("node") or not (WEB / "node_modules" / "pyodide").is_dir():
+        pytest.skip("requires npm ci in web/")
+    requests = []
+    for profile in _index(site)["profiles"]:
+        module = profile["modules"][0]
+        for op in ("sections", "graph", "linkml_yaml"):
+            requests.append(_request(site, profile["key"], op, module["package"], stored=[], flags={"root": module["sections"][0]}))
+    (tmp_path / "expected.json").write_text(json.dumps({"requests": requests, "answers": [_ask(site, request) for request in requests]}))
     pyodide = tmp_path / "pyodide-site"
     subprocess.run(["node", "scripts/copy-pyodide.mjs", str(pyodide)], cwd=WEB, check=True, capture_output=True)
-    env = {**os.environ, "STATIC_PARITY_DIR": str(tmp_path), "STATIC_PARITY_SITE": str(site),
-           "STATIC_PARITY_PYODIDE": str(pyodide / "pyodide")}
-    run = subprocess.run(
-        ["npx", "vitest", "run", "tests/static-parity.test.ts"], cwd=WEB, env=env, capture_output=True, text=True,
-        timeout=600,
-    )
+    env = {**os.environ, "STATIC_PARITY_DIR": str(tmp_path), "STATIC_PARITY_SITE": str(site), "STATIC_PARITY_PYODIDE": str(pyodide / "pyodide")}
+    run = subprocess.run(["node", "node_modules/vitest/vitest.mjs", "run", "tests/static-parity.test.ts"], cwd=WEB, env=env, capture_output=True, text=True, timeout=180)
     assert run.returncode == 0, run.stdout[-6000:] + run.stderr[-3000:]
-    assert "1 passed" in run.stdout

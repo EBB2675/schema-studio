@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ensureDiffResponse, ensureGraphResponse } from "../src/types/api";
+import { ensureGraphResponse } from "../src/types/api";
 import { fqidFromParts, normalizeId, normalizeLabel } from "../src/utils/identifier";
 
 const sampleGraph = {
@@ -44,20 +44,6 @@ describe("contracts", () => {
 
   it("ensureGraphResponse rejects missing nodes", () => {
     expect(() => ensureGraphResponse({ package: "pkg", edges: [] } as unknown)).toThrow();
-  });
-
-  it("ensureDiffResponse validates nested graphs", () => {
-    const diff = ensureDiffResponse({
-      base: { branch: "main", sha: "abc1234", graph: sampleGraph },
-      head: { branch: "dev", sha: "def5678", graph: sampleGraph },
-      diff: {
-        nodes: { added: [], removed: [], changed: [{ id: "example.pkg.Root" }] },
-        edges: { added: [], removed: [] },
-      },
-    });
-    expect(diff.base.graph.package).toBe("example.pkg");
-    expect(diff.head.branch).toBe("dev");
-    expect(diff.diff.nodes.changed[0].id).toBe("example.pkg.Root");
   });
 
   it("identifier utilities normalize ids and fqids", () => {

@@ -1,3 +1,4 @@
+vi.mock('../src/components/StaticSitePanel', () => ({ default: () => <div data-testid="static-site-panel" /> }));
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,7 +23,7 @@ const mockPost = vi.fn();
 const mockPut = vi.fn();
 const mockDelete = vi.fn();
 
-vi.mock('axios', () => {
+vi.mock('../src/client', () => {
   const create = () => ({
     get: mockGet,
     post: mockPost,
@@ -30,14 +31,13 @@ vi.mock('axios', () => {
     delete: mockDelete,
     interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
   });
-  const axios = Object.assign(create, { create, post: vi.fn() });
-  return { default: axios };
+  return { createApiClient: create, apiFetch: vi.fn(async () => new Response("[]")) };
 });
 
-// Minimal GraphView stub to avoid cytoscape in tests.
-vi.mock('../src/GraphView', () => ({
+// Minimal FlowGraphView stub to isolate the canvas in tests.
+vi.mock('../src/FlowGraphView', () => ({
   __esModule: true,
-  default: () => <div>GraphView</div>,
+  default: () => <div>FlowGraphView</div>,
 }));
 
 const commonGet = (graphPayload: object) => async (url: string, options?: { params?: Record<string, unknown> }) => {
@@ -58,8 +58,6 @@ const primeWorkspace = () => {
   useWorkspaceStore.getState().setPkg('pkg.custom_schema');
   useWorkspaceStore.getState().setBaseNamespace('pkg');
   useWorkspaceStore.getState().setStartEmpty(false);
-  window.localStorage.setItem('schema-uml-token', 'tok');
-  window.localStorage.setItem('schema-uml-username', 'tester');
 };
 
 describe('Audit trail — remove quantity stays active', () => {

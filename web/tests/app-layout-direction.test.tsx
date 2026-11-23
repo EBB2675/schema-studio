@@ -1,3 +1,4 @@
+vi.mock('../src/components/StaticSitePanel', () => ({ default: () => <div data-testid="static-site-panel" /> }));
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,7 +16,7 @@ const graph = {
 
 const mockGet = vi.fn();
 
-vi.mock('axios', () => {
+vi.mock('../src/client', () => {
   const create = () => ({
     get: mockGet,
     post: vi.fn(),
@@ -23,11 +24,11 @@ vi.mock('axios', () => {
     delete: vi.fn(),
     interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
   });
-  return { default: Object.assign(create, { create, post: vi.fn() }) };
+  return { createApiClient: create, apiFetch: vi.fn(async () => new Response("[]")) };
 });
 
-// GraphView reduced to the direction it is given.
-vi.mock('../src/GraphView', () => ({
+// FlowGraphView reduced to the direction it is given.
+vi.mock('../src/FlowGraphView', () => ({
   __esModule: true,
   default: ({ layoutDirection }: { layoutDirection?: string }) => <div data-testid="direction">{layoutDirection}</div>,
 }));
@@ -48,8 +49,6 @@ describe('App layout direction', () => {
     useWorkspaceStore.getState().setBaseNamespace('pkg');
     useWorkspaceStore.getState().setStartEmpty(true);
     window.localStorage.removeItem(LAYOUT_DIRECTION_STORAGE_KEY);
-    window.localStorage.setItem('schema-uml-token', 't0k');
-    window.localStorage.setItem('schema-uml-username', 'user');
     mockGet.mockReset();
     mockGet.mockImplementation(async (url: string) => {
       if (url === '/workspace') {

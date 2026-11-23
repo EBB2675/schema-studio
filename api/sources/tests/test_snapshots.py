@@ -2,14 +2,10 @@
 from __future__ import annotations
 
 import dataclasses
-import importlib
 import json
-import sys
 from types import SimpleNamespace
 
-import httpx
 import pytest
-import yaml
 
 from .conftest import load_fixture
 
@@ -34,7 +30,7 @@ def snapshots(studio_home, monkeypatch):
 
 
 def profile(key: str):
-    from api.light_mode.schema_source import SCHEMA_PROFILES
+    from api.sources.schema_source import SCHEMA_PROFILES
 
     return SCHEMA_PROFILES[key]
 
@@ -78,20 +74,6 @@ def test_snapshot_is_cached_on_disk_and_reconverted_without_extracting(snapshots
     assert len(snapshots.calls) == 2
 
 
-def test_worktree_snapshots_are_kept_apart_and_need_a_commit_to_be_cached(snapshots, studio_home, monkeypatch):
-    seen = []
-    monkeypatch.setattr(snapshots, "_extract", lambda profile, scope, source_root=None: (
-        seen.append(source_root), load_fixture(profile.key))[1])
-    nomad = profile("nomad-measurements")
-    snapshots.get_snapshot(nomad, "nomad_measurements.general", source_root="/wt", source_version="abc")
-    snapshots.get_snapshot(nomad, "nomad_measurements.general", source_root="/wt", source_version="abc")
-    snapshots.get_snapshot(nomad, "nomad_measurements.general", source_root="/wt")
-    assert seen == ["/wt", "/wt"]
-    assert [path.name for path in (studio_home / "cache" / "snapshots" / "nomad-measurements").iterdir()] == [
-        "0588fda-worktree-abc"
-    ]
-
-
 def test_whole_profile_scope_is_the_base_namespace(snapshots):
     snapshots.get_snapshot(profile("nomad-simulations"))
     assert snapshots.calls == [("nomad-simulations", "nomad_simulations.schema_packages")]
@@ -113,74 +95,6 @@ def test_bam_snapshot_uses_the_bam_converter(snapshots):
     assert schema["name"] == "bam_masterdata.datamodel.v0.object_types"
     assert schema["id"].endswith("/bam-masterdata/bam_masterdata.datamodel.v0.object_types")
     assert schema["annotations"]["source_module"] == "bam_masterdata.datamodel.v0.object_types"
-
-
-@pytest.fixture()
-async def client(snapshots, monkeypatch):
-    for name in list(sys.modules):
-        if name == "api.light_mode.app":
-            sys.modules.pop(name)
-    import api.light_mode.app as app_mod
-    import api.sources.linkml_routes as routes
-
-    app_mod = importlib.reload(app_mod)
-    monkeypatch.setattr(routes, "get_snapshot", snapshots.get_snapshot)
-    monkeypatch.setattr(app_mod, "current_schema_info", lambda *a, **k: SimpleNamespace(
-        version="0588fda", source="remote-develop", package_version="1.0"))
-    transport = httpx.ASGITransport(app=app_mod.app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as test_client:
-        yield test_client
-
-
-@pytest.mark.anyio
-async def test_linkml_download_endpoint(client):
-    response = await client.get("/schema/linkml", params={"package": "nomad_measurements.general"})
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("application/yaml")
-    assert 'filename="nomad_measurements.general.linkml.yaml"' in response.headers["content-disposition"]
-    assert response.text.startswith("# LinkML schema exported by schema-studio\n# profile: nomad-measurements\n")
-    assert yaml.safe_load(response.text)["default_prefix"] == "nomadmeas"
-    assert "# conversion report: 1 partial, 2 skipped (" in response.text
-
-    report = (await client.get("/schema/linkml/report", params={"package": "nomad_measurements.general"})).json()
-    assert report["profile"] == "nomad-measurements"
-    assert {row["status"] for row in report["report"]} <= {"skipped", "warning", "partial"}
-
-
-@pytest.mark.anyio
-async def test_linkml_download_for_profile_without_converter(client, monkeypatch):
-    import api.sources.editing as editing
-
-    without = dataclasses.replace(profile("bam-masterdata-v0"), contract_script=None)
-    monkeypatch.setattr(editing, "schema_profile_for_package", lambda package, *_: without)
-    response = await client.get("/schema/linkml", params={"package": "bam_masterdata.datamodel.v0.object_types"})
-    assert response.status_code == 400
-    assert "not available for bam-masterdata" in response.json()["detail"]
-
-
-@pytest.mark.anyio
-async def test_linkml_download_for_bam(client):
-    response = await client.get("/schema/linkml", params={"package": "bam_masterdata.datamodel.v0.object_types"})
-    assert response.status_code == 200
-    assert response.text.startswith("# LinkML schema exported by schema-studio\n# profile: bam-masterdata-v0\n")
-    schema = yaml.safe_load(response.text)
-    assert schema["default_prefix"] == "bammd"
-    assert schema["name"] == "bam_masterdata.datamodel.v0.object_types"
-    assert schema["title"] == "bam-masterdata bam_masterdata.datamodel.v0.object_types"
-    assert schema["id"].endswith("/bam-masterdata/bam_masterdata.datamodel.v0.object_types")
-    assert schema["annotations"]["source_module"] == "bam_masterdata.datamodel.v0.object_types"
-
-
-@pytest.mark.anyio
-async def test_profiles_say_which_ones_export_linkml(client):
-    profiles = (await client.get("/schema/profiles")).json()["profiles"]
-    assert {entry["key"]: entry["linkml_export"] for entry in profiles} == {
-        "nomad-simulations": True, "nomad-measurements": True, "bam-masterdata-v0": True, "bam-masterdata-v1": True,
-    }
-    assert {entry["key"]: entry["capabilities"] for entry in profiles} == {
-        "nomad-simulations": ["methods", "usage"], "nomad-measurements": ["methods", "usage"],
-        "bam-masterdata-v0": [], "bam-masterdata-v1": [],
-    }
 
 
 def test_parallel_requests_extract_a_snapshot_once(studio_home, monkeypatch):
