@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import DocPanel from '../src/components/DocPanel';
@@ -46,7 +46,7 @@ describe('DocPanel', () => {
     expect(screen.getByText('Quantities')).toBeInTheDocument();
     expect(clearActionError).toHaveBeenCalled();
 
-    await user.click(screen.getByRole('button', { name: /Beta/ }));
+    await user.click(screen.getByRole('button', { name: /^Beta/ }));
     expect(screen.getByText('Quantity')).toBeInTheDocument();
     expect(screen.getByText('Beta')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Back/ })).toBeEnabled();
@@ -72,7 +72,8 @@ describe('DocPanel', () => {
       />
     );
 
-    await user.click(screen.getAllByRole('button', { name: /Remove/ })[0]);
+    await user.click(screen.getByLabelText('Actions for Alpha'));
+    await user.click(within(screen.getByLabelText('Actions for Alpha').parentElement!).getByRole('button', { name: 'Remove' }));
 
     expect(confirmSpy).toHaveBeenCalled();
     expect(onRemoveQuantity).toHaveBeenCalledWith('pkg.Class.a');
@@ -93,6 +94,7 @@ describe('DocPanel', () => {
       />
     );
 
+    await user.click(screen.getByRole('tab', { name: 'Documentation' }));
     await user.click(screen.getByRole('button', { name: /edit class docstring/i }));
     const doc = screen.getByRole('textbox', { name: /class docstring/i });
     await user.clear(doc);
@@ -127,6 +129,24 @@ describe('DocPanel', () => {
     expect(screen.getByText('yes')).toBeInTheDocument();
     expect(screen.getByText('mm')).toBeInTheDocument();
     expect(screen.getByText('Deutscher Text')).toBeInTheDocument();
+  });
+
+  it('switches inspector tabs with arrow keys and keeps quantity editing available', async () => {
+    setSelection(classSelection);
+    const user = userEvent.setup();
+    render(<DocPanel editableMode onRemoveQuantity={vi.fn()} onEditQuantity={vi.fn()} onEditClass={vi.fn()} clearActionError={vi.fn()} />);
+    const properties = screen.getByRole('tab', { name: 'Properties' });
+    const documentation = screen.getByRole('tab', { name: 'Documentation' });
+    expect(properties).toHaveAttribute('aria-selected', 'true');
+    properties.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(documentation).toHaveFocus();
+    expect(documentation).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: 'Documentation' })).toHaveTextContent('class docs');
+    await user.keyboard('{Home}');
+    expect(properties).toHaveFocus();
+    await user.click(screen.getByRole('button', { name: 'Edit Beta' }));
+    expect(screen.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Beta');
   });
 
   it('shows no source details block without details', () => {

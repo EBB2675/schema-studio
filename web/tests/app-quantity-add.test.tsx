@@ -219,7 +219,7 @@ describe('App editable quantity add flow', () => {
     expect(screen.queryByRole('button', { name: /^UML$/i })).not.toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: /^Trigger quantity add$/i }));
     // The audit trail starts closed; open it to reach its undo and clear buttons.
-    await user.click(screen.getByRole('button', { name: /^Audit trail/, expanded: false }));
+    await user.click(screen.getByRole('button', { name: 'Show edit history' }));
   };
 
   it('undo deletes the stored edits of a change in one request', async () => {
@@ -227,11 +227,11 @@ describe('App editable quantity add flow', () => {
     mockDelete.mockResolvedValue({ data: { deleted: 1 } });
     await addOneQuantity(user);
 
-    await user.click(await screen.findByRole('button', { name: '🗑' }));
+    await user.click(await screen.findByRole('button', { name: 'Undo' }));
     await waitFor(() =>
       expect(mockDelete).toHaveBeenCalledWith('/schema/edits', { params: { package: undefined }, data: { ids: ['7'] } })
     );
-    await waitFor(() => expect(screen.queryByRole('button', { name: '🗑' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument());
   });
 
   it('a failed undo keeps the change so it can be tried again', async () => {
@@ -239,17 +239,18 @@ describe('App editable quantity add flow', () => {
     mockDelete.mockRejectedValue({ response: { data: { detail: 'offline' } } });
     await addOneQuantity(user);
 
-    await user.click(await screen.findByRole('button', { name: '🗑' }));
+    await user.click(await screen.findByRole('button', { name: 'Undo' }));
     expect(await screen.findByText(/Undo failed: offline/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '🗑' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
   });
 
   it('clear deletes this module\'s edits and the edits its entries made', async () => {
     const user = userEvent.setup();
     mockDelete.mockResolvedValue({ data: { deleted: 1 } });
     await addOneQuantity(user);
-    await screen.findByRole('button', { name: '🗑' });
+    await screen.findByRole('button', { name: 'Undo' });
 
+    await user.click(screen.getByLabelText('History actions'));
     await user.click(screen.getByRole('button', { name: /^Clear$/ }));
     await waitFor(() =>
       expect(mockDelete).toHaveBeenCalledWith('/schema/edits', {

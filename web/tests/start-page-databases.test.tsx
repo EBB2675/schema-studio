@@ -106,7 +106,7 @@ describe('Start page databases', () => {
     expect(screen.queryByText('Choose package')).toBeNull();
     expect(screen.queryByText('Root section')).toBeNull();
     expect(screen.queryByText('Custom package...')).toBeNull();
-    await user.click(screen.getByRole('button', { name: /Explore the data model/ }));
+    await user.click(screen.getByRole('button', { name: 'Toggle workspace settings' }));
     expect(screen.queryByRole('button', { name: "Bird's-eye view" })).toBeNull();
   });
 

@@ -88,6 +88,20 @@ describe('right panel', () => {
     expect(screen.getByRole('button', { name: 'Collapse right panel' })).toBeInTheDocument();
   });
 
+  it('switches between dedicated Workspace and History panels', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Toggle workspace settings' }));
+    expect(document.getElementById('section-workspace')).toBeVisible();
+    expect(document.getElementById('section-audit')).not.toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Show edit history' }));
+    expect(document.getElementById('section-audit')).toBeVisible();
+    expect(document.getElementById('section-workspace')).not.toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Toggle workspace settings' }));
+    expect(document.getElementById('section-workspace')).toBeVisible();
+    expect(document.getElementById('mobile-workspace')).not.toHaveAttribute('inert');
+  });
+
   it('starts collapsed and opens from the labelled tab', async () => {
     const user = userEvent.setup();
     render(<App />);

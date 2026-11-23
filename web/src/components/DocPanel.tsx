@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
+import ActionMenu from "./ActionMenu";
 import QuantityEditPanel from "./QuantityEditPanel";
 import type { EditRules, QuantityFormData } from "./quantityShared";
 import { useSelection, type QtyMeta, type Selected } from "../store/selection";
@@ -76,35 +77,18 @@ function QtyRow({ q, onClick, onEdit, onRemove, editableMode, disabled }: { q: Q
           ? "pill warning"
           : null;
 
-  const handleClick = () => {
-    if (editableMode && !disabled) {
-      onEdit();
-      onClick();
-      return;
-    }
-    onClick();
-  };
   return (
-    <div className="qty-row" style={{ gap: 8 }}>
-      <button className="qty-row" type="button" onClick={handleClick} style={{ flex: 1 }}>
-        <div style={{ flex: 1 }} className="qty-mono">
-          <div style={{ fontSize: 13 }}>{q.name}</div>
-          <div style={{ fontSize: 12, color: "var(--muted)" }}>{meta.join("  ")}</div>
-        </div>
-        {diffLabel ? <span className={diffClass || "pill"}>{diffLabel}</span> : null}
-        <div className={`tag ${q.inherited ? "inherited" : "view"}`}>{q.inherited ? "Inherited" : "View"}</div>
+    <div className="property-row">
+      <button className="property-name" type="button" onClick={onClick}>
+        <span>{q.name}</span><small>{meta.join("  ")}</small>
       </button>
-
-      {editableMode && (
-        <div className="row" style={{ gap: 6 }}>
-          <button className="btn secondary" type="button" style={{ padding: "6px 10px" }} onClick={onEdit} disabled={disabled}>
-            Edit
-          </button>
-          <button className="btn secondary" type="button" style={{ padding: "6px 10px" }} onClick={onRemove} disabled={disabled}>
-            Remove
-          </button>
-        </div>
-      )}
+      {diffLabel ? <span className={diffClass || "pill"}>{diffLabel}</span> : null}
+      {editableMode && <>
+        <button className="property-edit" type="button" onClick={onEdit} disabled={disabled} aria-label={`Edit ${q.name}`} title={`Edit ${q.name}`}>Edit</button>
+        <ActionMenu label={`Actions for ${q.name}`} compact>
+          <button className="danger-action" type="button" onClick={onRemove} disabled={disabled}>Remove</button>
+        </ActionMenu>
+      </>}
     </div>
   );
 }
@@ -120,6 +104,8 @@ export default function DocPanel({
   editRules,
 }: Props) {
   const { selected, setSelected } = useSelection();
+  const [tab, setTab] = useState<"properties" | "documentation">("properties");
+  const tabId = useId();
   const [classContext, setClassContext] = useState<Selected | null>(null);
   const [editingClassDoc, setEditingClassDoc] = useState(false);
   const [classDocDraft, setClassDocDraft] = useState("");
@@ -146,6 +132,7 @@ export default function DocPanel({
   };
 
   const showQuantity = (q: QtyMeta) => {
+    setTab("properties");
     if (selected?.kind === "class") {
       setClassContext(selected);
     }
@@ -187,12 +174,23 @@ export default function DocPanel({
     }
   };
 
+  const tabs = <div className="inspector-tabs" role="tablist" aria-label="Inspector views">
+    {(["properties", "documentation"] as const).map((value, index) => <button key={value} type="button" role="tab" id={`${tabId}-${value}`} aria-controls={`${tabId}-${value}-panel`} aria-selected={tab === value} tabIndex={tab === value ? 0 : -1} onClick={() => setTab(value)} onKeyDown={event => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === "Home" ? 0 : event.key === "End" ? 1 : 1 - index;
+      setTab(next === 0 ? "properties" : "documentation");
+      (event.currentTarget.parentElement?.children[next] as HTMLElement)?.focus();
+    }}>{value === "properties" ? "Properties" : "Documentation"}</button>)}
+  </div>;
+
   return (
     <div className="doc-shell">
       {!selected ? (
         <div className="doc-empty">Select a class to see its docstring and quantities.</div>
       ) : selected.kind === "class" ? (
         <>
+          <div className="inspector-sticky">
           <div className="doc-header">
             <div className="meta-label">Class</div>
             {selected.path ? (
@@ -202,7 +200,9 @@ export default function DocPanel({
             ) : null}
           </div>
           <h2 className="doc-title">{selected.name}</h2>
-          <div style={{ marginBottom: 14 }}>
+          {tabs}
+          </div>
+          <div role="tabpanel" id={`${tabId}-documentation-panel`} aria-labelledby={`${tabId}-documentation`} hidden={tab !== "documentation"}>
             <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <div className="meta-label">Docstring</div>
               {editableMode ? (
@@ -240,13 +240,14 @@ export default function DocPanel({
               <pre className="doc-docstring">{selected.doc || "No docstring available."}</pre>
             )}
           </div>
+          <div role="tabpanel" id={`${tabId}-properties-panel`} aria-labelledby={`${tabId}-properties`} hidden={tab !== "properties"}>
           <DetailsBlock details={selected.details} />
 
           <div className="doc-subtitle">
             <span>Quantities</span>
             <span className="qty-count">{selected.quantities ? selected.quantities.length : 0}</span>
           </div>
-          <div className="doc-card" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div className="property-list">
             {(selected.quantities ?? []).map((q) => (
               <QtyRow
                 key={q.id}
@@ -262,9 +263,11 @@ export default function DocPanel({
               <div style={{ fontSize: 12, opacity: 0.6 }}>No quantities found.</div>
             )}
           </div>
+          </div>
         </>
       ) : (
         <>
+          <div className="inspector-sticky">
           <div className="doc-header" style={{ justifyContent: "space-between", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <button className="btn secondary" type="button" onClick={goBackToClass} disabled={!classContext}>
@@ -281,6 +284,9 @@ export default function DocPanel({
               </div>
             )}
           </div>
+          {tabs}
+          </div>
+          <div role="tabpanel" id={`${tabId}-properties-panel`} aria-labelledby={`${tabId}-properties`} hidden={tab !== "properties"}>
           <div className="doc-meta">
             {[selected.dtype, selected.shape && selected.shape !== "[]"
               ? selected.shape
@@ -292,7 +298,6 @@ export default function DocPanel({
               Inherited from {selected.inheritedFromName || selected.inheritedFromId || "parent"}.
             </div>
           ) : null}
-          <pre className="doc-docstring">{selected.doc || "No docstring available."}</pre>
           <DetailsBlock details={selected.details} />
 
           <div style={{ marginTop: 14, paddingTop: 10, borderTop: "1px solid var(--panel-border)" }}>
@@ -327,6 +332,10 @@ export default function DocPanel({
               onEditQuantity={onEditQuantity}
               onRemoveQuantity={onRemoveQuantity}
             />
+          </div>
+          </div>
+          <div role="tabpanel" id={`${tabId}-documentation-panel`} aria-labelledby={`${tabId}-documentation`} hidden={tab !== "documentation"}>
+            <pre className="doc-docstring">{selected.doc || "No docstring available."}</pre>
           </div>
         </>
       )}

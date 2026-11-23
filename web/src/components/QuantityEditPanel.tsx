@@ -1,3 +1,4 @@
+import ActionMenu from "./ActionMenu";
 import { useEffect, useMemo, useState } from "react";
 import { useSelection } from "../store/selection";
 import { NOMAD_EDIT_RULES, VOCAB_TERM, dtypeNameFor, type EditRules, type QuantityFormData } from "./quantityShared";
@@ -171,9 +172,11 @@ export default function QuantityEditPanel({
           {inheritedBlockedReason && <div style={{ color: "var(--muted)", fontSize: 13 }}>{inheritedBlockedReason}</div>}
 
           <div className="row" style={{ justifyContent: "space-between", gap: 8 }}>
-            <button className="btn secondary" type="button" onClick={confirmRemove} disabled={disableActions}>
+            <ActionMenu label="Quantity actions">
+            <button className="danger-action" type="button" onClick={confirmRemove} disabled={disableActions}>
               Remove
             </button>
+            </ActionMenu>
             <button className="btn" type="button" onClick={commitEdit} disabled={disableActions || !formName.trim()}>
               Save changes
             </button>

@@ -45,6 +45,7 @@ describe('QuantityEditPanel', () => {
 
     expect(screen.getByText('Locked by workspace')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Save changes/i })).toBeDisabled();
+    screen.getByLabelText('Quantity actions').click();
     expect(screen.getByRole('button', { name: /Remove/i })).toBeDisabled();
   });
 
@@ -96,6 +97,7 @@ describe('QuantityEditPanel', () => {
       />
     );
 
+    await user.click(screen.getByLabelText('Quantity actions'));
     await user.click(screen.getByRole('button', { name: /Remove/i }));
 
     expect(confirmSpy).toHaveBeenCalled();

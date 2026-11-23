@@ -18,6 +18,7 @@ import {
 } from "./components/quantityShared";
 import CollapsibleSection from "./components/CollapsibleSection";
 import HomeButton from "./components/HomeButton";
+import ActionMenu from "./components/ActionMenu";
 import WorkbenchIcon from "./components/WorkbenchIcon";
 import "./workbench.css";
 import { useSelection } from "./store/selection";
@@ -163,11 +164,11 @@ export default function App() {
   // branch diff state
 
   // collapsible controls for accessibility / quick-open links
-  const [openWorkspace, setOpenWorkspace] = useState<boolean>(false);
+  const [leftPanel, setLeftPanel] = useState<"workspace" | "history">("workspace");
   const [openUnderTheHood, setOpenUnderTheHood] = useState<boolean>(false);
 
-  const [openDocumentation, setOpenDocumentation] = useState<boolean>(true);
-  const [openAuditTrail, setOpenAuditTrail] = useState<boolean>(false);
+
+
 
   const isAuditChange = (value: unknown): value is AuditTrailEntry["change"] => {
     if (!value || typeof value !== "object") return false;
@@ -544,11 +545,11 @@ export default function App() {
     () => {
       const lines = [
         "Start page (center): pick a schema; its bird's-eye view lists every module with its classes, and a class opens its diagram.",
-        "Workspace (left): diagram options, Build graph, import and export.",
+        "Setup: diagram options, Build graph, import and export.",
         "Graph canvas (center): pan/zoom, select classes; add, rename or remove classes and quantities directly.",
-        "Documentation (right): class and quantity docs; edit quantities in Edit mode.",
-        "Under the hood (right, below Documentation): where the selected class is used in code.",
-        "Audit trail (left): log of your edits to communicate them; export or clear it anytime.",
+        "Inspector: switch between Properties and Documentation to inspect or edit the selection.",
+        "Under the hood: inspect the selected class’s raw schema structure.",
+        "History: log of your edits to communicate them; export or clear it anytime.",
       ];
 
       lines.push("Empty canvas: sketch your own classes and quantities without loading an existing schema.");
@@ -561,9 +562,9 @@ export default function App() {
 
   const focusAndOpen = useCallback((section: "workspace" | "documentation" | "audit" | "under" ) => {
     const mapping: Record<typeof section, { setter: (v: boolean) => void; elementId: string }> = {
-      workspace: { setter: setOpenWorkspace, elementId: "section-workspace" },
-      documentation: { setter: setOpenDocumentation, elementId: "section-documentation" },
-      audit: { setter: setOpenAuditTrail, elementId: "section-audit" },
+      workspace: { setter: () => setLeftPanel("workspace"), elementId: "section-workspace" },
+      documentation: { setter: () => {}, elementId: "section-documentation" },
+      audit: { setter: () => setLeftPanel("history"), elementId: "section-audit" },
       under: { setter: setOpenUnderTheHood, elementId: "section-under" },
     };
 
@@ -2092,59 +2093,30 @@ export default function App() {
       <nav className="workbench-rail" aria-label="Studio navigation">
         <button className="rail-brand" type="button" onClick={returnToHome} title="Schema home" aria-label="Schema home"><WorkbenchIcon name="schema" /></button>
         <span className="rail-divider" />
-        <button type="button" aria-label="Toggle workspace settings" title="Workspace settings" aria-expanded={workspaceExpanded} aria-controls="mobile-workspace" onClick={() => setWorkspaceExpanded(v => !v)}><WorkbenchIcon name="controls" /><span>Setup</span></button>
-        <button type="button" aria-label="Show edit history" title="Edit history" onClick={() => focusAndOpen("audit")}><WorkbenchIcon name="history" /><span>History</span></button>
+        <button type="button" aria-label="Toggle workspace settings" title="Workspace settings" aria-expanded={workspaceExpanded && leftPanel === "workspace"} aria-controls="mobile-workspace" onClick={() => { setLeftPanel("workspace"); setWorkspaceExpanded(v => leftPanel !== "workspace" || !v); }}><WorkbenchIcon name="controls" /><span>Setup</span></button>
+        <button type="button" aria-label="Show edit history" title="Edit history" aria-expanded={workspaceExpanded && leftPanel === "history"} onClick={() => focusAndOpen("audit")}><WorkbenchIcon name="history" /><span>History</span></button>
         <button className="rail-theme" type="button" aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} title="Switch appearance" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}><WorkbenchIcon name="theme" /><span>Theme</span></button>
       </nav>
       {<header className="mobile-bar">
         <button type="button" aria-label="Open workspace" aria-expanded={mobilePanel === "workspace"} aria-controls="mobile-workspace" onClick={() => setMobilePanel("workspace")}>☰</button>
         <strong>SchemaStudio</strong>
         {graph && mode !== "overview" && <button type="button" aria-expanded={mobilePanel === "tools"} aria-controls="mobile-tools" onClick={() => setMobilePanel("tools")}>Tools</button>}
-        <button type="button" aria-expanded={mobilePanel === "details"} aria-controls="mobile-details" onClick={() => { setOpenDocumentation(true); setMobilePanel("details"); }}>Details</button>
+        <button type="button" aria-expanded={mobilePanel === "details"} aria-controls="mobile-details" onClick={() => { setMobilePanel("details"); }}>Details</button>
       </header>}
       {isMobile && mobilePanel && <button className="mobile-backdrop" type="button" aria-label="Close panel" tabIndex={-1} onClick={() => setMobilePanel(null)} />}
       <aside id="mobile-workspace" className="sidebar" inert={!isMobile && !workspaceExpanded} data-mobile-panel="workspace" role={isMobile && mobilePanel === "workspace" ? "dialog" : undefined} aria-modal={isMobile && mobilePanel === "workspace" || undefined} aria-label="Workspace" tabIndex={-1}>
-        <div className="mobile-panel-heading"><strong>Workspace</strong><button type="button" onClick={() => setMobilePanel(null)} aria-label="Close workspace">✕</button></div>
-        <div className="brand-card">
-          <h3 className="brand-title">
-            <span className="pulse" />
-            SchemaStudio
-          </h3>
-          <p className="subdued">
-            {"Explore and shape materials science schemas."}
-          </p>
-          <div style={{ marginTop: 12 }}>
-            <div className="toggle-group" role="group" aria-label="Appearance">
-              <button
-                className={`toggle-chip ${theme === "dark" ? "active" : ""}`}
-                onClick={() => setTheme("dark")}
-              >
-                Dark
-              </button>
-              <button
-                className={`toggle-chip ${theme === "light" ? "active" : ""}`}
-                onClick={() => setTheme("light")}
-              >
-                Light
-              </button>
-            </div>
-          </div>
+        <header className="tool-panel-header">
+          <h2>{leftPanel === "workspace" ? "Workspace" : "History"}</h2>
+          <button type="button" className="mobile-theme" aria-label="Switch appearance" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}><WorkbenchIcon name="theme" /></button>
+          <button type="button" className="panel-close" aria-label="Close workspace" onClick={() => { setWorkspaceExpanded(false); setMobilePanel(null); }}>×</button>
+        </header>
+        <div className="panel-switcher" role="group" aria-label="Workspace panels">
+          <button type="button" aria-pressed={leftPanel === "workspace"} onClick={() => setLeftPanel("workspace")}>Workspace</button>
+          <button type="button" aria-pressed={leftPanel === "history"} onClick={() => setLeftPanel("history")}>History</button>
         </div>
-
-        <CollapsibleSection
-          title="Workspace"
-          hint="Explore the data model"
-          id="section-workspace"
-          open={openWorkspace}
-          onToggle={setOpenWorkspace}
-        >
+        <section className="tool-panel-body" id="section-workspace" hidden={leftPanel !== "workspace"}>
+          <h3 className="panel-section-label">Diagram options</h3>
           <div className="action-stack">
-            {(
-              <Suspense fallback={null}>
-                <StaticSitePanel onEditsChanged={() => void loadGraph({ keepView: true })} />
-              </Suspense>
-            )}
-
             <div className="control-grid" style={{ marginTop: 4 }}>
               <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <input
@@ -2200,7 +2172,7 @@ export default function App() {
               <button className="btn" onClick={() => loadGraph()} disabled={!startEmpty && !selectedSchemaReady}>
                 Build graph
               </button>
-              <div className="row" style={{ flex: 1, justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+              <ActionMenu label="Import / export">
                 <input
                   type="file"
                   accept="application/json"
@@ -2236,7 +2208,7 @@ export default function App() {
                     </button>
                   </>
                 ) : null}
-              </div>
+              </ActionMenu>
               {linkmlStatus ? (
                 <div className="small" style={{ color: linkmlStatus.startsWith("LinkML export failed") ? "var(--danger)" : "var(--muted)", textAlign: "right" }}>
                   {linkmlStatus}
@@ -2258,15 +2230,15 @@ export default function App() {
               <p style={{ color: "var(--danger)", marginTop: 10, whiteSpace: "pre-wrap" }}>{err}</p>
             ) : null}
           </div>
-        </CollapsibleSection>
+        </section>
+        <section className="tool-panel-body" id="section-audit" hidden={leftPanel !== "history"}>
+          <h3 className="panel-section-label">Edit history</h3>
+            {(
+              <Suspense fallback={null}>
+                <StaticSitePanel onEditsChanged={() => void loadGraph({ keepView: true })} />
+              </Suspense>
+            )}
 
-        <CollapsibleSection
-          title="Audit trail"
-          hint="Track edits and export"
-          id="section-audit"
-          open={openAuditTrail}
-          onToggle={setOpenAuditTrail}
-        >
           <div className="action-stack" style={{ gap: 10 }}>
             <div className="row" style={{ gap: 8 }}>
               <button
@@ -2278,14 +2250,16 @@ export default function App() {
               >
                 Restore archived
               </button>
+              <ActionMenu label="History actions">
               <button
-                className="btn secondary"
+                className="danger-action"
                 type="button"
                 onClick={clearAuditTrail}
                 disabled={!auditTrail.length && !(graph?.applied_edits?.length) && !(graph?.edit_conflicts?.length)}
               >
                 Clear
               </button>
+              </ActionMenu>
             </div>
             {graph?.edit_conflicts?.length ? (
               <div className="small" role="status" style={{ color: "var(--pill-warning-fg)" }}>
@@ -2309,11 +2283,10 @@ export default function App() {
             </div>
             <div
               style={{
-                maxHeight: 240,
+                maxHeight: "none",
                 overflowY: "auto",
-                border: "1px solid var(--panel-border)",
-                borderRadius: 10,
-                padding: 8,
+                border: 0,
+                padding: 0,
                 background: "var(--panel)",
                 fontSize: 12
               }}
@@ -2340,7 +2313,7 @@ export default function App() {
                       title={archived ? "Archived for a different canvas; undo disabled" : "Undo this change"}
                       style={{ padding: "6px 10px" }}
                     >
-                      🗑
+                      Undo
                     </button>
                     {archived ? (
                       <button
@@ -2350,7 +2323,7 @@ export default function App() {
                         style={{ padding: "6px 10px" }}
                         title="Reactivate this edit on the current canvas"
                       >
-                        ↺
+                        Restore
                       </button>
                     ) : null}
                     <div>
@@ -2369,7 +2342,7 @@ export default function App() {
               })}
             </div>
           </div>
-        </CollapsibleSection>
+        </section>
       </aside>
       <div
         className="resizer"
@@ -2528,7 +2501,7 @@ export default function App() {
                   key={`flow-${canvasKey}`}
                   positionStorageKey={canvasPositionKey(schemaProfileKey || "default", graph.package, layoutDirection)}
                   mobile={isMobile}
-                  onInspect={() => { if (!isMobile) { setOpenDocumentation(true); setDocPanelCollapsed(false); } }}
+                  onInspect={() => { if (!isMobile) { setDocPanelCollapsed(false); } }}
                   onRenameClass={renameClassOnCanvas}
                   onEditQuantity={editQuantity}
                   nodes={graph.nodes}
@@ -2650,7 +2623,7 @@ export default function App() {
             overflowY: detailsHidden ? "hidden" : "auto"
           }}
         >
-          <div className="mobile-panel-heading"><strong>Details</strong><button type="button" onClick={() => setMobilePanel(null)} aria-label="Close details">✕</button></div>
+          <div className="mobile-panel-heading"><strong>Inspector</strong><button type="button" onClick={() => setMobilePanel(null)} aria-label="Close details">×</button></div>
           {isMobile ? null : docPanelCollapsed ? (
             <button
               type="button"
@@ -2661,10 +2634,11 @@ export default function App() {
               title="Open Documentation"
             >
               <span aria-hidden>«</span>
-              <span>Documentation</span>
+              <span>Inspector</span>
             </button>
           ) : (
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <header className="tool-panel-header">
+              <h2>Inspector</h2>
               <button
                 type="button"
                 className="btn ghost small"
@@ -2674,9 +2648,9 @@ export default function App() {
                 aria-label="Collapse right panel"
                 title="Hide panel"
               >
-                »
+                ×
               </button>
-            </div>
+            </header>
           )}
 
           {/* Kept mounted while collapsed so the sections keep their state */}
@@ -2690,14 +2664,7 @@ export default function App() {
                 flex: "0 0 auto"
               }}
             >
-              <CollapsibleSection
-                title="Documentation"
-                hint="Browse docs and edit quantities"
-                className="panel"
-                id="section-documentation"
-                open={openDocumentation}
-                onToggle={setOpenDocumentation}
-              >
+              <section id="section-documentation">
                 <DocPanel
                   editRules={editRules}
                   editableMode={editableMode}
@@ -2708,7 +2675,7 @@ export default function App() {
                   actionError={quantityActionErr}
                   clearActionError={clearQuantityActionError}
                 />
-              </CollapsibleSection>
+              </section>
             </div>
 
             {showUsage ? (
