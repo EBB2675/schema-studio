@@ -48,6 +48,10 @@ import { initialLayoutDirection, LAYOUT_DIRECTION_STORAGE_KEY, LAYOUT_DIRECTIONS
 const StaticSitePanel = lazy(() => import("./components/StaticSitePanel"));
 
 type WorkspaceEnvelope = { workspace?: WorkspaceState };
+type CanvasIdentity = { package: string; root: string; namespace: string; branch: string; empty: boolean };
+const sameCanvas = (a: CanvasIdentity | null, b: CanvasIdentity) =>
+  a !== null && a.package === b.package && a.root === b.root &&
+  a.namespace === b.namespace && a.branch === b.branch && a.empty === b.empty;
 
 // Responses carry the workspace the browser backend had when the request was handled.
 // A response that was requested before the user's latest workspace change must
@@ -119,6 +123,24 @@ export default function App() {
   const graphRequestRef = useRef(0);
   // Navigation ends an editing context; refreshes only supersede its displayed graph.
   const canvasEpochRef = useRef(0);
+  const canvasIdentityRef = useRef<CanvasIdentity | null>(null);
+  const pendingMutationsRef = useRef<Record<string, number>>({});
+  const [pendingMutations, setPendingMutations] = useState<Record<string, number>>({});
+  const withPendingMutation = useCallback(async <T,>(targetPackage: string, mutate: () => Promise<T>): Promise<T> => {
+    const update = (delta: number) => {
+      pendingMutationsRef.current = {
+        ...pendingMutationsRef.current,
+        [targetPackage]: (pendingMutationsRef.current[targetPackage] ?? 0) + delta,
+      };
+      setPendingMutations(pendingMutationsRef.current);
+    };
+    update(1);
+    try {
+      return await mutate();
+    } finally {
+      update(-1);
+    }
+  }, []);
   const editUiOperationRef = useRef(0);
   const quantityCreationRef = useRef(0);
   const classCreationRef = useRef(0);
@@ -679,12 +701,15 @@ export default function App() {
     overrides?: { pkg?: string; root?: string; namespace?: string; branch?: string; forceEmpty?: boolean; expand?: string[]; keepView?: boolean }
   ) => {
 
-    if (!overrides?.keepView) invalidateGraphRequests();
     const pkgToUse = overrides?.pkg ?? pkg;
     const rootToUse = overrides?.root ?? root;
     const namespaceToUse = overrides?.namespace ?? normalizedNamespace;
     const branchToUse = overrides?.branch ?? workspaceBranch ?? "";
     const useEmpty = overrides?.forceEmpty ?? startEmpty;
+    const identity: CanvasIdentity = { package: pkgToUse, root: rootToUse, namespace: namespaceToUse, branch: branchToUse, empty: useEmpty };
+    const identityChanged = !sameCanvas(canvasIdentityRef.current, identity);
+    if (identityChanged) invalidateGraphRequests();
+    canvasIdentityRef.current = identity;
     if (!useEmpty) {
       setStartEmpty(false);
       setCanvasStatus(null);
@@ -698,7 +723,7 @@ export default function App() {
       normalizePackageName(entry.package || pkg) === normalizePackageName(pkgToUse)
     ).map(entry => entry.id));
     // Another module or root starts with no class expanded.
-    const expand = overrides?.expand ?? (pkgToUse === pkg && rootToUse === root ? expandIntentRef.current : []);
+    const expand = overrides?.expand ?? (identityChanged ? [] : expandIntentRef.current);
     try {
       const parsed = await fetchGraph({
         pkg: pkgToUse, root: rootToUse, namespace: namespaceToUse, branch: branchToUse, empty: useEmpty, expand,
@@ -736,7 +761,10 @@ export default function App() {
   const resetEmptyCanvas = useCallback(async () => {
 
     const targetPkg = scratchPackage;
+    // Also guard imperative callers and clicks before React renders disabled state.
+    if (pendingMutationsRef.current[targetPkg]) return;
     invalidateGraphRequests();
+    canvasIdentityRef.current = { package: targetPkg, root: "", namespace: normalizedNamespace, branch: workspaceBranch ?? "", empty: true };
     const epoch = canvasEpochRef.current;
     // Capture only entries this deletion covers; later edits must retain their history.
     const archivedIds = new Set(auditTrail.filter(entry =>
@@ -745,7 +773,7 @@ export default function App() {
     try {
       setCanvasStatus("Resetting canvas…");
       setErr(null);
-      await api.delete("/schema/edits", { params: { package: targetPkg } });
+      await withPendingMutation(targetPkg, () => api.delete("/schema/edits", { params: { package: targetPkg } }));
       setAuditTrail(prev => prev.map(entry => archivedIds.has(entry.id) ? { ...entry, replayable: false } : entry));
       if (epoch !== canvasEpochRef.current) return;
       setGraph(null);
@@ -766,7 +794,7 @@ export default function App() {
       if (epoch !== canvasEpochRef.current) return;
       setCanvasStatus(`Reset failed: ${formatApiError(e)}`);
     }
-  }, [api, auditTrail, graph?.package, invalidateGraphRequests, normalizePackageName, normalizedNamespace, pkg, scratchPackage, setSelected, workspaceBranch]);
+  }, [api, auditTrail, graph?.package, invalidateGraphRequests, normalizePackageName, normalizedNamespace, pkg, scratchPackage, setSelected, withPendingMutation, workspaceBranch]);
 
 
   const applySchemaProfile = useCallback(async (profileKey: string) => {
@@ -805,6 +833,7 @@ export default function App() {
 
   // A database button opens the bird's-eye view of that schema; a class there opens its diagram.
   const showOverview = useCallback(() => {
+    canvasIdentityRef.current = null;
     invalidateGraphRequests();
     setMode("overview");
   }, [invalidateGraphRequests]);
@@ -1114,11 +1143,12 @@ export default function App() {
   // Store edits on the browser backend (all or none) and show the graph it rebuilds from the edited schema.
   const submitEdits = async (edits: EditRequest[]): Promise<ApiGraph> => {
     const targetPackage = graph?.package || pkg;
-    // A save supersedes older graph requests, but must respect subsequent navigation.
+    // A failed save leaves pending reads and expansion intent intact. Only success
+    // supersedes pre-mutation reads; navigation is tracked independently.
     const expand = expandIntentRef.current;
     const epoch = canvasEpochRef.current;
-    const request = ++graphRequestRef.current;
-    const res = await api.post(
+    const request = graphRequestRef.current;
+    const res = await withPendingMutation(targetPackage, () => api.post(
       "/schema/edits",
       { package: targetPackage, edits },
       {
@@ -1134,17 +1164,19 @@ export default function App() {
           branch: undefined,
         },
       }
-    );
+    ));
     const updated = ensureGraphResponse(res.data);
     if (epoch !== canvasEpochRef.current) return updated;
     // A renamed root follows its class even when the graph needs reconciliation.
     if ((updated.root ?? "") !== (root ?? "")) setRoot(updated.root ?? "");
+    if (canvasIdentityRef.current) canvasIdentityRef.current = { ...canvasIdentityRef.current, root: updated.root ?? "" };
     if (request !== graphRequestRef.current) {
       // A refresh may have read before persistence. Re-read after the mutation,
       // retaining the user's latest expansion/filter choices in this canvas.
       void latestLoadGraph.current({ keepView: true, root: updated.root ?? "", expand: expandIntentRef.current });
       return updated;
     }
+    graphRequestRef.current += 1;
     syncWorkspaceFromResponse(res.data);
     const merged = replayGraphWithAudit(updated);
     expandedRef.current = expand;
@@ -1499,9 +1531,9 @@ export default function App() {
   // Deletes the stored edits of audit entries (and a module's own edits) in one request: all or none.
   const deleteStoredEdits = useCallback(
     async (ids: string[], packageName?: string) => {
-      await api.delete("/schema/edits", { params: { package: packageName }, data: { ids } });
+      await withPendingMutation(packageName || graph?.package || pkg, () => api.delete("/schema/edits", { params: { package: packageName }, data: { ids } }));
     },
-    [api]
+    [api, graph?.package, pkg, withPendingMutation]
   );
 
   const undoAuditEntry = async (id: string) => {
@@ -1681,6 +1713,7 @@ export default function App() {
   }, [currentGraph, root, setSelected, setSelectedClassId, setSelectedQuantityId]);
 
   const returnToHome = useCallback(() => {
+    canvasIdentityRef.current = null;
     invalidateGraphRequests();
     setErr(null);
     setMode("graph");
@@ -2081,6 +2114,10 @@ export default function App() {
         setMode("graph");
 
         invalidateGraphRequests();
+        canvasIdentityRef.current = {
+          package: nextGraph.package, root: nextGraph.root ?? "", namespace: normalizedNamespace,
+          branch: workspaceBranch ?? "", empty: startEmpty && nextGraph.package === scratchPackage,
+        };
         setGraph(nextGraph);
         setBaseGraph(nextGraph);
         setCanvasKey((key) => key + 1);
@@ -2544,6 +2581,7 @@ export default function App() {
                         className="btn secondary"
                         type="button"
                         onClick={resetEmptyCanvas}
+                        disabled={Boolean(pendingMutations[scratchPackage])}
                         title="Clear saved custom schema edits for this empty canvas"
                         style={{ padding: "6px 10px", whiteSpace: "nowrap" }}
                       >

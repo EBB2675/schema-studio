@@ -1,5 +1,5 @@
 vi.mock('../src/components/StaticSitePanel', () => ({ default: () => <div data-testid="static-site-panel" /> }));
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
@@ -64,14 +64,16 @@ vi.mock('../src/client', () => {
 vi.mock('../src/FlowGraphView', () => {
   return {
     __esModule: true,
-    default: ({ onCreateQuantity, onToggleSubclasses, nodes, selectedClassId, creatingQuantityFor }: {
+    default: ({ onCreateQuantity, onToggleSubclasses, nodes, selectedClassId, creatingQuantityFor, expandedClassIds }: {
       onCreateQuantity?: (classId: string, data: { quantityName: string; dtype: string; docstring: string }) => Promise<void> | void;
       onToggleSubclasses?: (id: string) => Promise<void> | void;
       nodes: { id: string }[];
       selectedClassId?: string | null;
       creatingQuantityFor?: string | null;
+      expandedClassIds?: string[];
     }) => (
       <div>
+        <div data-testid="expanded">{expandedClassIds?.join(",")}</div>
         <div data-testid="visible-nodes">{nodes.map(node => node.id).join(',')}</div>
         <div data-testid="selected-class">{selectedClassId}</div>
         <div data-testid="quantity-progress">{creatingQuantityFor}</div>
@@ -310,10 +312,15 @@ describe('App editable quantity add flow', () => {
     );
   });
 
-  it.each([true, false])('reconciles a save overlapping a subclass read (read finishes first: %s)', async readFirst => {
+  it.each([['Toggle subclasses', true, false], ['Toggle subclasses', false, false], ['Build graph', true, false], ['Build graph', false, false], ['Build graph', true, true], ['Build graph', false, true]] as const)('reconciles a save overlapping %s (read first: %s, imported: %s)', async (refreshButton, readFirst, imported) => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    if (imported) {
+      const input = document.querySelector<HTMLInputElement>('input[type="file"][accept="application/json"]')!;
+      fireEvent.change(input, { target: { files: [new File([JSON.stringify(baseGraph)], 'graph.json', { type: 'application/json' })] } });
+      await screen.findByText('Imported graph.json');
+    }
     let save!: (value: unknown) => void;
     mockPost.mockReset().mockImplementation(() => new Promise(resolve => { save = resolve; }));
     const reads: Array<(value: unknown) => void> = [];
@@ -321,12 +328,12 @@ describe('App editable quantity add flow', () => {
     mockGet.mockImplementation((url, options) => url === '/schema'
       ? new Promise(resolve => reads.push(resolve)) : originalGet(url, options));
     await user.click(screen.getByRole('button', { name: 'Trigger quantity add' }));
-    await user.click(screen.getByRole('button', { name: 'Toggle subclasses' }));
+    await user.click(screen.getByRole('button', { name: refreshButton }));
     if (readFirst) await act(async () => reads[0]({ data: baseGraph }));
     await act(async () => { save({ data: graphWithQuantity }); });
     expect(reads).toHaveLength(2);
     const calls = mockGet.mock.calls.filter(([url]) => url === '/schema');
-    expect(calls.at(-1)?.[1]?.params.expand).toBe(classId);
+    expect(calls.at(-1)?.[1]?.params.expand).toBe(refreshButton === 'Toggle subclasses' ? classId : undefined);
     await act(async () => reads[1]({ data: graphWithQuantity }));
     if (!readFirst) await act(async () => reads[0]({ data: baseGraph }));
     expect(screen.getByTestId('visible-nodes')).toHaveTextContent(`${classId}.new_qty`);
@@ -386,6 +393,65 @@ describe('App editable quantity add flow', () => {
     await act(async () => reads[0]({ data: graphWithQuantity }));
     expect(screen.getByTestId('visible-nodes')).not.toHaveTextContent(`${classId}.new_qty`);
     expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+  });
+
+  it.each([true, false])('a rejected save preserves a pending expansion (read finishes first: %s)', async readFirst => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    const reads: Array<(value: unknown) => void> = [];
+    const originalGet = mockGet.getMockImplementation()!;
+    mockGet.mockImplementation((url, options) => url === '/schema'
+      ? new Promise(resolve => reads.push(resolve)) : originalGet(url, options));
+    let rejectSave!: (error: unknown) => void;
+    mockPost.mockReset().mockImplementation(() => new Promise((_resolve, reject) => { rejectSave = reject; }));
+    await user.click(screen.getByRole('button', { name: 'Toggle subclasses' }));
+    await user.click(screen.getByRole('button', { name: 'Trigger quantity add' }));
+    if (readFirst) await act(async () => reads[0]({ data: baseGraph }));
+    await act(async () => rejectSave(new Error('save rejected')));
+    if (!readFirst) await act(async () => reads[0]({ data: baseGraph }));
+    expect(screen.getByTestId('expanded')).toHaveTextContent(classId);
+    await user.click(screen.getByRole('button', { name: 'Toggle subclasses' }));
+    const calls = mockGet.mock.calls.filter(([url]) => url === '/schema');
+    expect(calls.at(-1)?.[1]?.params.expand).toBeUndefined();
+    await act(async () => reads[1]({ data: baseGraph }));
+    expect(screen.getByTestId('expanded')).toBeEmptyDOMElement();
+  });
+
+  it.each([true, false])('reset waits until a pending save settles (success: %s)', async success => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    let resolveSave!: (value: unknown) => void;
+    let rejectSave!: (error: unknown) => void;
+    mockPost.mockReset().mockImplementation(() => new Promise((resolve, reject) => { resolveSave = resolve; rejectSave = reject; }));
+    await user.click(screen.getByRole('button', { name: 'Trigger quantity add' }));
+    const reset = screen.getByRole('button', { name: 'Reset canvas' });
+    expect(reset).toBeDisabled();
+    await user.click(reset);
+    expect(mockDelete).not.toHaveBeenCalled();
+    await act(async () => success ? resolveSave({ data: graphWithQuantity }) : rejectSave(new Error('save rejected')));
+    expect(reset).toBeEnabled();
+    mockDelete.mockResolvedValue({ data: { deleted: success ? 1 : 0 } });
+    await user.click(reset);
+    await screen.findByText('Canvas reset to empty.');
+    const audit = JSON.parse(window.localStorage.getItem('schema-uml-audit') ?? '[]');
+    expect(audit.filter((entry: { replayable: boolean }) => entry.replayable)).toEqual([]);
+    if (success) expect(audit).toEqual(expect.arrayContaining([expect.objectContaining({ editIds: ['7'], replayable: false })]));
+  });
+
+  it('reset stays disabled until every pending save settles', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    const saves: Array<(value: unknown) => void> = [];
+    mockPost.mockReset().mockImplementation(() => new Promise(resolve => saves.push(resolve)));
+    await user.click(screen.getByRole('button', { name: 'Trigger quantity add' }));
+    await user.click(screen.getByRole('button', { name: 'Trigger quantity add' }));
+    await act(async () => saves[0]({ data: graphWithQuantity }));
+    expect(screen.getByRole('button', { name: 'Reset canvas' })).toBeDisabled();
+    await act(async () => saves[1]({ data: graphWithQuantity }));
+    expect(screen.getByRole('button', { name: 'Reset canvas' })).toBeEnabled();
   });
 
 });
