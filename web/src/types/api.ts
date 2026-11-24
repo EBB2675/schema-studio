@@ -125,6 +125,11 @@ const optionalString = (v: unknown) => (typeof v === "string" && v ? v : undefin
 
 // Only nodes with an openBIS code have details; units alone (NOMAD quantities) are not shown yet.
 const ensureDetails = (node: Record<string, unknown>): NodeDetails | null => {
+  // Graph exports already use NodeDetails; backend responses use flat snake_case fields.
+  const detailsNode = isRecord(node.details) ? node.details : null;
+  if (detailsNode) {
+    node = { ...detailsNode, title_de: detailsNode.titleDe, doc_de: detailsNode.docDe };
+  }
   const code = optionalString(node.code);
   if (!code) return null;
   const details: NodeDetails = {

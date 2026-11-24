@@ -122,6 +122,11 @@ export default function App() {
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedQuantityId, setSelectedQuantityId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const invalidateGraphRequests = useCallback(() => {
+    graphRequestRef.current += 1;
+    expandIntentRef.current = expandedRef.current;
+    setLoading(false);
+  }, []);
   const [err, setErr] = useState<string | null>(null);
 
   // appearance
@@ -315,7 +320,7 @@ export default function App() {
     [basePackageForEmpty]
   );
 
-  const emptyCanvasActive = startEmpty && graph?.package === scratchPackage && graph?.root === "";
+  const emptyCanvasActive = startEmpty && graph?.package === scratchPackage && (graph?.root === "" || graph?.root === null);
   // The schema's base namespace is no module itself; its graph is every class of the data model.
   const wholeModelPackage = basePackageForEmpty;
   const wholeModelActive = !startEmpty && pkg === wholeModelPackage;
@@ -724,29 +729,35 @@ export default function App() {
       setGraph(null);
       setBaseGraph(null);
     } finally {
-      setLoading(false);
+      if (request === graphRequestRef.current) setLoading(false);
     }
   }, [archiveAllAuditEntries, fetchGraph, normalizedNamespace, pkg, root, setStartEmpty, startEmpty, workspaceBranch]);
 
   const resetEmptyCanvas = useCallback(async () => {
 
     const targetPkg = scratchPackage;
+    invalidateGraphRequests();
+    const request = graphRequestRef.current;
     try {
       setCanvasStatus("Resetting canvas…");
       setErr(null);
       await api.delete("/schema/edits", { params: { package: targetPkg } });
       archiveAuditTrail();
+      if (request !== graphRequestRef.current) return;
       setGraph(null);
       setBaseGraph(null);
       setSelected(null);
       setSelectedClassId(null);
       setSelectedQuantityId(null);
-      await loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, branch: workspaceBranch, forceEmpty: true, expand: [] });
-      setCanvasStatus("Canvas reset to empty.");
+      const reload = loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, branch: workspaceBranch, forceEmpty: true, expand: [] });
+      const reloadRequest = graphRequestRef.current;
+      await reload;
+      if (reloadRequest === graphRequestRef.current) setCanvasStatus("Canvas reset to empty.");
     } catch (e: unknown) {
+      if (request !== graphRequestRef.current) return;
       setCanvasStatus(`Reset failed: ${formatApiError(e)}`);
     }
-  }, [api, archiveAuditTrail, loadGraph, normalizedNamespace, scratchPackage, setSelected, workspaceBranch]);
+  }, [api, archiveAuditTrail, invalidateGraphRequests, loadGraph, normalizedNamespace, scratchPackage, setSelected, workspaceBranch]);
 
 
   const applySchemaProfile = useCallback(async (profileKey: string) => {
@@ -784,11 +795,16 @@ export default function App() {
   const selectedDatabaseLabel = databases.find((entry) => entry.key === selectedDatabaseKey)?.label ?? null;
 
   // A database button opens the bird's-eye view of that schema; a class there opens its diagram.
-  const openDatabase = useCallback(async (profileKey: string) => {
+  const showOverview = useCallback(() => {
+    invalidateGraphRequests();
     setMode("overview");
+  }, [invalidateGraphRequests]);
+
+  const openDatabase = useCallback(async (profileKey: string) => {
+    showOverview();
     setOverviewQuery("");
     await applySchemaProfile(profileKey);
-  }, [applySchemaProfile]);
+  }, [applySchemaProfile, showOverview]);
 
   // Keeps the package one of the schema's modules on the selected branch.
   const loadPackages = useCallback(async () => {
@@ -1089,9 +1105,10 @@ export default function App() {
   // Store edits on the browser backend (all or none) and show the graph it rebuilds from the edited schema.
   const submitEdits = async (edits: EditRequest[]): Promise<ApiGraph> => {
     const targetPackage = graph?.package || pkg;
-    // The stored edit always shows; a graph request still on its way is outdated by it.
-    graphRequestRef.current += 1;
+    // A save supersedes older graph requests, but must respect subsequent navigation.
     const expand = expandIntentRef.current;
+    invalidateGraphRequests();
+    const request = graphRequestRef.current;
     const res = await api.post(
       "/schema/edits",
       { package: targetPackage, edits },
@@ -1110,6 +1127,7 @@ export default function App() {
       }
     );
     const updated = ensureGraphResponse(res.data);
+    if (request !== graphRequestRef.current) return updated;
     syncWorkspaceFromResponse(res.data);
     // A root the edits renamed follows its class; a removed one leaves the whole module.
     if ((updated.root ?? "") !== (root ?? "")) setRoot(updated.root ?? "");
@@ -1467,6 +1485,7 @@ export default function App() {
     const entry = auditTrail.find((a) => a.id === id);
     if (!entry || !entry.change) return;
     setQuantityActionErr(null);
+    const request = graphRequestRef.current;
 
     if (entry.editIds?.length) {
       try {
@@ -1477,7 +1496,7 @@ export default function App() {
         return;
       }
       setAuditTrail(prev => prev.filter(item => item.id !== id && item.change));
-      await loadGraph({ keepView: true });
+      if (request === graphRequestRef.current) await loadGraph({ keepView: true });
       return;
     }
 
@@ -1492,6 +1511,7 @@ export default function App() {
     const hasLocalAudit = auditEntriesForCurrentPackage.length > 0;
     const hasPersistedEdits = (graph?.applied_edits?.length ?? 0) > 0 || (graph?.edit_conflicts?.length ?? 0) > 0;
     if (!hasLocalAudit && !hasPersistedEdits) return;
+    const request = graphRequestRef.current;
     const ids = auditEntriesForCurrentPackage.flatMap((entry) => entry.editIds ?? []);
     setQuantityActionErr(null);
     try {
@@ -1501,7 +1521,7 @@ export default function App() {
       return;
     }
     setAuditTrail((prev) => prev.filter((entry) => !auditEntriesForCurrentPackage.includes(entry)));
-    await loadGraph({ keepView: true });
+    if (request === graphRequestRef.current) await loadGraph({ keepView: true });
   };
 
   useEffect(() => {
@@ -1638,6 +1658,8 @@ export default function App() {
   }, [currentGraph, root, setSelected, setSelectedClassId, setSelectedQuantityId]);
 
   const returnToHome = useCallback(() => {
+    invalidateGraphRequests();
+    setErr(null);
     setMode("graph");
     setGraph(null);
     setBaseGraph(null);
@@ -1649,7 +1671,7 @@ export default function App() {
     setQuantityActionErr(null);
     setCreatingQuantityFor(null);
     setCreatingClass(false);
-  }, [setSelected]);
+  }, [invalidateGraphRequests, setSelected]);
 
   const handleOverviewClassSelect = (pkgName: string, className: string) => {
     setMode("graph");
@@ -2018,20 +2040,20 @@ export default function App() {
       throw new Error("Expected nodes[] and edges[] in the workspace file.");
     };
 
+    const request = graphRequestRef.current;
     const reader = new FileReader();
     reader.onload = () => {
       try {
+        if (request !== graphRequestRef.current) return;
         const raw = JSON.parse(String(reader.result ?? "{}"));
         const candidate = extractGraphCandidate(raw);
-        const nextGraph: ApiGraph = {
+        const nextGraph = ensureGraphResponse({
+          ...candidate,
           package: typeof candidate.package === "string" ? candidate.package : pkg,
-          root: typeof candidate.root === "string" || candidate.root === null ? (candidate.root as string | null) : null,
-          nodes: candidate.nodes as ApiNode[],
-          edges: candidate.edges as ApiEdge[],
-        };
+        });
         setMode("graph");
 
-        graphRequestRef.current += 1;
+        invalidateGraphRequests();
         setGraph(nextGraph);
         setBaseGraph(nextGraph);
         setCanvasKey((key) => key + 1);
@@ -2040,7 +2062,7 @@ export default function App() {
         setSelectedQuantityId(null);
         setSelected(null);
         if (nextGraph.package) setPkg(nextGraph.package);
-        if (nextGraph.root) setRoot(nextGraph.root);
+        setRoot(nextGraph.root ?? "");
         setImportStatus(`Imported ${file.name}`);
         setErr(null);
       } catch (error: unknown) {
@@ -2403,7 +2425,7 @@ export default function App() {
                 <button className="link-button" type="button" onClick={() => focusAndOpen("workspace")}>Workspace</button>
                 <button className="link-button" type="button" onClick={() => focusAndOpen("documentation")}>Documentation</button>
                 <button className="link-button" type="button" onClick={() => focusAndOpen("audit")}>Audit trail</button>
-                <button className="link-button" type="button" onClick={() => setMode("overview")}>Overview</button>
+                <button className="link-button" type="button" onClick={showOverview}>Overview</button>
               </div>
             </div>
           </details>
@@ -2460,7 +2482,7 @@ export default function App() {
                       <button
                         className="btn secondary"
                         type="button"
-                        onClick={() => setMode("overview")}
+                        onClick={showOverview}
                         title="Back to the class list of this schema"
                       >
                         {selectedDatabaseLabel ? `← ${selectedDatabaseLabel}` : "← Classes"}

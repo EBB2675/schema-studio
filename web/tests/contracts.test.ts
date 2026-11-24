@@ -42,6 +42,16 @@ describe("contracts", () => {
     expect(parsed.nodes[1].details).toBeNull();
   });
 
+  it("preserves validated node details when an exported graph is imported again", () => {
+    const parsed = ensureGraphResponse({
+      ...sampleGraph,
+      nodes: [{ ...sampleGraph.nodes[0], code: "C", title: "Class", title_de: "Klasse", doc_de: "Beschreibung", mandatory: false, section: "General", iri: "urn:class", unit: "mm" }],
+    });
+    expect(ensureGraphResponse(JSON.parse(JSON.stringify(parsed)))).toEqual(parsed);
+    const malformed = ensureGraphResponse({ ...sampleGraph, nodes: [{ ...sampleGraph.nodes[0], details: { code: "C", title: 42, mandatory: "yes" } }] });
+    expect(malformed.nodes[0].details).toEqual({ code: "C" });
+  });
+
   it("ensureGraphResponse rejects missing nodes", () => {
     expect(() => ensureGraphResponse({ package: "pkg", edges: [] } as unknown)).toThrow();
   });

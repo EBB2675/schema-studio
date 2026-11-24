@@ -1,5 +1,5 @@
 vi.mock('../src/components/StaticSitePanel', () => ({ default: () => <div data-testid="static-site-panel" /> }));
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
@@ -37,13 +37,14 @@ const queue: Array<{ params: Record<string, unknown>; answer: (data: unknown) =>
 const mockGet = vi.fn();
 const mockPost = vi.fn();
 const mockPut = vi.fn();
+const mockDelete = vi.fn();
 
 vi.mock('../src/client', () => {
   const create = () => ({
     get: mockGet,
     post: mockPost,
     put: mockPut,
-    delete: vi.fn(),
+    delete: mockDelete,
     interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
   });
   return { createApiClient: create, apiFetch: vi.fn(async () => new Response("[]")) };
@@ -87,6 +88,7 @@ describe('App subclass toggle', () => {
     mockGet.mockReset();
     mockPost.mockReset();
     mockPut.mockReset();
+    mockDelete.mockReset();
     mockPut.mockResolvedValue({ data: { workspace: { branch: 'main', package: 'pkg', base_namespace: 'pkg' } } });
     useWorkspaceStore.getState().setPkg('pkg');
     useWorkspaceStore.getState().setBaseNamespace('pkg');
@@ -184,4 +186,68 @@ describe('App subclass toggle', () => {
     expect(renders.at(-1)?.layoutKey).not.toBe(layoutKey);
     expectConsistentRenders();
   });
+
+  it('keeps Home visible when a pending subclass response arrives', async () => {
+    const user = await startWithTwoClasses();
+    await user.click(screen.getByRole('button', { name: 'Toggle subclasses' }));
+    await user.click(screen.getByRole('button', { name: 'Back to home' }));
+    await act(async () => queue[0].answer(withA));
+    expect(screen.queryByTestId('classes')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Start from empty canvas/ })).toBeInTheDocument();
+  });
+
+  it('keeps Home visible when the initial scratch graph arrives late', async () => {
+    held = true;
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    await user.click(screen.getByRole('button', { name: 'Back to home' }));
+    await act(async () => queue[0].answer(graph));
+    expect(screen.queryByTestId('classes')).not.toBeInTheDocument();
+  });
+
+  it('recognizes a scratch graph with the backend null root', async () => {
+    schemaGraph = { ...graph, root: null };
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    await screen.findByText(classId, { selector: '[data-testid="classes"]' });
+    expect(screen.queryByRole('button', { name: '← Classes' })).not.toBeInTheDocument();
+
+  });
+
+  it.each([
+    { nodes: [null] },
+    { nodes: [{ id: 42, kind: 'section' }] },
+    { edges: [null] },
+    { edges: [{ source: classId, target: 42, type: 'inherits' }] },
+    { edges: [{ source: classId, target: otherId, type: 'invalid' }] },
+  ])('rejects malformed imports without replacing the canvas: %j', async (invalid) => {
+    await startWithTwoClasses();
+    const input = document.querySelector<HTMLInputElement>('input[type="file"][accept="application/json"]')!;
+    fireEvent.change(input, { target: { files: [new File([JSON.stringify({ ...graph, ...invalid })], 'bad.json', { type: 'application/json' })] } });
+    await screen.findByText(/Import failed:/);
+    expect(screen.getByTestId('classes').textContent).toBe(`${classId},${otherId}`);
+  });
+
+  it.each(['direct', 'schema', 'graph', 'head'])('imports the %s graph export format', async (wrapper) => {
+    await startWithTwoClasses();
+    const payload = wrapper === 'direct' ? graph : wrapper === 'head' ? { head: { graph } } : { [wrapper]: graph };
+    const input = document.querySelector<HTMLInputElement>('input[type="file"][accept="application/json"]')!;
+    fireEvent.change(input, { target: { files: [new File([JSON.stringify(payload)], 'graph.json', { type: 'application/json' })] } });
+    await screen.findByText('Imported graph.json');
+    expect(screen.getByTestId('classes').textContent).toBe(classId);
+  });
+
+  it('does not reload a reset canvas after navigating Home during deletion', async () => {
+    const user = await startWithTwoClasses();
+    let finish!: () => void;
+    mockDelete.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+    await user.click(screen.getByRole('button', { name: 'Reset canvas' }));
+    await user.click(screen.getByRole('button', { name: 'Back to home' }));
+    await act(async () => finish());
+    expect(queue).toHaveLength(0);
+    expect(screen.queryByTestId('classes')).not.toBeInTheDocument();
+  });
+
 });

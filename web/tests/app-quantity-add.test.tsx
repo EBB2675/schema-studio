@@ -285,4 +285,19 @@ describe('App editable quantity add flow', () => {
       })
     );
   });
+  it('records a completed save without reopening the canvas after Home', async () => {
+    let finish!: (value: unknown) => void;
+    mockPost.mockReset().mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    await user.click(await screen.findByRole('button', { name: 'Trigger quantity add' }));
+    await user.click(screen.getByRole('button', { name: 'Back to home' }));
+    await act(async () => finish({ data: graphWithQuantity }));
+    expect(screen.queryByRole('button', { name: 'Trigger quantity add' })).not.toBeInTheDocument();
+    expect(JSON.parse(window.localStorage.getItem('schema-uml-audit') ?? '[]')).toEqual(
+      expect.arrayContaining([expect.objectContaining({ editIds: ['7'] })])
+    );
+  });
+
 });
