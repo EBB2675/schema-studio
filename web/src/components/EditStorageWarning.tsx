@@ -4,6 +4,16 @@ import type { EditStore } from "../static/editStore";
 
 function StorageWarning({ store }: { store: EditStore }) {
   const unsaved = useSyncExternalStore(store.subscribe, store.hasUnsavedChanges);
+  const [retryMessage, setRetryMessage] = useState("");
+  useEffect(() => {
+    if (!unsaved) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [unsaved]);
   if (!unsaved) return null;
 
   const download = () => {
@@ -19,6 +29,15 @@ function StorageWarning({ store }: { store: EditStore }) {
     <div role="alert" style={{ position: "fixed", bottom: 16, left: 16, right: 16, zIndex: 1000, padding: 16, background: "var(--panel)", border: "2px solid var(--danger)", borderRadius: 8 }}>
       <p>Browser storage could not save your edits. Your changes are available only in this page and may be lost when you reload or close it. Download a backup now. Keep editing in this tab only.</p>
       <button type="button" className="btn secondary" onClick={download}>Download edits backup</button>
+      <button type="button" className="btn secondary" onClick={async () => {
+        try {
+          if (!await store.retrySave()) setRetryMessage("Saving still failed. Download a backup to keep your edits.");
+        } catch {
+          setRetryMessage("Saving could not be retried. Download a backup to keep your edits.");
+        }
+      }}>Retry saving</button>
+      <p>To recover later, open History and choose Restore backup. This replaces the saved edit log.</p>
+      {retryMessage && <p role="status">{retryMessage}</p>}
     </div>
   );
 }

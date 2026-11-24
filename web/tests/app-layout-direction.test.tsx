@@ -42,7 +42,7 @@ const openCanvas = async () => {
 };
 
 describe('App layout direction', () => {
-  afterEach(cleanup);
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
   beforeEach(() => {
     useWorkspaceStore.getState().setPkg('pkg');
@@ -78,4 +78,15 @@ describe('App layout direction', () => {
     await openCanvas();
     expect(screen.getByTestId('direction').textContent).toBe('LEFT');
   });
+  it.each(["getter", "read", "write"])("keeps rendering and changing preferences after a storage %s failure", async failure => {
+    const blocked = () => { throw new DOMException("Blocked", "SecurityError"); };
+    if (failure === "getter") vi.spyOn(window, "localStorage", "get").mockImplementation(blocked);
+    else vi.spyOn(window.localStorage, failure === "read" ? "getItem" : "setItem").mockImplementation(blocked);
+    const user = await openCanvas();
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Layout direction' }), 'Root at left');
+    expect(screen.getByTestId('direction').textContent).toBe('LEFT');
+    await user.click(screen.getByRole('button', { name: /Switch to .* theme/ }));
+    expect(screen.getByTestId('direction')).toBeInTheDocument();
+  });
+
 });

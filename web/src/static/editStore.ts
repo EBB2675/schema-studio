@@ -1,3 +1,5 @@
+import { browserStorage } from "../utils/browserStorage";
+
 /**
  * Schema edits of the static site, kept in this browser (localStorage).
  *
@@ -45,6 +47,8 @@ export interface EditStore {
   transaction<T>(operation: (edits: EditTransaction) => T | Promise<T>): Promise<T>;
   remove(...args: Parameters<EditTransaction["remove"]>): Promise<number>;
   importLog(file: unknown): Promise<number>;
+  restoreLog(file: unknown): Promise<number>;
+  retrySave(): Promise<boolean>;
 }
 
 // Shared by store instances in this page when Web Locks are unavailable.
@@ -67,14 +71,6 @@ function isEdit(value: unknown): value is StoredEdit {
     && typeof edit.target === "string" && typeof edit.payload === "object" && edit.payload !== null;
 }
 
-export function browserStorage(): Storage | null {
-  try {
-    return typeof window === "undefined" ? null : window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
 export function createEditStore(storage: Storage | null = browserStorage()): EditStore {
   let memory: Saved = { nextId: 1, edits: [] };
   let unsaved = false;
@@ -84,11 +80,17 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
     if (unsaved || !storage) return memory;
     try {
       const raw = storage.getItem(EDITS_STORAGE_KEY);
-      if (!raw) return memory;
+      if (raw === null) {
+        memory = { nextId: 1, edits: [] };
+        return memory;
+      }
       const saved = JSON.parse(raw) as Saved;
-      if (Array.isArray(saved.edits) && typeof saved.nextId === "number") memory = saved;
+      if (!saved || !Array.isArray(saved.edits) || !saved.edits.every(isEdit)
+        || !Number.isSafeInteger(saved.nextId) || saved.nextId < 1) throw new Error("Invalid edit log");
+      memory = saved;
     } catch {
-      // unreadable storage: keep what this page has
+      // Never turn an unknown persistent log into an empty successful read.
+      throw new Error("Saved edits could not be read. Try again when browser storage is available, or restore a backup. Existing saved edits have not been changed.");
     }
     return memory;
   };
@@ -159,6 +161,24 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
   // through asynchronous validation and the final write. Do not nest transactions.
   const transaction: EditStore["transaction"] = operation => serialize(() => operation(access));
   return {
+    restoreLog: file => serialize(() => {
+      const log = file as Partial<EditLogFile> | null;
+      if (!log || log.format !== "schema-studio-edits" || log.version !== 1
+        || !Array.isArray(log.edits) || !log.edits.every(isEdit)
+        || log.edits.some(edit => !Number.isSafeInteger(edit.id) || edit.id < 1 || edit.id >= Number.MAX_SAFE_INTEGER)
+        || new Set(log.edits.map(edit => edit.id)).size !== log.edits.length) {
+        throw new Error("This file is not a valid Schema Studio backup.");
+      }
+      // Explicit replacement can recover even an unreadable existing log.
+      const edits = structuredClone(log.edits);
+      const nextId = edits.reduce((next, edit) => Math.max(next, edit.id + 1), 1);
+      write({ nextId, edits });
+      return edits.length;
+    }),
+    retrySave: () => serialize(() => {
+      if (unsaved) write(memory);
+      return !unsaved;
+    }),
     hasUnsavedChanges: () => unsaved,
     subscribe(listener) {
       listeners.add(listener);

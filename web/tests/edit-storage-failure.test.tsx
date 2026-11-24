@@ -91,10 +91,81 @@ it("shows existing unsaved state, downloads all edits, and clears the warning on
   expect(JSON.parse(await blob.text()).edits.map((e: StoredEdit) => e.id)).toEqual([1, 2]);
   expect(click).toHaveBeenCalledOnce();
   expect(screen.getByRole("alert")).toHaveTextContent("reload or close");
+  const leaving = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(leaving);
+  expect(leaving.defaultPrevented).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "Retry saving" }));
+  await screen.findByText("Saving still failed. Download a backup to keep your edits.");
   failedWrite.mockRestore();
-  await act(async () => { await store.transaction(tx => tx.add([edit(3)])); });
+  fireEvent.click(screen.getByRole("button", { name: "Retry saving" }));
   await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  const savedLeaving = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(savedLeaving);
+  expect(savedLeaving.defaultPrevented).toBe(false);
+  expect(store.exportLog().edits).toEqual([edit(1), edit(2)]);
   fail();
-  await act(async () => { await store.remove([3]); });
+  await act(async () => { await store.remove([2]); });
   expect(screen.getByRole("alert")).toBeInTheDocument();
+});
+
+it.each([false, true])("never overwrites saved edits after a failed read (previously read: %s)", async previouslyRead => {
+  const { store, storage } = setup();
+  await store.transaction(tx => tx.add([edit(1)]));
+  const fresh = createEditStore(storage);
+  if (previouslyRead) expect(fresh.list("p")).toEqual([edit(1)]);
+  const read = vi.spyOn(storage, "getItem").mockImplementation(() => { throw new DOMException("Blocked", "SecurityError"); });
+  const write = vi.spyOn(storage, "setItem");
+  await expect(fresh.transaction(tx => tx.add([edit(2)]))).rejects.toThrow("could not be read");
+  await expect(fresh.remove([1])).rejects.toThrow("could not be read");
+  await expect(fresh.importLog(storeLog([edit(2)]))).rejects.toThrow("could not be read");
+  await fresh.retrySave();
+  expect(write).not.toHaveBeenCalled();
+  read.mockRestore();
+  await fresh.transaction(tx => tx.add([edit(tx.nextIds(1)[0])]));
+  expect(fresh.exportLog().edits).toEqual([edit(1), edit(2)]);
+});
+
+const storeLog = (edits: StoredEdit[]) => ({ format: "schema-studio-edits", version: 1, edits });
+
+it("does not overwrite a malformed persistent log", async () => {
+  const { store, storage } = setup();
+  storage.setItem(EDITS_STORAGE_KEY, "broken json");
+  await expect(store.transaction(tx => tx.add([edit(1)]))).rejects.toThrow("could not be read");
+  expect(storage.getItem(EDITS_STORAGE_KEY)).toBe("broken json");
+});
+
+it.each(["add", "delete", "clear"])("round-trips a backup after a failed %s without duplicating or resurrecting edits", async operation => {
+  const { store, storage, fail } = setup();
+  await store.transaction(tx => tx.add([edit(1), edit(2)]));
+  const failure = fail();
+  if (operation === "add") await store.transaction(tx => tx.add([edit(3)]));
+  else await store.remove(operation === "clear" ? [1, 2] : [2]);
+  const backup = JSON.parse(JSON.stringify(store.exportLog()));
+  failure.mockRestore();
+  const reloaded = createEditStore(storage);
+  expect(reloaded.list("p")).toEqual([edit(1), edit(2)]);
+  await reloaded.restoreLog(backup);
+  expect(reloaded.exportLog().edits).toEqual(backup.edits);
+  expect(createEditStore(storage).exportLog().edits).toEqual(backup.edits);
+  await reloaded.restoreLog(backup);
+  expect(reloaded.exportLog().edits).toEqual(backup.edits);
+  await reloaded.transaction(tx => {
+    const id = tx.nextIds(1)[0];
+    expect(id).toBe(operation === "add" ? 4 : operation === "clear" ? 1 : 2);
+  });
+});
+
+it("rejects invalid backups and preserves a restored backup if its write fails", async () => {
+  const { store, fail } = setup();
+  await store.transaction(tx => tx.add([edit(1)]));
+  for (const invalid of [{ ...storeLog([]), version: 2 }, storeLog([edit(2), edit(2)]), storeLog([edit(-1)]), storeLog([null as unknown as StoredEdit])]) {
+    await expect(store.restoreLog(invalid)).rejects.toThrow("valid Schema Studio backup");
+    expect(store.exportLog().edits).toEqual([edit(1)]);
+  }
+  const failure = fail();
+  await store.restoreLog(storeLog([edit(5)]));
+  expect(store.exportLog().edits).toEqual([edit(5)]);
+  expect(store.hasUnsavedChanges()).toBe(true);
+  failure.mockRestore();
+  expect(await store.retrySave()).toBe(true);
 });

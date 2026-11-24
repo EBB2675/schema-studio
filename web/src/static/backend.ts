@@ -7,7 +7,8 @@
  * everything else goes to the Python core (see `pythonRunner.ts`).
  */
 import type { CoreAnswer, CoreRequest } from "./pythonRunner";
-import { browserStorage, createEditStore, type EditStore, type StoredEdit } from "./editStore";
+import { browserStorage } from "../utils/browserStorage";
+import { createEditStore, type EditStore, type StoredEdit } from "./editStore";
 
 export type SiteModule = {
   package: string;

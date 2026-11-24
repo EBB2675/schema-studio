@@ -1,3 +1,4 @@
+import { readPreference, writePreference } from "./utils/browserStorage";
 import type { ChangeEvent, SyntheticEvent } from "react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
@@ -125,12 +126,12 @@ export default function App() {
   // appearance
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     if (typeof window === "undefined") return "dark";
-    const initial = initialTheme(window.localStorage.getItem("schema-uml-theme"));
+    const initial = initialTheme(readPreference("schema-uml-theme"));
     document.documentElement.setAttribute("data-theme", initial);
     return initial;
   });
   const [layoutDirection, setLayoutDirection] = useState<LayoutDirection>(() =>
-    typeof window === "undefined" ? initialLayoutDirection(null) : initialLayoutDirection(window.localStorage.getItem(LAYOUT_DIRECTION_STORAGE_KEY))
+    typeof window === "undefined" ? initialLayoutDirection(null) : initialLayoutDirection(readPreference(LAYOUT_DIRECTION_STORAGE_KEY))
   );
 
   const appShellRef = useRef<HTMLElement | null>(null);
@@ -140,12 +141,12 @@ export default function App() {
   const importFileRef = useRef<HTMLInputElement | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === "undefined") return 360;
-    const stored = Number.parseInt(window.localStorage.getItem("schema-uml-left-width") || "", 10);
+    const stored = Number.parseInt(readPreference("schema-uml-left-width") || "", 10);
     return Number.isFinite(stored) ? stored : 360;
   });
   const [docPanelWidth, setDocPanelWidth] = useState<number>(() => {
     if (typeof window === "undefined") return 380;
-    const stored = Number.parseInt(window.localStorage.getItem("schema-uml-doc-width") || "", 10);
+    const stored = Number.parseInt(readPreference("schema-uml-doc-width") || "", 10);
     return Number.isFinite(stored) ? stored : 380;
   });
   // The right panel starts collapsed; the canvas gets the room until someone opens it.
@@ -199,7 +200,7 @@ export default function App() {
   const [auditTrail, setAuditTrail] = useState<AuditTrailEntry[]>(() => {
     if (typeof window === "undefined") return [];
     try {
-      const raw = window.localStorage.getItem("schema-uml-audit");
+      const raw = readPreference("schema-uml-audit");
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
@@ -251,7 +252,7 @@ export default function App() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      window.localStorage.setItem("schema-uml-audit", JSON.stringify(auditTrail));
+      writePreference("schema-uml-audit", JSON.stringify(auditTrail));
     } catch {
       // ignore storage errors
     }
@@ -490,12 +491,12 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem("schema-uml-left-width", String(clamp(sidebarWidth, 260, 520)));
+    writePreference("schema-uml-left-width", String(clamp(sidebarWidth, 260, 520)));
   }, [sidebarWidth]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem("schema-uml-doc-width", String(clampDocWidth(docPanelWidth)));
+    writePreference("schema-uml-doc-width", String(clampDocWidth(docPanelWidth)));
   }, [clampDocWidth, docPanelWidth]);
 
   useEffect(() => {
@@ -875,11 +876,11 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
-    window.localStorage.setItem("schema-uml-theme", theme);
+    writePreference("schema-uml-theme", theme);
   }, [theme]);
 
   useEffect(() => {
-    window.localStorage.setItem(LAYOUT_DIRECTION_STORAGE_KEY, layoutDirection);
+    writePreference(LAYOUT_DIRECTION_STORAGE_KEY, layoutDirection);
   }, [layoutDirection]);
 
   useEffect(() => {
