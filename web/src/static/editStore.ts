@@ -41,7 +41,6 @@ export interface EditStore {
   list: EditTransaction["list"];
   exportLog: EditTransaction["exportLog"];
   transaction<T>(operation: (edits: EditTransaction) => T | Promise<T>): Promise<T>;
-  add(edits: StoredEdit[]): Promise<void>;
   remove(...args: Parameters<EditTransaction["remove"]>): Promise<number>;
   importLog(file: unknown): Promise<number>;
 }
@@ -102,6 +101,11 @@ export function createEditStore(storage: Storage | null = typeof window === "und
     },
     add(edits) {
       const saved = read();
+      const ids = new Set(saved.edits.map(edit => edit.id));
+      for (const edit of edits) {
+        if (ids.has(edit.id)) throw new Error(`Duplicate edit ID: ${edit.id}`);
+        ids.add(edit.id);
+      }
       const nextId = Math.max(saved.nextId, ...edits.map(edit => edit.id + 1));
       write({ nextId, edits: [...saved.edits, ...edits] });
     },
@@ -139,7 +143,6 @@ export function createEditStore(storage: Storage | null = typeof window === "und
     list: access.list,
     exportLog: access.exportLog,
     transaction,
-    add: edits => transaction(store => store.add(edits)),
     remove: (...args) => transaction(store => store.remove(...args)),
     importLog: file => transaction(store => store.importLog(file)),
   };

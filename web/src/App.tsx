@@ -1460,7 +1460,6 @@ export default function App() {
   const undoAuditEntry = async (id: string) => {
     const entry = auditTrail.find((a) => a.id === id);
     if (!entry || !entry.change) return;
-    const remaining = auditTrail.filter((a) => a.id !== id && a.change);
     setQuantityActionErr(null);
 
     if (entry.editIds?.length) {
@@ -1471,11 +1470,12 @@ export default function App() {
         setQuantityActionErr(`Undo failed: ${formatApiError(e)}`);
         return;
       }
-      setAuditTrail(remaining as AuditTrailEntry[]);
+      setAuditTrail(prev => prev.filter(item => item.id !== id && item.change));
       await loadGraph({ keepView: true });
       return;
     }
 
+    const remaining = auditTrail.filter((a) => a.id !== id && a.change);
     setAuditTrail(remaining as AuditTrailEntry[]);
     rebuildGraphWithAudit(remaining as AuditTrailEntry[]);
   };

@@ -220,15 +220,30 @@ describe("static backend", () => {
 });
 
 describe("edit store", () => {
+  it("rejects duplicate IDs without partially inserting a batch", async () => {
+    const store = createEditStore(null);
+    const edit = { id: 1, profile: "p", package: "m", commit: null, op: "add_class", target: "", payload: {}, created_at: null };
+    await expect(store.transaction(edits => edits.add([edit, edit]))).rejects.toThrow("Duplicate edit ID: 1");
+    expect(store.list("p")).toEqual([]);
+    await store.transaction(edits => edits.add([edit]));
+    await expect(store.transaction(edits => edits.add([{ ...edit, id: 2 }, edit]))).rejects.toThrow("Duplicate edit ID: 1");
+    expect(store.list("p").map(edit => edit.id)).toEqual([1]);
+    await store.transaction(edits => {
+      expect(edits.nextIds(1)).toEqual([2]);
+      edits.add([{ ...edit, id: 2 }]);
+    });
+    expect(store.list("p").map(edit => edit.id)).toEqual([1, 2]);
+  });
+
   it("downloads and loads the edit log, giving loaded edits new ids", async () => {
     window.localStorage.clear();
     const store = createEditStore(window.localStorage);
-    await store.add([{ id: 1, profile: "p", package: "m", commit: null, op: "add_class", target: "", payload: { name: "A" }, created_at: null }]);
+    await store.transaction(edits => edits.add([{ id: 1, profile: "p", package: "m", commit: null, op: "add_class", target: "", payload: { name: "A" }, created_at: null }]));
     const log = store.exportLog();
     expect(log.format).toBe("schema-studio-edits");
 
     const other = createEditStore(null);
-    await other.add([{ id: 1, profile: "p", package: "m", commit: null, op: "add_class", target: "", payload: { name: "B" }, created_at: null }]);
+    await other.transaction(edits => edits.add([{ id: 1, profile: "p", package: "m", commit: null, op: "add_class", target: "", payload: { name: "B" }, created_at: null }]));
     expect(await other.importLog(JSON.parse(JSON.stringify(log)))).toBe(1);
     expect(other.list("p").map(edit => [edit.id, edit.payload.name])).toEqual([[1, "B"], [2, "A"]]);
     await expect(other.importLog({ edits: [] })).rejects.toThrow(/not a Schema Studio edit log/);
