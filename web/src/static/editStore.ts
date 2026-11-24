@@ -28,13 +28,34 @@ type Saved = { nextId: number; edits: StoredEdit[] };
 
 export const EDITS_STORAGE_KEY = "schema-studio-static-edits";
 
-export interface EditStore {
+export interface EditTransaction {
   list(profile: string, pkg?: string): StoredEdit[];
   nextIds(count: number): number[];
   add(edits: StoredEdit[]): void;
   remove(ids: number[], scope?: { profile: string; package?: string; allPackages?: boolean }): number;
   exportLog(): EditLogFile;
   importLog(file: unknown): number;
+}
+
+export interface EditStore {
+  list: EditTransaction["list"];
+  exportLog: EditTransaction["exportLog"];
+  transaction<T>(operation: (edits: EditTransaction) => T | Promise<T>): Promise<T>;
+  remove(...args: Parameters<EditTransaction["remove"]>): Promise<number>;
+  importLog(file: unknown): Promise<number>;
+}
+
+// Shared by store instances in this page when Web Locks are unavailable.
+// This fallback cannot coordinate other browser tabs.
+let mutationQueue: Promise<unknown> = Promise.resolve();
+
+async function serialize<T>(operation: () => T | Promise<T>): Promise<T> {
+  if (typeof navigator !== "undefined" && navigator.locks) {
+    return navigator.locks.request(EDITS_STORAGE_KEY, { mode: "exclusive" }, operation);
+  }
+  const result = mutationQueue.then(operation);
+  mutationQueue = result.catch(() => undefined);
+  return result;
 }
 
 function isEdit(value: unknown): value is StoredEdit {
@@ -70,7 +91,7 @@ export function createEditStore(storage: Storage | null = typeof window === "und
     }
   };
 
-  return {
+  const access: EditTransaction = {
     list(profile, pkg) {
       return read().edits.filter(edit => edit.profile === profile && (pkg === undefined || edit.package === pkg));
     },
@@ -80,6 +101,11 @@ export function createEditStore(storage: Storage | null = typeof window === "und
     },
     add(edits) {
       const saved = read();
+      const ids = new Set(saved.edits.map(edit => edit.id));
+      for (const edit of edits) {
+        if (ids.has(edit.id)) throw new Error(`Duplicate edit ID: ${edit.id}`);
+        ids.add(edit.id);
+      }
       const nextId = Math.max(saved.nextId, ...edits.map(edit => edit.id + 1));
       write({ nextId, edits: [...saved.edits, ...edits] });
     },
@@ -109,5 +135,15 @@ export function createEditStore(storage: Storage | null = typeof window === "und
       write({ nextId, edits: [...saved.edits, ...loaded] });
       return loaded.length;
     },
+  };
+  // Read IDs and existing edits only inside this callback, and hold the lock
+  // through asynchronous validation and the final write. Do not nest transactions.
+  const transaction: EditStore["transaction"] = operation => serialize(() => operation(access));
+  return {
+    list: access.list,
+    exportLog: access.exportLog,
+    transaction,
+    remove: (...args) => transaction(store => store.remove(...args)),
+    importLog: file => transaction(store => store.importLog(file)),
   };
 }

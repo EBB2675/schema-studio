@@ -43,7 +43,7 @@ export default function StaticSitePanel({ onEditsChanged }: { onEditsChanged: ()
     event.target.value = "";
     if (!file) return;
     try {
-      const count = (await getStaticBackend()).edits.importLog(JSON.parse(await file.text()));
+      const count = await (await getStaticBackend()).edits.importLog(JSON.parse(await file.text()));
       setMessage(`Loaded ${count} edit${count === 1 ? "" : "s"}.`);
       onEditsChanged();
     } catch (error) {

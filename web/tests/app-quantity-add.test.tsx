@@ -1,5 +1,5 @@
 vi.mock('../src/components/StaticSitePanel', () => ({ default: () => <div data-testid="static-site-panel" /> }));
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
@@ -232,6 +232,32 @@ describe('App editable quantity add flow', () => {
       expect(mockDelete).toHaveBeenCalledWith('/schema/edits', { params: { package: undefined }, data: { ids: ['7'] } })
     );
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument());
+  });
+
+  it.each([false, true])('concurrent Undo keeps both completed removals (reverse completion: %s)', async reverse => {
+    const user = userEvent.setup();
+    await addOneQuantity(user);
+    mockPost.mockReset();
+    const secondGraph = JSON.parse(JSON.stringify(graphWithQuantity).replaceAll('new_qty', 'bad_qty').replaceAll('"7"', '"8"'));
+    mockPost.mockResolvedValue({ data: secondGraph });
+    await user.click(screen.getByRole('button', { name: /Trigger quantity add failure/i }));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Undo' })).toHaveLength(2));
+
+    const complete: (() => void)[] = [];
+    mockDelete.mockImplementation(() => new Promise(resolve => {
+      complete.push(() => resolve({ data: { deleted: 1 } }));
+    }));
+    const buttons = screen.getAllByRole('button', { name: 'Undo' });
+    await user.click(buttons[0]);
+    await user.click(buttons[1]);
+    expect(mockDelete).toHaveBeenCalledTimes(2);
+    expect(mockDelete.mock.calls.map(call => call[1].data.ids)).toEqual([['8'], ['7']]);
+    if (reverse) complete.reverse();
+    await act(async () => complete[0]());
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Undo' })).toHaveLength(1));
+    await act(async () => complete[1]());
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument());
+    expect(JSON.parse(window.localStorage.getItem('schema-uml-audit') || '[]')).toEqual([]);
   });
 
   it('a failed undo keeps the change so it can be tried again', async () => {

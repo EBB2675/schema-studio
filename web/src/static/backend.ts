@@ -326,26 +326,28 @@ export function createStaticBackend(options: StaticBackendOptions) {
       if (!snapshot) throw new StaticHttpError(404, `No schema module named '${pkg}' on this site.`);
       ws = setWorkspace(data, pkg, namespace);
       const requested = Array.isArray(payload.edits) ? payload.edits as Record<string, unknown>[] : [];
-      const stored = edits.list(profile.key);
-      const result = await core({
-        op: "add_edits", snapshots: [snapshot], snapshot, profile: profileRequest(profile), package: pkg, stored,
-        edits: requested.map(edit => ({ op: edit.op, target: edit.target ?? "", payload: edit.payload ?? {} })),
-        flags: graphFlags(query, text(query.root), namespace), empty: flag(query.empty, false),
-        ids: edits.nextIds(requested.length), created_at: now(),
-      }) as Record<string, unknown>;
-      edits.add((result.persisted_edits as StoredEdit[]) ?? []);
-      return ok({ ...result, workspace: workspacePayload(ws) });
+      return edits.transaction(async edits => {
+        const stored = edits.list(profile.key);
+        const result = await core({
+          op: "add_edits", snapshots: [snapshot], snapshot, profile: profileRequest(profile), package: pkg, stored,
+          edits: requested.map(edit => ({ op: edit.op, target: edit.target ?? "", payload: edit.payload ?? {} })),
+          flags: graphFlags(query, text(query.root), namespace), empty: flag(query.empty, false),
+          ids: edits.nextIds(requested.length), created_at: now(),
+        }) as Record<string, unknown>;
+        edits.add((result.persisted_edits as StoredEdit[]) ?? []);
+        return ok({ ...result, workspace: workspacePayload(ws) });
+      });
     }
     if (method.toUpperCase() === "DELETE" && path.startsWith("/schema/edits/")) {
       const id = Number(path.slice("/schema/edits/".length));
-      return ok({ deleted: Number.isInteger(id) ? edits.remove([id]) : 0, workspace: workspacePayload(ws) });
+      return ok({ deleted: Number.isInteger(id) ? await edits.remove([id]) : 0, workspace: workspacePayload(ws) });
     }
     if (route === "DELETE /schema/edits") {
       const pkg = text(query.package);
       const all = flag(query.all_packages, false);
       const profile = profileFor(data, pkg ?? ws.package, ws.base_namespace);
       const ids = Array.isArray(payload.ids) ? (payload.ids as unknown[]).map(Number).filter(Number.isInteger) : [];
-      const deleted = edits.remove(ids, pkg || all ? { profile: profile.key, package: pkg, allPackages: all } : undefined);
+      const deleted = await edits.remove(ids, pkg || all ? { profile: profile.key, package: pkg, allPackages: all } : undefined);
       return ok({ deleted, workspace: workspacePayload(ws) });
     }
     if (route === "GET /usage") {
