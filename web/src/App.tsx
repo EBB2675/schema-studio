@@ -1,3 +1,4 @@
+import { getBrowserEditStore, LEGACY_EDIT_GENERATION } from "./static/editStore";
 import { readPreference, writePreference } from "./utils/browserStorage";
 import type { ChangeEvent, SyntheticEvent } from "react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -191,6 +192,7 @@ export default function App() {
       change: entry.change,
       replayable: entry.replayable === false ? false : true,
       package: typeof entry.package === "string" ? entry.package : undefined,
+      editGeneration: typeof entry.editGeneration === "string" ? entry.editGeneration : LEGACY_EDIT_GENERATION,
       editIds: Array.isArray(entry.editIds)
         ? entry.editIds.filter((item): item is string => typeof item === "string")
         : undefined,
@@ -204,9 +206,11 @@ export default function App() {
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
+      const generation = getBrowserEditStore().getGeneration();
       return parsed
         .map(parseAuditEntry)
         .filter((e): e is AuditTrailEntry => Boolean(e))
+        .filter(e => e.editGeneration === generation)
         .filter((e) => !(typeof e.id === "string" && e.id.startsWith("persisted-")));
     } catch {
       return [];
@@ -416,9 +420,10 @@ export default function App() {
       const now = new Date().toISOString();
       const id = `${now}-${Math.random().toString(16).slice(2)}`;
       const pkgForEntry = packageName || graph?.package || pkg;
+      const editGeneration = getBrowserEditStore().getGeneration();
       setAuditTrail((prev) => [
         ...prev,
-        { change, description, id, timestamp: now, package: pkgForEntry, replayable: true, editIds },
+        { change, description, id, timestamp: now, package: pkgForEntry, replayable: true, editIds, editGeneration },
       ]);
     },
     [graph, pkg]

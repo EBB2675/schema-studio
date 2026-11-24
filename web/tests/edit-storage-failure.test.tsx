@@ -169,3 +169,28 @@ it("rejects invalid backups and preserves a restored backup if its write fails",
   failure.mockRestore();
   expect(await store.retrySave()).toBe(true);
 });
+
+it("persists each replacement generation atomically with edits and preserves it through retries and ordinary mutations", async () => {
+  const { store, storage, fail } = setup();
+  // Legacy logs remain readable without a migration write.
+  storage.setItem(EDITS_STORAGE_KEY, JSON.stringify({ nextId: 2, edits: [edit(1)] }));
+  const original = store.getGeneration();
+  expect(original).toBe("legacy");
+  const failure = fail();
+  await store.restoreLog(storeLog([{ ...edit(1), target: "B" }]));
+  const restored = store.getGeneration();
+  expect(restored).not.toBe(original);
+  expect(createEditStore(storage).getGeneration()).toBe(original);
+  failure.mockRestore();
+  await store.retrySave();
+  const saved = JSON.parse(storage.getItem(EDITS_STORAGE_KEY)!);
+  expect(saved.generation).toBe(restored);
+  expect(saved.edits[0].target).toBe("B");
+  expect(createEditStore(storage).getGeneration()).toBe(restored);
+  await store.transaction(tx => tx.add([edit(2)]));
+  await store.importLog(storeLog([edit(3)]));
+  await store.remove([2]);
+  expect(store.getGeneration()).toBe(restored);
+  await store.restoreLog(store.exportLog());
+  expect(store.getGeneration()).not.toBe(restored);
+});

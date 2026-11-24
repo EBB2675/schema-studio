@@ -63,5 +63,7 @@ export type AuditTrailEntry = {
   replayable?: boolean;
   // Ids of the stored schema edits this change made; the server's graph already holds them.
   editIds?: string[];
+  // Identity of the edit log these undo references belong to.
+  editGeneration?: string;
   change: AuditChange;
 };
