@@ -7,7 +7,8 @@
  * everything else goes to the Python core (see `pythonRunner.ts`).
  */
 import type { CoreAnswer, CoreRequest } from "./pythonRunner";
-import { createEditStore, type EditStore, type StoredEdit } from "./editStore";
+import { browserStorage } from "../utils/browserStorage";
+import { createEditStore, getBrowserEditStore, type EditStore, type StoredEdit } from "./editStore";
 
 export type SiteModule = {
   package: string;
@@ -86,8 +87,8 @@ function inNamespace(name: string, namespace: string): boolean {
 }
 
 export function createStaticBackend(options: StaticBackendOptions) {
-  const edits = options.edits ?? createEditStore(options.storage === undefined ? undefined : options.storage);
-  const storage = options.storage === undefined ? (typeof window === "undefined" ? null : window.localStorage) : options.storage;
+  const edits = options.edits ?? (options.storage === undefined ? getBrowserEditStore() : createEditStore(options.storage));
+  const storage = options.storage === undefined ? browserStorage() : options.storage;
   const now = options.now ?? (() => new Date().toISOString());
   let site: Promise<SiteIndex> | null = null;
   let workspace: Workspace | null = null;

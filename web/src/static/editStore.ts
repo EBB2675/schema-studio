@@ -1,3 +1,5 @@
+import { browserStorage } from "../utils/browserStorage";
+
 /**
  * Schema edits of the static site, kept in this browser (localStorage).
  *
@@ -24,7 +26,10 @@ export type EditLogFile = {
   edits: StoredEdit[];
 };
 
-type Saved = { nextId: number; edits: StoredEdit[] };
+type Saved = { nextId: number; edits: StoredEdit[]; generation: string };
+
+// Older logs and history share this generation until the first replacement.
+export const LEGACY_EDIT_GENERATION = "legacy";
 
 export const EDITS_STORAGE_KEY = "schema-studio-static-edits";
 
@@ -38,11 +43,16 @@ export interface EditTransaction {
 }
 
 export interface EditStore {
+  getGeneration(): string;
+  hasUnsavedChanges(): boolean;
+  subscribe(listener: () => void): () => void;
   list: EditTransaction["list"];
   exportLog: EditTransaction["exportLog"];
   transaction<T>(operation: (edits: EditTransaction) => T | Promise<T>): Promise<T>;
   remove(...args: Parameters<EditTransaction["remove"]>): Promise<number>;
   importLog(file: unknown): Promise<number>;
+  restoreLog(file: unknown): Promise<number>;
+  retrySave(): Promise<boolean>;
 }
 
 // Shared by store instances in this page when Web Locks are unavailable.
@@ -65,29 +75,47 @@ function isEdit(value: unknown): value is StoredEdit {
     && typeof edit.target === "string" && typeof edit.payload === "object" && edit.payload !== null;
 }
 
-export function createEditStore(storage: Storage | null = typeof window === "undefined" ? null : window.localStorage): EditStore {
-  let memory: Saved = { nextId: 1, edits: [] };
+export function createEditStore(storage: Storage | null = browserStorage()): EditStore {
+  let memory: Saved = { nextId: 1, edits: [], generation: LEGACY_EDIT_GENERATION };
+  let unsaved = false;
+  const listeners = new Set<() => void>();
 
   const read = (): Saved => {
-    if (!storage) return memory;
+    if (unsaved || !storage) return memory;
     try {
       const raw = storage.getItem(EDITS_STORAGE_KEY);
-      if (!raw) return memory;
+      if (raw === null) {
+        memory = { nextId: 1, edits: [], generation: LEGACY_EDIT_GENERATION };
+        return memory;
+      }
       const saved = JSON.parse(raw) as Saved;
-      if (Array.isArray(saved.edits) && typeof saved.nextId === "number") memory = saved;
+      if (!saved || !Array.isArray(saved.edits) || !saved.edits.every(isEdit)
+        || !Number.isSafeInteger(saved.nextId) || saved.nextId < 1) throw new Error("Invalid edit log");
+      if (saved.generation !== undefined && (typeof saved.generation !== "string" || !saved.generation)) {
+        throw new Error("Invalid edit generation");
+      }
+      memory = { ...saved, generation: saved.generation ?? LEGACY_EDIT_GENERATION };
     } catch {
-      // unreadable storage: keep what this page has
+      // Never turn an unknown persistent log into an empty successful read.
+      throw new Error("Saved edits could not be read. Try again when browser storage is available, or restore a backup. Existing saved edits have not been changed.");
     }
     return memory;
   };
 
   const write = (saved: Saved) => {
     memory = saved;
-    if (!storage) return;
+    let persisted = false;
     try {
-      storage.setItem(EDITS_STORAGE_KEY, JSON.stringify(saved));
+      if (storage) {
+        storage.setItem(EDITS_STORAGE_KEY, JSON.stringify(saved));
+        persisted = true;
+      }
     } catch {
-      // storage full or blocked: the edits stay for this page only
+      // Keep memory authoritative until the entire current log is saved.
+    }
+    if (unsaved !== !persisted) {
+      unsaved = !persisted;
+      listeners.forEach(listener => listener());
     }
   };
 
@@ -107,7 +135,7 @@ export function createEditStore(storage: Storage | null = typeof window === "und
         ids.add(edit.id);
       }
       const nextId = Math.max(saved.nextId, ...edits.map(edit => edit.id + 1));
-      write({ nextId, edits: [...saved.edits, ...edits] });
+      write({ ...saved, nextId, edits: [...saved.edits, ...edits] });
     },
     remove(ids, scope) {
       const saved = read();
@@ -132,7 +160,7 @@ export function createEditStore(storage: Storage | null = typeof window === "und
       const saved = read();
       let nextId = saved.nextId;
       const loaded = log.edits.map(edit => ({ ...edit, id: nextId++ }));
-      write({ nextId, edits: [...saved.edits, ...loaded] });
+      write({ ...saved, nextId, edits: [...saved.edits, ...loaded] });
       return loaded.length;
     },
   };
@@ -140,10 +168,41 @@ export function createEditStore(storage: Storage | null = typeof window === "und
   // through asynchronous validation and the final write. Do not nest transactions.
   const transaction: EditStore["transaction"] = operation => serialize(() => operation(access));
   return {
+    restoreLog: file => serialize(() => {
+      const log = file as Partial<EditLogFile> | null;
+      if (!log || log.format !== "schema-studio-edits" || log.version !== 1
+        || !Array.isArray(log.edits) || !log.edits.every(isEdit)
+        || log.edits.some(edit => !Number.isSafeInteger(edit.id) || edit.id < 1 || edit.id >= Number.MAX_SAFE_INTEGER)
+        || new Set(log.edits.map(edit => edit.id)).size !== log.edits.length) {
+        throw new Error("This file is not a valid Schema Studio backup.");
+      }
+      // Explicit replacement can recover even an unreadable existing log.
+      const edits = structuredClone(log.edits);
+      const nextId = edits.reduce((next, edit) => Math.max(next, edit.id + 1), 1);
+      // A backup never supplies its identity: every replacement gets a fresh one.
+      write({ nextId, edits, generation: crypto.randomUUID() });
+      return edits.length;
+    }),
+    retrySave: () => serialize(() => {
+      if (unsaved) write(memory);
+      return !unsaved;
+    }),
+    getGeneration: () => read().generation,
+    hasUnsavedChanges: () => unsaved,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
     list: access.list,
     exportLog: access.exportLog,
     transaction,
     remove: (...args) => transaction(store => store.remove(...args)),
     importLog: file => transaction(store => store.importLog(file)),
   };
+}
+
+// The UI and default backend must see the same generation even before it is saved.
+let browserEditStore: EditStore | undefined;
+export function getBrowserEditStore(): EditStore {
+  return browserEditStore ??= createEditStore();
 }

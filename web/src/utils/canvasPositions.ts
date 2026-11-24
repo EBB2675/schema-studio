@@ -1,3 +1,4 @@
+import { browserStorage } from "./browserStorage";
 import type { LayoutDirection } from "./layoutDirection";
 
 export type CanvasPosition = { x: number; y: number };
@@ -7,10 +8,6 @@ type Storage = Pick<globalThis.Storage, "getItem" | "setItem">;
 // reopening another part of the same schema must not lose its manually placed boxes.
 export function canvasPositionKey(profile: string, pkg: string, direction: LayoutDirection): string {
   return `schema-studio-canvas-positions:${JSON.stringify([profile, pkg, direction])}`;
-}
-
-function browserStorage(): Storage | null {
-  try { return window.localStorage; } catch { return null; }
 }
 
 export function readCanvasPositions(key: string, storage: Storage | null = browserStorage()): Map<string, CanvasPosition> {

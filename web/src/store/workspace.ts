@@ -1,3 +1,4 @@
+import { readPreference, writePreference } from "../utils/browserStorage";
 import { create } from "zustand";
 import { DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_PACKAGE } from "../constants/defaults";
 import type { WorkspaceState } from "../types/workspace";
@@ -23,13 +24,13 @@ const STORAGE_KEYS = {
 
 const readString = (key: keyof typeof STORAGE_KEYS, fallback: string) => {
   if (typeof window === "undefined") return fallback;
-  const stored = window.localStorage.getItem(STORAGE_KEYS[key]);
+  const stored = readPreference(STORAGE_KEYS[key]);
   return stored || fallback;
 };
 
 const readBool = (key: keyof typeof STORAGE_KEYS, fallback: boolean) => {
   if (typeof window === "undefined") return fallback;
-  const stored = window.localStorage.getItem(STORAGE_KEYS[key]);
+  const stored = readPreference(STORAGE_KEYS[key]);
   if (stored === "true") return true;
   if (stored === "false") return false;
   return fallback;
@@ -38,7 +39,7 @@ const readBool = (key: keyof typeof STORAGE_KEYS, fallback: boolean) => {
 const persist = (key: keyof typeof STORAGE_KEYS, value: string) => {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(STORAGE_KEYS[key], value);
+    writePreference(STORAGE_KEYS[key], value);
   } catch {
     // ignore storage failures
   }
