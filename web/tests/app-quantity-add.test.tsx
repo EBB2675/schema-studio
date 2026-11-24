@@ -454,4 +454,27 @@ describe('App editable quantity add flow', () => {
     expect(screen.getByRole('button', { name: 'Reset canvas' })).toBeEnabled();
   });
 
+  it.each([true, false])('history Clear waits for a pending save (success: %s)', async success => {
+    const user = userEvent.setup();
+    await addOneQuantity(user);
+    let resolveSave!: (value: unknown) => void;
+    let rejectSave!: (error: unknown) => void;
+    mockPost.mockReset().mockImplementation(() => new Promise((resolve, reject) => { resolveSave = resolve; rejectSave = reject; }));
+    await user.click(screen.getByRole('button', { name: 'Trigger quantity add failure' }));
+    await user.click(screen.getByLabelText('History actions'));
+    const clear = screen.getByRole('button', { name: /^Clear$/ });
+    expect(clear).toBeDisabled();
+    await user.click(clear);
+    expect(mockDelete).not.toHaveBeenCalled();
+    const secondGraph = JSON.parse(JSON.stringify(graphWithQuantity).replaceAll('new_qty', 'bad_qty').replaceAll('"7"', '"8"'));
+    await act(async () => success ? resolveSave({ data: secondGraph }) : rejectSave(new Error('save rejected')));
+    expect(clear).toBeEnabled();
+    mockDelete.mockResolvedValue({ data: { deleted: success ? 2 : 1 } });
+    await user.click(clear);
+    await waitFor(() => expect(mockDelete).toHaveBeenCalledWith('/schema/edits', {
+      params: { package: 'pkg.custom_schema' }, data: { ids: success ? ['7', '8'] : ['7'] },
+    }));
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem('schema-uml-audit') ?? '[]')).toEqual([]));
+  });
+
 });

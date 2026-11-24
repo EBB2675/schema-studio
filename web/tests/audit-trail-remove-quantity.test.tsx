@@ -1,7 +1,7 @@
 vi.mock('../src/components/StaticSitePanel', () => ({ default: () => <div data-testid="static-site-panel" /> }));
-import { render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { useWorkspaceStore } from '../src/store/workspace';
 
@@ -40,31 +40,39 @@ vi.mock('../src/FlowGraphView', () => ({
   default: () => <div>FlowGraphView</div>,
 }));
 
+vi.mock('../src/components/DocPanel', () => ({
+  default: ({ onRemoveQuantity }: { onRemoveQuantity: (id: string) => Promise<void> }) => (
+    <button onClick={() => void onRemoveQuantity(qtyId)}>Remove test quantity</button>
+  ),
+}));
+
 const commonGet = (graphPayload: object) => async (url: string, options?: { params?: Record<string, unknown> }) => {
   if (url === '/workspace') {
-    return { data: { workspace: { branch: 'develop', package: 'pkg.custom_schema', base_namespace: 'pkg' }, user: { username: 'tester' } } };
+    return { data: { workspace: { branch: 'main', package: 'pkg', base_namespace: 'pkg' }, user: { username: 'tester' } } };
   }
   if (url === '/schema') {
     if (options?.params?.empty) return { data: graphPayload };
     return { data: graphPayload };
   }
-  if (url === '/git/branches') return { data: { branches: ['develop'] } };
-  if (url === '/git/packages') return { data: { packages: ['pkg.custom_schema'] } };
+  if (url === '/git/branches') return { data: { branches: ['main'] } };
+  if (url === '/git/packages') return { data: { packages: ['pkg'] } };
   if (url === '/roots') return { data: { sections: ['AtomsState'] } };
   return { data: {} };
 };
 
 const primeWorkspace = () => {
-  useWorkspaceStore.getState().setPkg('pkg.custom_schema');
+  useWorkspaceStore.getState().setPkg('pkg');
   useWorkspaceStore.getState().setBaseNamespace('pkg');
-  useWorkspaceStore.getState().setStartEmpty(false);
+  useWorkspaceStore.getState().setStartEmpty(true);
 };
 
-describe('Audit trail — remove quantity stays active', () => {
+describe('Audit trail — archived quantity removals', () => {
+  afterEach(cleanup);
   beforeEach(() => {
     mockGet.mockReset();
     mockPost.mockReset();
     mockPut.mockReset();
+    mockPut.mockResolvedValue({ data: { workspace: { branch: "main", package: "pkg", base_namespace: "pkg" } } });
     mockDelete.mockReset();
     window.localStorage.clear();
     primeWorkspace();
@@ -78,8 +86,8 @@ describe('Audit trail — remove quantity stays active', () => {
     }
   });
 
-  it('keeps a remove-quantity entry active (not archived) when baseline still contains the quantity', async () => {
-    // Seed local audit with a removal that should remain active.
+  it('keeps removal history archived when starting a new canvas', async () => {
+    // Starting a new canvas intentionally archives the previous local history.
     const storedAudit = [
       {
         id: 'local-remove-1',
@@ -107,16 +115,41 @@ describe('Audit trail — remove quantity stays active', () => {
     window.localStorage.setItem('schema-uml-audit', JSON.stringify(storedAudit));
 
     mockGet.mockImplementation(commonGet(graphWithQuantity));
-    mockPut.mockResolvedValue({ data: { workspace: { branch: 'develop', package: 'pkg.custom_schema', base_namespace: 'pkg' } } });
+    mockPut.mockResolvedValue({ data: { workspace: { branch: 'main', package: 'pkg', base_namespace: 'pkg' } } });
 
     render(<App />);
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole('button', { name: /\+ Start from empty canvas/i }));
 
-    const removalEntry = await screen.findByText((_, node) => node?.textContent === 'Removed quantity atomic_number from AtomsState');
-    expect(removalEntry).not.toHaveTextContent(/archived/i);
-    const undoButtons = screen.getAllByTitle('Undo this change');
-    expect(undoButtons.some((btn) => !btn.hasAttribute('disabled'))).toBe(true);
+    const saved = JSON.parse(window.localStorage.getItem('schema-uml-audit') ?? '[]');
+    expect(saved[0].replayable).toBe(false);
+    expect(screen.queryByTitle('Undo this change')).not.toBeInTheDocument();
   });
+  it('keeps persisted removal history archived after reset and reload', async () => {
+    mockGet.mockImplementation(commonGet(graphWithQuantity));
+    const removal = { id: '7', op: 'remove_attribute', target: classId, payload: { attribute: 'atomic_number' }, package: 'pkg.custom_schema' };
+    mockPost.mockResolvedValue({ data: {
+      ...graphWithQuantity, nodes: graphWithQuantity.nodes.slice(0, 1), edges: [],
+      persisted_edits: [removal], applied_edits: [removal],
+    } });
+    mockDelete.mockResolvedValue({ data: { deleted: 1 } });
+    const user = userEvent.setup();
+    const view = render(<App />);
+    await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove test quantity', hidden: true }));
+    const readAudit = () => JSON.parse(window.localStorage.getItem('schema-uml-audit') ?? '[]');
+    await waitFor(() => expect(readAudit()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ editIds: ['7'], replayable: true, change: expect.objectContaining({ type: 'remove-quantity' }) }),
+    ])));
+    await user.click(screen.getByRole('button', { name: 'Reset canvas' }));
+    await screen.findByText('Canvas reset to empty.');
+    expect(readAudit()).toEqual(expect.arrayContaining([expect.objectContaining({ editIds: ['7'], replayable: false })]));
+    view.unmount();
+    render(<App />);
+    await screen.findByRole('button', { name: /Start from empty canvas/ });
+    expect(readAudit()).toEqual(expect.arrayContaining([expect.objectContaining({ editIds: ['7'], replayable: false })]));
+    expect(screen.queryByTitle('Undo this change')).not.toBeInTheDocument();
+  });
+
 });

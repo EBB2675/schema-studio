@@ -1563,6 +1563,7 @@ export default function App() {
   // Clears what the audit panel shows: this module's stored edits and the edits its entries made.
   const clearAuditTrail = async () => {
     const targetPackage = currentPackageForAudit || pkg;
+    if (pendingMutationsRef.current[targetPackage]) return;
     const hasLocalAudit = auditEntriesForCurrentPackage.length > 0;
     const hasPersistedEdits = (graph?.applied_edits?.length ?? 0) > 0 || (graph?.edit_conflicts?.length ?? 0) > 0;
     if (!hasLocalAudit && !hasPersistedEdits) return;
@@ -1620,28 +1621,6 @@ export default function App() {
   );
   const activeAuditCount = activeAuditEntries.length;
   const archivedAuditCount = auditEntriesForCurrentPackage.length - activeAuditCount;
-
-  // Safety net: re-activate remove-quantity entries that were incorrectly archived
-  // by earlier logic, as long as they belong to the current package.
-  useEffect(() => {
-    if (!auditTrail.length) return;
-    setAuditTrail((prev) => {
-      let changed = false;
-      const normalizedPkg = currentPackageForAudit;
-      const next = prev.map((entry) => {
-        if (
-          entry.replayable === false &&
-          entry.change?.type === "remove-quantity" &&
-          (!entry.package || normalizePackageName(entry.package) === normalizedPkg)
-        ) {
-          changed = true;
-          return { ...entry, replayable: true };
-        }
-        return entry;
-      });
-      return changed ? next : prev;
-    });
-  }, [auditTrail, currentPackageForAudit, normalizePackageName]);
 
   const restoreArchivedEntry = (id: string) => {
     const updated = auditTrail.map((entry) =>
@@ -2355,7 +2334,7 @@ export default function App() {
                 className="danger-action"
                 type="button"
                 onClick={clearAuditTrail}
-                disabled={!auditTrail.length && !(graph?.applied_edits?.length) && !(graph?.edit_conflicts?.length)}
+                disabled={Boolean(pendingMutations[currentPackageForAudit || pkg]) || (!auditTrail.length && !(graph?.applied_edits?.length) && !(graph?.edit_conflicts?.length))}
               >
                 Clear
               </button>
