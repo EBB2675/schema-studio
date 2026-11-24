@@ -37,6 +37,7 @@ function StorageWarning({ store }: { store: EditStore }) {
         }
       }}>Retry saving</button>
       <p>To recover later, open History and choose Restore backup. This replaces the saved edit log.</p>
+      <p>If browser storage was blocked when this page opened, Retry saving cannot reconnect it. Download a backup, enable browser storage, reload, then restore the backup.</p>
       {retryMessage && <p role="status">{retryMessage}</p>}
     </div>
   );

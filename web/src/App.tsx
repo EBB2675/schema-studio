@@ -2236,7 +2236,15 @@ export default function App() {
           <h3 className="panel-section-label">Edit history</h3>
             {(
               <Suspense fallback={null}>
-                <StaticSitePanel onEditsChanged={() => void loadGraph({ keepView: true })} />
+                <StaticSitePanel
+                  onEditsChanged={() => void loadGraph({ keepView: true })}
+                  onBackupRestored={() => {
+                    // Replacement may reuse IDs for unrelated edits in any schema.
+                    // Clear rather than archive: archived entries can be reactivated.
+                    setAuditTrail([]);
+                    void loadGraph({ keepView: true });
+                  }}
+                />
               </Suspense>
             )}
 

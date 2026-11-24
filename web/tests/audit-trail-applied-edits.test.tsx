@@ -1,7 +1,14 @@
-vi.mock('../src/components/StaticSitePanel', () => ({ default: () => <div data-testid="static-site-panel" /> }));
-import { render, screen, waitFor } from '@testing-library/react';
+vi.mock('../src/components/StaticSitePanel', () => ({
+  default: ({ onEditsChanged, onBackupRestored }: { onEditsChanged: () => void; onBackupRestored: () => void }) => (
+    <div data-testid="static-site-panel">
+      <button onClick={onEditsChanged}>Simulate additive import</button>
+      <button onClick={onBackupRestored}>Simulate backup restore</button>
+    </div>
+  ),
+}));
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { useWorkspaceStore } from '../src/store/workspace';
 
@@ -78,6 +85,7 @@ const primeWorkspace = () => {
 };
 
 describe('Audit trail seeding from applied edits', () => {
+  afterEach(cleanup);
   beforeEach(() => {
     mockGet.mockReset();
     mockPost.mockReset();
@@ -141,4 +149,41 @@ describe('Audit trail seeding from applied edits', () => {
     const archivedLocal = screen.getAllByText((_, node) => node?.textContent?.includes('Old local change') ?? false);
     expect(archivedLocal[0]).toHaveTextContent(/archived/i);
   });
+  it.each(['restore', 'import'])('%s refreshes the graph and only replacement clears history across all schemas', async operation => {
+    const storedAudit = ['pkg.custom_schema', 'other.schema'].map((pkg, index) => ({
+      id: `local-${index}`,
+      timestamp: new Date().toISOString(),
+      description: `Old change in ${pkg}`,
+      package: pkg,
+      replayable: true,
+      editIds: [String(index + 1)],
+      change: {
+        type: 'add-class',
+        cls: { id: classId, name: 'AtomsState', doc: null, module: pkg, path: null, line: null, quantities: [], parentId: null, parentRelation: null },
+      },
+    }));
+    window.localStorage.setItem('schema-uml-audit', JSON.stringify(storedAudit));
+    mockGet.mockImplementation(commonGet(graphWithApplied));
+    mockPut.mockResolvedValue({ data: { workspace: { branch: 'develop', package: 'pkg.custom_schema', base_namespace: 'pkg' } } });
+    render(<App />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /\+ Start from empty canvas/i }));
+    await user.click(screen.getByRole('button', { name: 'Show edit history' }));
+    await screen.findByRole('button', { name: 'Simulate backup restore' });
+    expect(JSON.parse(window.localStorage.getItem('schema-uml-audit')!).map((entry: { id: string }) => entry.id)).toEqual(['local-0', 'local-1']);
+    const previousRequests = mockGet.mock.calls.filter(([url]) => url === '/schema').length;
+    await user.click(screen.getByRole('button', { name: operation === 'restore' ? 'Simulate backup restore' : 'Simulate additive import' }));
+    await waitFor(() => expect(mockGet.mock.calls.filter(([url]) => url === '/schema').length).toBeGreaterThan(previousRequests));
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem('schema-uml-audit')!).length).toBe(operation === 'restore' ? 0 : 2));
+    if (operation === 'restore') {
+      expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+      // Clearing the persisted history also prevents stale references after reopening.
+      cleanup();
+      render(<App />);
+      await screen.findByRole('button', { name: 'Show edit history' });
+      expect(JSON.parse(window.localStorage.getItem('schema-uml-audit')!)).toEqual([]);
+    }
+    expect(mockDelete).not.toHaveBeenCalled();
+  });
+
 });

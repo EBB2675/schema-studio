@@ -13,7 +13,10 @@ const ENGINE_TEXT: Partial<Record<CoreStatus, string>> = {
  * What the static site shows instead of the server controls: the edit log kept in this browser,
  * and the in-browser engine status while it loads or if it fails.
  */
-export default function StaticSitePanel({ onEditsChanged }: { onEditsChanged: () => void }) {
+export default function StaticSitePanel({ onEditsChanged, onBackupRestored }: {
+  onEditsChanged: () => void;
+  onBackupRestored: () => void;
+}) {
   const [engine, setEngine] = useState<CoreStatus>(coreStatus());
   const [message, setMessage] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -49,10 +52,10 @@ export default function StaticSitePanel({ onEditsChanged }: { onEditsChanged: ()
     if (!file) return;
     try {
       const log: unknown = JSON.parse(await file.text());
-      if (!window.confirm("Restore this backup? This replaces ALL current edits across all schemas, including unsaved edits. Download your current edits first if you want to keep them.")) return;
+      if (!window.confirm("Restore this backup? This replaces ALL current edits across all schemas, including unsaved edits, and clears the previous undo history. Download your current edits first if you want to keep them.")) return;
       const count = await (await getStaticBackend()).edits.restoreLog(log);
       setMessage(`Restored ${count} edit${count === 1 ? "" : "s"}.`);
-      onEditsChanged();
+      onBackupRestored();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     }
