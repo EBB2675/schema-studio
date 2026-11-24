@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ensureGraphResponse } from "../src/types/api";
+import { ensureGraphResponse, ensureImportedGraph } from "../src/types/api";
 import { fqidFromParts, normalizeId, normalizeLabel } from "../src/utils/identifier";
 
 const sampleGraph = {
@@ -42,6 +42,16 @@ describe("contracts", () => {
     expect(parsed.nodes[1].details).toBeNull();
   });
 
+  it("preserves validated node details when an exported graph is imported again", () => {
+    const parsed = ensureGraphResponse({
+      ...sampleGraph,
+      nodes: [{ ...sampleGraph.nodes[0], code: "C", title: "Class", title_de: "Klasse", doc_de: "Beschreibung", mandatory: false, section: "General", iri: "urn:class", unit: "mm" }],
+    });
+    expect(ensureGraphResponse(JSON.parse(JSON.stringify(parsed)))).toEqual(parsed);
+    const malformed = ensureGraphResponse({ ...sampleGraph, nodes: [{ ...sampleGraph.nodes[0], details: { code: "C", title: 42, mandatory: "yes" } }] });
+    expect(malformed.nodes[0].details).toEqual({ code: "C" });
+  });
+
   it("ensureGraphResponse rejects missing nodes", () => {
     expect(() => ensureGraphResponse({ package: "pkg", edges: [] } as unknown)).toThrow();
   });
@@ -52,4 +62,22 @@ describe("contracts", () => {
     expect(fqidFromParts("pkg.", "Class", "fallback")).toBe("pkg.Class");
     expect(fqidFromParts("", "", "fallback")).toBe("fallback");
   });
+  it.each(['example.pkg.Root', ' example.pkg.Root '])('rejects duplicate normalized IDs: %s', id => {
+    expect(() => ensureImportedGraph({ ...sampleGraph, nodes: [...sampleGraph.nodes, { ...sampleGraph.nodes[0], id }] })).toThrow(/Duplicate node id/);
+  });
+
+  it.each(['inherits', 'hasSubSection'])('allows an external %s target in a filtered graph', type => {
+    const parsed = ensureImportedGraph({ ...sampleGraph, edges: [{ source: ' example.pkg.Root ', target: 'external.Base', type }] });
+    expect(parsed.edges[0].source).toBe('example.pkg.Root');
+    expect(parsed.edges[0].target).toBe('external.Base');
+  });
+
+  it.each([
+    { source: 'missing', target: 'example.pkg.Root', type: 'inherits' },
+    { source: 'example.pkg.Root', target: 'missing', type: 'hasQuantity' },
+    { source: 'example.pkg.Root.value', target: 'example.pkg.Root', type: 'inherits' },
+  ])('rejects invalid graph relationships: %j', edge => {
+    expect(() => ensureImportedGraph({ ...sampleGraph, edges: [edge] })).toThrow();
+  });
+
 });
