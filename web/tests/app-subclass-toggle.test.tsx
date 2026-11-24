@@ -191,7 +191,10 @@ describe('App subclass toggle', () => {
     const user = await startWithTwoClasses();
     await user.click(screen.getByRole('button', { name: 'Toggle subclasses' }));
     await user.click(screen.getByRole('button', { name: 'Back to home' }));
-    await act(async () => queue[0].answer(withA));
+    const workspaceBefore = { ...useWorkspaceStore.getState() };
+    await act(async () => queue[0].answer({ ...withA, workspace: { branch: 'obsolete', package: 'old.pkg', base_namespace: 'old' } }));
+    expect(useWorkspaceStore.getState().pkg).toBe(workspaceBefore.pkg);
+    expect(useWorkspaceStore.getState().baseNamespace).toBe(workspaceBefore.baseNamespace);
     expect(screen.queryByTestId('classes')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Start from empty canvas/ })).toBeInTheDocument();
   });
@@ -218,6 +221,8 @@ describe('App subclass toggle', () => {
 
   it.each([
     { nodes: [null] },
+    { nodes: [section(classId), section(` ${classId} `)] },
+    { edges: [{ source: classId, target: "missing", type: "hasQuantity" }] },
     { nodes: [{ id: 42, kind: 'section' }] },
     { edges: [null] },
     { edges: [{ source: classId, target: 42, type: 'inherits' }] },
@@ -248,6 +253,14 @@ describe('App subclass toggle', () => {
     await act(async () => finish());
     expect(queue).toHaveLength(0);
     expect(screen.queryByTestId('classes')).not.toBeInTheDocument();
+  });
+
+  it('reports a failed reset reload without reporting success', async () => {
+    const user = await startWithTwoClasses();
+    await user.click(screen.getByRole('button', { name: 'Reset canvas' }));
+    await act(async () => queue[0].answer({ invalid: true }));
+    expect(await screen.findByText(/Reset failed: edits were cleared/)).toBeInTheDocument();
+    expect(screen.queryByText('Canvas reset to empty.')).not.toBeInTheDocument();
   });
 
 });

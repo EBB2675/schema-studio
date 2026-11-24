@@ -230,3 +230,40 @@ export const ensureGraphResponse = (payload: unknown): ApiGraph => {
       : undefined,
   };
 };
+
+// Import integrity is stricter than the wire shape contract. Section relationship
+// targets may be outside a depth-limited graph (see core graph.add_section);
+// sources and quantity endpoints must be present. Keep those external targets
+// as metadata: the canvas only draws relationships between visible sections.
+export const ensureImportedGraph = (payload: unknown): ApiGraph => {
+  const graph = ensureGraphResponse(payload);
+  const byId = new Map<string, ApiNode>();
+  graph.nodes = graph.nodes.map(node => {
+    const id = node.id.trim();
+    if (!id) throw new Error("Node is missing id");
+    if (byId.has(id)) throw new Error(`Duplicate node id: ${id}`);
+    const normalized = { ...node, id, owner: node.owner?.trim() || null };
+    byId.set(id, normalized);
+    return normalized;
+  });
+  graph.edges = graph.edges.map(edge => {
+    const source = edge.source.trim();
+    const target = edge.target.trim();
+    const from = byId.get(source);
+    const to = byId.get(target);
+    if (!from || !target) throw new Error(`Edge has a missing endpoint: ${source} → ${target}`);
+    if (edge.type === "hasQuantity") {
+      // Both orientations occur in existing exports.
+      if (!to || from.kind === to.kind) throw new Error(`Invalid quantity edge: ${source} → ${target}`);
+    } else if (from.kind !== "section" || (to && to.kind !== "section")) {
+      throw new Error(`Invalid section relationship: ${source} → ${target}`);
+    }
+    return { ...edge, source, target };
+  });
+  for (const node of graph.nodes) {
+    if (node.kind === "quantity" && node.owner && byId.get(node.owner)?.kind !== "section") {
+      throw new Error(`Quantity has a missing section owner: ${node.id}`);
+    }
+  }
+  return graph;
+};

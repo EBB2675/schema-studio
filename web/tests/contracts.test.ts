@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ensureGraphResponse } from "../src/types/api";
+import { ensureGraphResponse, ensureImportedGraph } from "../src/types/api";
 import { fqidFromParts, normalizeId, normalizeLabel } from "../src/utils/identifier";
 
 const sampleGraph = {
@@ -62,4 +62,22 @@ describe("contracts", () => {
     expect(fqidFromParts("pkg.", "Class", "fallback")).toBe("pkg.Class");
     expect(fqidFromParts("", "", "fallback")).toBe("fallback");
   });
+  it.each(['example.pkg.Root', ' example.pkg.Root '])('rejects duplicate normalized IDs: %s', id => {
+    expect(() => ensureImportedGraph({ ...sampleGraph, nodes: [...sampleGraph.nodes, { ...sampleGraph.nodes[0], id }] })).toThrow(/Duplicate node id/);
+  });
+
+  it.each(['inherits', 'hasSubSection'])('allows an external %s target in a filtered graph', type => {
+    const parsed = ensureImportedGraph({ ...sampleGraph, edges: [{ source: ' example.pkg.Root ', target: 'external.Base', type }] });
+    expect(parsed.edges[0].source).toBe('example.pkg.Root');
+    expect(parsed.edges[0].target).toBe('external.Base');
+  });
+
+  it.each([
+    { source: 'missing', target: 'example.pkg.Root', type: 'inherits' },
+    { source: 'example.pkg.Root', target: 'missing', type: 'hasQuantity' },
+    { source: 'example.pkg.Root.value', target: 'example.pkg.Root', type: 'inherits' },
+  ])('rejects invalid graph relationships: %j', edge => {
+    expect(() => ensureImportedGraph({ ...sampleGraph, edges: [edge] })).toThrow();
+  });
+
 });

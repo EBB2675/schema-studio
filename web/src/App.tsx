@@ -28,6 +28,7 @@ import { jsPDF } from "jspdf";
 import type { AuditTrailEntry, QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
 import {
   ensureGraphResponse,
+  ensureImportedGraph,
   type ApiEdge,
   type ApiGraph,
   type ApiNode
@@ -116,6 +117,16 @@ export default function App() {
   const [canvasKey, setCanvasKey] = useState(0);
   // Only the latest graph request may change what the canvas shows.
   const graphRequestRef = useRef(0);
+  // Navigation ends an editing context; refreshes only supersede its displayed graph.
+  const canvasEpochRef = useRef(0);
+  const editUiOperationRef = useRef(0);
+  const quantityCreationRef = useRef(0);
+  const classCreationRef = useRef(0);
+  const beginEditUiOperation = () => {
+    const epoch = canvasEpochRef.current;
+    const operation = ++editUiOperationRef.current;
+    return () => epoch === canvasEpochRef.current && operation === editUiOperationRef.current;
+  };
   // expandedRef mirrors expandedClasses; expandIntentRef is what the latest request asked for.
   const expandedRef = useRef<string[]>([]);
   const expandIntentRef = useRef<string[]>([]);
@@ -123,9 +134,12 @@ export default function App() {
   const [selectedQuantityId, setSelectedQuantityId] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const invalidateGraphRequests = useCallback(() => {
+    canvasEpochRef.current += 1;
     graphRequestRef.current += 1;
     expandIntentRef.current = expandedRef.current;
     setLoading(false);
+    setCreatingQuantityFor(null);
+    setCreatingClass(false);
   }, []);
   const [err, setErr] = useState<string | null>(null);
 
@@ -414,12 +428,6 @@ export default function App() {
     setAuditTrail((prev) => prev.map((entry) => ({ ...entry, replayable: false })));
   }, []);
 
-  const archiveAllAuditEntries = useCallback(() => {
-    setAuditTrail((prev) =>
-      prev.length ? prev.map((entry) => ({ ...entry, replayable: false })) : prev
-    );
-  }, [setAuditTrail]);
-
   const appendAudit = useCallback(
     (change: AuditTrailEntry["change"], description: string, editIds?: string[], packageName?: string) => {
       const now = new Date().toISOString();
@@ -639,49 +647,31 @@ export default function App() {
     }
   }, [api, pkg, root, startEmpty, syncWorkspaceFromResponse, wholeModelActive]);
 
-  // The module's graph as the browser core builds it; no state changes beyond the workspace sync.
+  // Fetch and validate without changing UI state; callers must check freshness before syncing.
   const fetchGraph = useCallback(async (
     opts: { pkg: string; root: string; namespace: string; branch: string; empty: boolean; expand: string[] }
   ): Promise<ApiGraph> => {
     const expand = opts.expand.length ? opts.expand.join(",") : undefined;
-    let parsed: ApiGraph | null = null;
-    if (opts.empty) {
-      const r = await api.get("/schema", {
-        params: {
-          package: opts.pkg,
-          root: opts.root,
-          include_quantities: includeQuantities,
-          include_subsections: includeSubsections,
-          include_inheritance: includeInheritance,
-          allow_cross_module: crossModules,
-          base_namespace: opts.namespace || undefined,
-          expand,
-          empty: true,
-        },
-      });
-      parsed = ensureGraphResponse(r.data);
-      syncWorkspaceFromResponse(r.data);
-      return parsed;
-    }
-    {
-      const r = await api.get("/schema", {
-        params: {
-          package: opts.pkg,
-          root: opts.root,
-          include_quantities: includeQuantities,
-          include_subsections: includeSubsections,
-          include_inheritance: includeInheritance,
-          allow_cross_module: crossModules,
-          base_namespace: opts.namespace || undefined,
-          expand,
-        },
-      });
-      parsed = ensureGraphResponse(r.data);
-      syncWorkspaceFromResponse(r.data);
-    }
-    if (!parsed) throw new Error("Failed to load graph");
+    const response = await api.get("/schema", {
+      params: {
+        package: opts.pkg,
+        root: opts.root,
+        include_quantities: includeQuantities,
+        include_subsections: includeSubsections,
+        include_inheritance: includeInheritance,
+        allow_cross_module: crossModules,
+        base_namespace: opts.namespace || undefined,
+        expand,
+        ...(opts.empty ? { empty: true } : {}),
+      },
+    });
+    const parsed = ensureGraphResponse(response.data);
+    // Retain the transport's workspace epoch through validation without syncing it yet.
+    Object.defineProperty(parsed, WORKSPACE_EPOCH, {
+      value: (response.data as Record<string, unknown>)[WORKSPACE_EPOCH],
+    });
     return parsed;
-  }, [api, crossModules, includeQuantities, includeSubsections, includeInheritance, syncWorkspaceFromResponse]);
+  }, [api, crossModules, includeQuantities, includeSubsections, includeInheritance]);
 
   // Build the selected snapshot graph.
   // keepView: the same graph again (after an undo, say), so the canvas keeps its layout and view.
@@ -689,6 +679,7 @@ export default function App() {
     overrides?: { pkg?: string; root?: string; namespace?: string; branch?: string; forceEmpty?: boolean; expand?: string[]; keepView?: boolean }
   ) => {
 
+    if (!overrides?.keepView) invalidateGraphRequests();
     const pkgToUse = overrides?.pkg ?? pkg;
     const rootToUse = overrides?.root ?? root;
     const namespaceToUse = overrides?.namespace ?? normalizedNamespace;
@@ -703,61 +694,79 @@ export default function App() {
     setLoading(true);
 
     const request = ++graphRequestRef.current;
+    const auditIds = new Set(auditTrail.filter(entry =>
+      normalizePackageName(entry.package || pkg) === normalizePackageName(pkgToUse)
+    ).map(entry => entry.id));
     // Another module or root starts with no class expanded.
     const expand = overrides?.expand ?? (pkgToUse === pkg && rootToUse === root ? expandIntentRef.current : []);
     try {
       const parsed = await fetchGraph({
         pkg: pkgToUse, root: rootToUse, namespace: namespaceToUse, branch: branchToUse, empty: useEmpty, expand,
       });
-      if (request !== graphRequestRef.current) return;
+      if (request !== graphRequestRef.current) return false;
+      syncWorkspaceFromResponse(parsed);
       expandedRef.current = expand;
       expandIntentRef.current = expand;
       setExpandedClasses(expand);
       setGraph(parsed);
       setBaseGraph(parsed);
       if (!overrides?.keepView) setCanvasKey((key) => key + 1);
-      if (useEmpty) return;
+      if (useEmpty) return true;
       // If the browser backend returned a clean graph without applied persisted edits, archive any local audit history
       // so “active edits” reflects only new work in this session.
       if (!parsed.applied_edits || parsed.applied_edits.length === 0) {
-        archiveAllAuditEntries();
+        setAuditTrail(prev => prev.map(entry => auditIds.has(entry.id) ? { ...entry, replayable: false } : entry));
       }
+      return true;
     } catch (e: unknown) {
-      if (request !== graphRequestRef.current) return;
+      if (request !== graphRequestRef.current) return false;
       const message = formatApiError(e);
       setErr(message || "Failed to load graph");
       setGraph(null);
       setBaseGraph(null);
+      return false;
     } finally {
       if (request === graphRequestRef.current) setLoading(false);
     }
-  }, [archiveAllAuditEntries, fetchGraph, normalizedNamespace, pkg, root, setStartEmpty, startEmpty, workspaceBranch]);
+  }, [auditTrail, fetchGraph, invalidateGraphRequests, normalizePackageName, normalizedNamespace, pkg, root, setStartEmpty, startEmpty, syncWorkspaceFromResponse, workspaceBranch]);
+
+  const latestLoadGraph = useRef(loadGraph);
+  useEffect(() => { latestLoadGraph.current = loadGraph; }, [loadGraph]);
 
   const resetEmptyCanvas = useCallback(async () => {
 
     const targetPkg = scratchPackage;
     invalidateGraphRequests();
-    const request = graphRequestRef.current;
+    const epoch = canvasEpochRef.current;
+    // Capture only entries this deletion covers; later edits must retain their history.
+    const archivedIds = new Set(auditTrail.filter(entry =>
+      normalizePackageName(entry.package || graph?.package || pkg) === normalizePackageName(targetPkg)
+    ).map(entry => entry.id));
     try {
       setCanvasStatus("Resetting canvas…");
       setErr(null);
       await api.delete("/schema/edits", { params: { package: targetPkg } });
-      archiveAuditTrail();
-      if (request !== graphRequestRef.current) return;
+      setAuditTrail(prev => prev.map(entry => archivedIds.has(entry.id) ? { ...entry, replayable: false } : entry));
+      if (epoch !== canvasEpochRef.current) return;
       setGraph(null);
       setBaseGraph(null);
       setSelected(null);
       setSelectedClassId(null);
       setSelectedQuantityId(null);
-      const reload = loadGraph({ pkg: targetPkg, root: "", namespace: normalizedNamespace, branch: workspaceBranch, forceEmpty: true, expand: [] });
+      const reload = latestLoadGraph.current({ pkg: targetPkg, root: "", namespace: normalizedNamespace, branch: workspaceBranch, forceEmpty: true, expand: [], keepView: true });
+      setCanvasKey(key => key + 1);
       const reloadRequest = graphRequestRef.current;
-      await reload;
-      if (reloadRequest === graphRequestRef.current) setCanvasStatus("Canvas reset to empty.");
+      const loaded = await reload;
+      if (epoch === canvasEpochRef.current && reloadRequest === graphRequestRef.current) {
+        const status = loaded ? "Canvas reset to empty." : "Reset failed: edits were cleared, but the canvas could not be reloaded.";
+        setCanvasStatus(status);
+        if (!loaded) setErr(status);
+      }
     } catch (e: unknown) {
-      if (request !== graphRequestRef.current) return;
+      if (epoch !== canvasEpochRef.current) return;
       setCanvasStatus(`Reset failed: ${formatApiError(e)}`);
     }
-  }, [api, archiveAuditTrail, invalidateGraphRequests, loadGraph, normalizedNamespace, scratchPackage, setSelected, workspaceBranch]);
+  }, [api, auditTrail, graph?.package, invalidateGraphRequests, normalizePackageName, normalizedNamespace, pkg, scratchPackage, setSelected, workspaceBranch]);
 
 
   const applySchemaProfile = useCallback(async (profileKey: string) => {
@@ -1107,8 +1116,8 @@ export default function App() {
     const targetPackage = graph?.package || pkg;
     // A save supersedes older graph requests, but must respect subsequent navigation.
     const expand = expandIntentRef.current;
-    invalidateGraphRequests();
-    const request = graphRequestRef.current;
+    const epoch = canvasEpochRef.current;
+    const request = ++graphRequestRef.current;
     const res = await api.post(
       "/schema/edits",
       { package: targetPackage, edits },
@@ -1127,16 +1136,23 @@ export default function App() {
       }
     );
     const updated = ensureGraphResponse(res.data);
-    if (request !== graphRequestRef.current) return updated;
-    syncWorkspaceFromResponse(res.data);
-    // A root the edits renamed follows its class; a removed one leaves the whole module.
+    if (epoch !== canvasEpochRef.current) return updated;
+    // A renamed root follows its class even when the graph needs reconciliation.
     if ((updated.root ?? "") !== (root ?? "")) setRoot(updated.root ?? "");
+    if (request !== graphRequestRef.current) {
+      // A refresh may have read before persistence. Re-read after the mutation,
+      // retaining the user's latest expansion/filter choices in this canvas.
+      void latestLoadGraph.current({ keepView: true, root: updated.root ?? "", expand: expandIntentRef.current });
+      return updated;
+    }
+    syncWorkspaceFromResponse(res.data);
     const merged = replayGraphWithAudit(updated);
     expandedRef.current = expand;
     expandIntentRef.current = expand;
     setExpandedClasses(expand);
     setBaseGraph(updated);
     setGraph(merged);
+    setLoading(false);
     return updated;
   };
 
@@ -1153,6 +1169,9 @@ export default function App() {
       throw new Error(message);
     }
 
+    const uiIsCurrent = beginEditUiOperation();
+    const epoch = canvasEpochRef.current;
+    const creation = ++quantityCreationRef.current;
     setCreatingQuantityFor(classId);
     setQuantityActionErr(null);
     try {
@@ -1212,14 +1231,14 @@ export default function App() {
         editIdsOf(updated),
         updated.package
       );
-      setSelectedClassId(classId);
-      setSelectedQuantityId(addedId);
+      if (uiIsCurrent()) setSelectedClassId(classId);
+      if (uiIsCurrent()) setSelectedQuantityId(addedId);
     } catch (e: unknown) {
       const message = formatApiError(e);
-      setQuantityActionErr(message);
+      if (uiIsCurrent()) setQuantityActionErr(message);
       throw new Error(message);
     } finally {
-      setCreatingQuantityFor(null);
+      if (epoch === canvasEpochRef.current && creation === quantityCreationRef.current) setCreatingQuantityFor(null);
     }
   };
 
@@ -1229,6 +1248,9 @@ export default function App() {
       throw new Error(addBlockedReason || "Canvas is not editable");
     }
 
+    const uiIsCurrent = beginEditUiOperation();
+    const epoch = canvasEpochRef.current;
+    const creation = ++classCreationRef.current;
     setCreatingClass(true);
     setQuantityActionErr(null);
     try {
@@ -1283,14 +1305,14 @@ export default function App() {
         editIdsOf(next),
         next.package
       );
-      setSelectedClassId(newCls.id);
-      setSelectedQuantityId(null);
+      if (uiIsCurrent()) setSelectedClassId(newCls.id);
+      if (uiIsCurrent()) setSelectedQuantityId(null);
     } catch (e: unknown) {
       const message = formatApiError(e);
-      setQuantityActionErr(message);
+      if (uiIsCurrent()) setQuantityActionErr(message);
       throw new Error(message);
     } finally {
-      setCreatingClass(false);
+      if (epoch === canvasEpochRef.current && creation === classCreationRef.current) setCreatingClass(false);
     }
   };
 
@@ -1448,6 +1470,7 @@ export default function App() {
           branch: workspaceBranch ?? "", empty: startEmpty, expand: next,
         });
         if (request !== graphRequestRef.current) return;
+        syncWorkspaceFromResponse(parsed);
         expandedRef.current = next;
         setExpandedClasses(next);
         setBaseGraph(parsed);
@@ -1458,7 +1481,7 @@ export default function App() {
         setErr(formatApiError(e) || "Failed to load graph");
       }
     },
-    [fetchGraph, graph?.package, loading, normalizedNamespace, pkg, replayGraphWithAudit, root, startEmpty, workspaceBranch]
+    [fetchGraph, graph?.package, loading, normalizedNamespace, pkg, replayGraphWithAudit, root, startEmpty, syncWorkspaceFromResponse, workspaceBranch]
   );
 
   const rebuildGraphWithAudit = useCallback(
@@ -1485,18 +1508,18 @@ export default function App() {
     const entry = auditTrail.find((a) => a.id === id);
     if (!entry || !entry.change) return;
     setQuantityActionErr(null);
-    const request = graphRequestRef.current;
+    const epoch = canvasEpochRef.current;
 
     if (entry.editIds?.length) {
       try {
         await deleteStoredEdits(entry.editIds);
       } catch (e: unknown) {
         // Nothing was deleted; the entry stays so the undo can be tried again.
-        setQuantityActionErr(`Undo failed: ${formatApiError(e)}`);
+        if (epoch === canvasEpochRef.current) setQuantityActionErr(`Undo failed: ${formatApiError(e)}`);
         return;
       }
       setAuditTrail(prev => prev.filter(item => item.id !== id && item.change));
-      if (request === graphRequestRef.current) await loadGraph({ keepView: true });
+      if (epoch === canvasEpochRef.current) await latestLoadGraph.current({ keepView: true });
       return;
     }
 
@@ -1511,17 +1534,17 @@ export default function App() {
     const hasLocalAudit = auditEntriesForCurrentPackage.length > 0;
     const hasPersistedEdits = (graph?.applied_edits?.length ?? 0) > 0 || (graph?.edit_conflicts?.length ?? 0) > 0;
     if (!hasLocalAudit && !hasPersistedEdits) return;
-    const request = graphRequestRef.current;
+    const epoch = canvasEpochRef.current;
     const ids = auditEntriesForCurrentPackage.flatMap((entry) => entry.editIds ?? []);
     setQuantityActionErr(null);
     try {
       await deleteStoredEdits(ids, targetPackage);
     } catch (e: unknown) {
-      setQuantityActionErr(`Clear failed: ${formatApiError(e)}`);
+      if (epoch === canvasEpochRef.current) setQuantityActionErr(`Clear failed: ${formatApiError(e)}`);
       return;
     }
     setAuditTrail((prev) => prev.filter((entry) => !auditEntriesForCurrentPackage.includes(entry)));
-    if (request === graphRequestRef.current) await loadGraph({ keepView: true });
+    if (epoch === canvasEpochRef.current) await latestLoadGraph.current({ keepView: true });
   };
 
   useEffect(() => {
@@ -1758,6 +1781,7 @@ export default function App() {
       doc: updates.docstring,
     };
 
+    const uiIsCurrent = beginEditUiOperation();
     let updated: ApiGraph;
     try {
       updated = await submitEdits([
@@ -1765,11 +1789,11 @@ export default function App() {
       ]);
     } catch (e: unknown) {
       const message = formatApiError(e);
-      setQuantityActionErr(message);
+      if (uiIsCurrent()) setQuantityActionErr(message);
       throw new Error(message);
     }
 
-    setQuantityActionErr(null);
+    if (uiIsCurrent()) setQuantityActionErr(null);
     appendAudit(
       { type: "edit-class", before, after },
       `Edited class ${before.name} docstring`,
@@ -1778,7 +1802,7 @@ export default function App() {
     );
 
     if (selected?.kind === "class" && selected.id === classId) {
-      setSelected({
+      if (uiIsCurrent()) setSelected({
         ...selected,
         doc: updates.docstring || "",
       });
@@ -1789,13 +1813,14 @@ export default function App() {
     if (!ensureEditableReady()) throw new Error(addBlockedReason || "Enable editing first.");
     const before = umlState?.classes.find(c => c.id === classId);
     if (!before) throw new Error("Class not found.");
+    const uiIsCurrent = beginEditUiOperation();
     const updated = await submitEdits([{ op: "rename_class", target: classId, payload: { new_name: name } }]);
     const newId = before.module ? `${before.module}.${name}` : name;
     const after = buildUmlStateFromGraph(updated)?.classes.find(c => c.id === newId);
     if (after) appendAudit({ type: "edit-class", before, after }, `Renamed class ${before.name} to ${name}`, editIdsOf(updated), updated.package);
-    setSelectedClassId(newId);
-    setSelectedQuantityId(null);
-    setQuantityActionErr(null);
+    if (uiIsCurrent()) setSelectedClassId(newId);
+    if (uiIsCurrent()) setSelectedQuantityId(null);
+    if (uiIsCurrent()) setQuantityActionErr(null);
     return newId;
   };
 
@@ -1886,14 +1911,15 @@ export default function App() {
       return true;
     }
 
+    const uiIsCurrent = beginEditUiOperation();
     let updated: ApiGraph;
     try {
       updated = await submitEdits(edits);
     } catch (e: unknown) {
-      setQuantityActionErr(formatApiError(e));
+      if (uiIsCurrent()) setQuantityActionErr(formatApiError(e));
       return false;
     }
-    setQuantityActionErr(null);
+    if (uiIsCurrent()) setQuantityActionErr(null);
     const newId = `${owner}.${target.dtype === VOCAB_TERM ? target.label : trimmedName}`;
     const before = quantitySnapshot(target);
     const afterNode = updated.nodes.find((n) => n.id === newId);
@@ -1906,7 +1932,7 @@ export default function App() {
     );
 
     if (selected?.kind === "quantity" && selected.id === quantityId) {
-      setSelectedQuantityId(newId);
+      if (uiIsCurrent()) setSelectedQuantityId(newId);
     }
     return true;
   };
@@ -1927,14 +1953,15 @@ export default function App() {
     } else {
       edit = { op: "remove_attribute", target: target.owner, payload: { attribute: target.label } };
     }
+    const uiIsCurrent = beginEditUiOperation();
     let updated: ApiGraph;
     try {
       updated = await submitEdits([edit]);
     } catch (e: unknown) {
-      setQuantityActionErr(formatApiError(e));
+      if (uiIsCurrent()) setQuantityActionErr(formatApiError(e));
       return;
     }
-    setQuantityActionErr(null);
+    if (uiIsCurrent()) setQuantityActionErr(null);
     const removed = quantitySnapshot(target);
     appendAudit(
       { type: "remove-quantity", classId: target.owner, quantity: removed },
@@ -1944,7 +1971,7 @@ export default function App() {
     );
 
     if (selected?.kind === "quantity" && selected.id === quantityId) {
-      setSelectedQuantityId(null);
+      if (uiIsCurrent()) setSelectedQuantityId(null);
     }
   };
 
@@ -2047,7 +2074,7 @@ export default function App() {
         if (request !== graphRequestRef.current) return;
         const raw = JSON.parse(String(reader.result ?? "{}"));
         const candidate = extractGraphCandidate(raw);
-        const nextGraph = ensureGraphResponse({
+        const nextGraph = ensureImportedGraph({
           ...candidate,
           package: typeof candidate.package === "string" ? candidate.package : pkg,
         });

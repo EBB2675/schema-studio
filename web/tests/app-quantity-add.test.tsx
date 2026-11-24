@@ -64,8 +64,18 @@ vi.mock('../src/client', () => {
 vi.mock('../src/FlowGraphView', () => {
   return {
     __esModule: true,
-    default: ({ onCreateQuantity }: { onCreateQuantity?: (classId: string, data: { quantityName: string; dtype: string; docstring: string }) => Promise<void> | void }) => (
+    default: ({ onCreateQuantity, onToggleSubclasses, nodes, selectedClassId, creatingQuantityFor }: {
+      onCreateQuantity?: (classId: string, data: { quantityName: string; dtype: string; docstring: string }) => Promise<void> | void;
+      onToggleSubclasses?: (id: string) => Promise<void> | void;
+      nodes: { id: string }[];
+      selectedClassId?: string | null;
+      creatingQuantityFor?: string | null;
+    }) => (
       <div>
+        <div data-testid="visible-nodes">{nodes.map(node => node.id).join(',')}</div>
+        <div data-testid="selected-class">{selectedClassId}</div>
+        <div data-testid="quantity-progress">{creatingQuantityFor}</div>
+        <button onClick={() => void onToggleSubclasses?.(classId)}>Toggle subclasses</button>
         <button
           type="button"
           onClick={() => {
@@ -298,6 +308,84 @@ describe('App editable quantity add flow', () => {
     expect(JSON.parse(window.localStorage.getItem('schema-uml-audit') ?? '[]')).toEqual(
       expect.arrayContaining([expect.objectContaining({ editIds: ['7'] })])
     );
+  });
+
+  it.each([true, false])('reconciles a save overlapping a subclass read (read finishes first: %s)', async readFirst => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    let save!: (value: unknown) => void;
+    mockPost.mockReset().mockImplementation(() => new Promise(resolve => { save = resolve; }));
+    const reads: Array<(value: unknown) => void> = [];
+    const originalGet = mockGet.getMockImplementation()!;
+    mockGet.mockImplementation((url, options) => url === '/schema'
+      ? new Promise(resolve => reads.push(resolve)) : originalGet(url, options));
+    await user.click(screen.getByRole('button', { name: 'Trigger quantity add' }));
+    await user.click(screen.getByRole('button', { name: 'Toggle subclasses' }));
+    if (readFirst) await act(async () => reads[0]({ data: baseGraph }));
+    await act(async () => { save({ data: graphWithQuantity }); });
+    expect(reads).toHaveLength(2);
+    const calls = mockGet.mock.calls.filter(([url]) => url === '/schema');
+    expect(calls.at(-1)?.[1]?.params.expand).toBe(classId);
+    await act(async () => reads[1]({ data: graphWithQuantity }));
+    if (!readFirst) await act(async () => reads[0]({ data: baseGraph }));
+    expect(screen.getByTestId('visible-nodes')).toHaveTextContent(`${classId}.new_qty`);
+  });
+
+  it.each([true, false])('old edit completion leaves a newer canvas operation alone (success: %s)', async success => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    const saves: Array<{ resolve: (value: unknown) => void; reject: (error: unknown) => void }> = [];
+    mockPost.mockReset().mockImplementation(() => new Promise((resolve, reject) => saves.push({ resolve, reject })));
+    await user.click(screen.getByRole('button', { name: 'Trigger quantity add' }));
+    await user.click(screen.getByRole('button', { name: 'Back to home' }));
+    await user.click(screen.getByRole('button', { name: /Start from empty canvas/ }));
+    await user.click(screen.getByRole('button', { name: 'Trigger quantity add' }));
+    await act(async () => success ? saves[0].resolve({ data: graphWithQuantity }) : saves[0].reject(new Error('old error')));
+    expect(screen.getByTestId('quantity-progress')).toHaveTextContent(classId);
+    expect(screen.getByTestId('selected-class')).toBeEmptyDOMElement();
+    expect(screen.queryByText('old error')).not.toBeInTheDocument();
+    await act(async () => saves[1].resolve({ data: graphWithQuantity }));
+    expect(screen.getByTestId('quantity-progress')).toBeEmptyDOMElement();
+  });
+
+  it('a delayed reset preserves audit entries added after it started', async () => {
+    const user = userEvent.setup();
+    await addOneQuantity(user);
+    let finish!: () => void;
+    mockDelete.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+    await user.click(screen.getByRole('button', { name: 'Reset canvas' }));
+    await user.click(screen.getByRole('button', { name: 'Back to home' }));
+    await user.click(screen.getByRole('button', { name: /Start from empty canvas/ }));
+    mockPost.mockReset().mockResolvedValue({ data: { ...graphWithQuantity, persisted_edits: [{ ...graphWithQuantity.persisted_edits[0], id: '8' }] } });
+    await user.click(screen.getByRole('button', { name: 'Trigger quantity add' }));
+    await act(async () => finish());
+    const audit = JSON.parse(window.localStorage.getItem('schema-uml-audit') ?? '[]');
+    expect(audit).toEqual(expect.arrayContaining([expect.objectContaining({ editIds: ['8'], replayable: true })]));
+  });
+
+  it.each(['undo', 'clear'])('reconciles %s after an overlapping subclass read', async action => {
+    const user = userEvent.setup();
+    await addOneQuantity(user);
+    let remove!: () => void;
+    mockDelete.mockImplementation(() => new Promise<void>(resolve => { remove = resolve; }));
+    const reads: Array<(value: unknown) => void> = [];
+    const originalGet = mockGet.getMockImplementation()!;
+    mockGet.mockImplementation((url, options) => url === '/schema'
+      ? new Promise(resolve => reads.push(resolve)) : originalGet(url, options));
+    if (action === 'undo') await user.click(screen.getByRole('button', { name: 'Undo' }));
+    else {
+      await user.click(screen.getByLabelText('History actions'));
+      await user.click(screen.getByRole('button', { name: /^Clear$/ }));
+    }
+    await user.click(screen.getByRole('button', { name: 'Toggle subclasses' }));
+    await act(async () => remove());
+    expect(reads).toHaveLength(2);
+    await act(async () => reads[1]({ data: baseGraph }));
+    await act(async () => reads[0]({ data: graphWithQuantity }));
+    expect(screen.getByTestId('visible-nodes')).not.toHaveTextContent(`${classId}.new_qty`);
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
   });
 
 });
