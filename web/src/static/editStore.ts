@@ -38,6 +38,8 @@ export interface EditTransaction {
 }
 
 export interface EditStore {
+  hasUnsavedChanges(): boolean;
+  subscribe(listener: () => void): () => void;
   list: EditTransaction["list"];
   exportLog: EditTransaction["exportLog"];
   transaction<T>(operation: (edits: EditTransaction) => T | Promise<T>): Promise<T>;
@@ -65,11 +67,21 @@ function isEdit(value: unknown): value is StoredEdit {
     && typeof edit.target === "string" && typeof edit.payload === "object" && edit.payload !== null;
 }
 
-export function createEditStore(storage: Storage | null = typeof window === "undefined" ? null : window.localStorage): EditStore {
+export function browserStorage(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+export function createEditStore(storage: Storage | null = browserStorage()): EditStore {
   let memory: Saved = { nextId: 1, edits: [] };
+  let unsaved = false;
+  const listeners = new Set<() => void>();
 
   const read = (): Saved => {
-    if (!storage) return memory;
+    if (unsaved || !storage) return memory;
     try {
       const raw = storage.getItem(EDITS_STORAGE_KEY);
       if (!raw) return memory;
@@ -83,11 +95,18 @@ export function createEditStore(storage: Storage | null = typeof window === "und
 
   const write = (saved: Saved) => {
     memory = saved;
-    if (!storage) return;
+    let persisted = false;
     try {
-      storage.setItem(EDITS_STORAGE_KEY, JSON.stringify(saved));
+      if (storage) {
+        storage.setItem(EDITS_STORAGE_KEY, JSON.stringify(saved));
+        persisted = true;
+      }
     } catch {
-      // storage full or blocked: the edits stay for this page only
+      // Keep memory authoritative until the entire current log is saved.
+    }
+    if (unsaved !== !persisted) {
+      unsaved = !persisted;
+      listeners.forEach(listener => listener());
     }
   };
 
@@ -140,6 +159,11 @@ export function createEditStore(storage: Storage | null = typeof window === "und
   // through asynchronous validation and the final write. Do not nest transactions.
   const transaction: EditStore["transaction"] = operation => serialize(() => operation(access));
   return {
+    hasUnsavedChanges: () => unsaved,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
     list: access.list,
     exportLog: access.exportLog,
     transaction,
