@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createStaticBackend, type SiteIndex } from "../src/static/backend";
 import { createEditStore, EDITS_STORAGE_KEY } from "../src/static/editStore";
@@ -71,7 +71,95 @@ function setup() {
   return { backend, readJson, runCore };
 }
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+const EDIT_BODY = { package: "ns.pkg.a", edits: [{ op: "add_class", payload: { name: "Added" } }] };
+
+function pauseNextSave(runCore: ReturnType<typeof setup>["runCore"]) {
+  const entered = deferred();
+  const release = deferred();
+  const implementation = runCore.getMockImplementation()!;
+  runCore.mockImplementationOnce(async request => {
+    entered.resolve();
+    await release.promise;
+    return implementation(request);
+  });
+  return { entered: entered.promise, release: release.resolve };
+}
+
+afterEach(() => vi.unstubAllGlobals());
+
 describe("static backend", () => {
+  it.each([false, true])("serializes overlapping saves and Undo (Web Locks: %s)", async useLocks => {
+    const { backend, runCore, readJson } = setup();
+    let lockQueue = Promise.resolve<unknown>(undefined);
+    const requestLock = vi.fn((_name: string, _options: unknown, callback: () => unknown) => {
+      const result = lockQueue.then(callback);
+      lockQueue = result.catch(() => undefined);
+      return result;
+    });
+    vi.stubGlobal("navigator", { locks: useLocks ? { request: requestLock } : undefined });
+    // Separate stores model two clients sharing persisted state.
+    const other = createStaticBackend({ readJson, runCore, storage: window.localStorage });
+    const pause = pauseNextSave(runCore);
+    const first = backend.request("POST", "/schema/edits", {}, EDIT_BODY);
+    await pause.entered;
+    const second = other.request("POST", "/schema/edits", {}, EDIT_BODY);
+    await other.request("GET", "/health");
+    expect(runCore).toHaveBeenCalledTimes(1);
+    pause.release();
+    await Promise.all([first, second]);
+    expect(runCore.mock.calls[1][0]).toMatchObject({ ids: [2], stored: [expect.objectContaining({ id: 1 })] });
+    expect(backend.edits.list("nomad-simulations").map(edit => edit.id)).toEqual([1, 2]);
+    await backend.request("DELETE", "/schema/edits/1");
+    expect(backend.edits.list("nomad-simulations").map(edit => edit.id)).toEqual([2]);
+    if (useLocks) expect(requestLock).toHaveBeenCalledWith(EDITS_STORAGE_KEY, { mode: "exclusive" }, expect.any(Function));
+  });
+
+  it.each(["single", "bulk", "clear"])("queues %s deletion behind an in-flight save", async kind => {
+    const { backend, runCore } = setup();
+    const pause = pauseNextSave(runCore);
+    const save = backend.request("POST", "/schema/edits", {}, EDIT_BODY);
+    await pause.entered;
+    const deletion = kind === "single"
+      ? backend.request("DELETE", "/schema/edits/1")
+      : backend.request("DELETE", "/schema/edits", kind === "clear" ? { package: "ns.pkg.a" } : {}, { ids: kind === "bulk" ? [1] : [] });
+    await backend.request("GET", "/health");
+    pause.release();
+    await save;
+    expect((await deletion).data).toMatchObject({ deleted: 1 });
+    expect(backend.edits.list("nomad-simulations")).toEqual([]);
+  });
+
+  it("queues imported edits behind validation and gives them fresh IDs", async () => {
+    const { backend, runCore } = setup();
+    const pause = pauseNextSave(runCore);
+    const save = backend.request("POST", "/schema/edits", {}, EDIT_BODY);
+    await pause.entered;
+    const imported = backend.edits.importLog({ format: "schema-studio-edits", edits: [{
+      id: 1, profile: "nomad-simulations", package: "ns.pkg.a", op: "add_class", target: "", payload: { name: "Imported" },
+    }] });
+    pause.release();
+    await save;
+    expect(await imported).toBe(1);
+    expect(backend.edits.list("nomad-simulations").map(edit => edit.id)).toEqual([1, 2]);
+  });
+
+  it("continues queued saves after failed validation without persisting the failed edit", async () => {
+    const { backend, runCore } = setup();
+    runCore.mockResolvedValueOnce({ error: "Invalid edit", status: 400 });
+    const failed = backend.request("POST", "/schema/edits", {}, EDIT_BODY);
+    const next = backend.request("POST", "/schema/edits", {}, EDIT_BODY);
+    await expect(failed).rejects.toMatchObject({ status: 400 });
+    await next;
+    expect(backend.edits.list("nomad-simulations").map(edit => edit.id)).toEqual([1]);
+    expect(runCore.mock.calls[1][0]).toMatchObject({ ids: [1], stored: [] });
+  });
+
   it("serves the ready-made graph without the Python core while there are no edits", async () => {
     const { backend, runCore } = setup();
     const answer = await backend.request("GET", "/schema", { package: "ns.pkg.a", root: "Root", base_namespace: "ns.pkg" });
@@ -132,17 +220,17 @@ describe("static backend", () => {
 });
 
 describe("edit store", () => {
-  it("downloads and loads the edit log, giving loaded edits new ids", () => {
+  it("downloads and loads the edit log, giving loaded edits new ids", async () => {
     window.localStorage.clear();
     const store = createEditStore(window.localStorage);
-    store.add([{ id: 1, profile: "p", package: "m", commit: null, op: "add_class", target: "", payload: { name: "A" }, created_at: null }]);
+    await store.add([{ id: 1, profile: "p", package: "m", commit: null, op: "add_class", target: "", payload: { name: "A" }, created_at: null }]);
     const log = store.exportLog();
     expect(log.format).toBe("schema-studio-edits");
 
     const other = createEditStore(null);
-    other.add([{ id: 1, profile: "p", package: "m", commit: null, op: "add_class", target: "", payload: { name: "B" }, created_at: null }]);
-    expect(other.importLog(JSON.parse(JSON.stringify(log)))).toBe(1);
+    await other.add([{ id: 1, profile: "p", package: "m", commit: null, op: "add_class", target: "", payload: { name: "B" }, created_at: null }]);
+    expect(await other.importLog(JSON.parse(JSON.stringify(log)))).toBe(1);
     expect(other.list("p").map(edit => [edit.id, edit.payload.name])).toEqual([[1, "B"], [2, "A"]]);
-    expect(() => other.importLog({ edits: [] })).toThrow(/not a Schema Studio edit log/);
+    await expect(other.importLog({ edits: [] })).rejects.toThrow(/not a Schema Studio edit log/);
   });
 });
