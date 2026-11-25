@@ -2,7 +2,7 @@
  * Runs the app's Python core (`api/sources/core.py` and the modules it uses) in Pyodide.
  *
  * The Python files are bundled as text from `api/sources/`, so the static site
- * runs the same code as the server. Used by the web worker, and directly by
+ * runs the same portable core as the snapshot pipeline. Used by the web worker, and directly by
  * the tests (Pyodide in Node).
  */
 import browserSource from "../../../api/sources/browser.py?raw";

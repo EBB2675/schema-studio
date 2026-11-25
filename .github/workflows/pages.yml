@@ -22,7 +22,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
   build:
+    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -63,9 +69,6 @@ jobs:
       - name: Install the frontend
         run: npm --prefix web ci
 
-      - name: Test the frontend
-        run: npm --prefix web run test:run
-
       - name: Build the static frontend
         run: npm --prefix web run build:pages
 
@@ -73,6 +76,24 @@ jobs:
         env:
           SCHEMA_STUDIO_HOME: ${{ runner.temp }}/schema-studio-home
         run: .venv/bin/python scripts/build_snapshots.py --out web/dist/data --graphs
+
+      - name: Install Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke-test the full deployment artifact
+        run: npm --prefix web run test:smoke
+
+      - name: Upload browser failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-pages
+          path: |
+            web/playwright-report/
+            web/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Report the site size
         run: |

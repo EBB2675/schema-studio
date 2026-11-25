@@ -16,3 +16,8 @@ export const fqidFromParts = (module: string | null | undefined, name: string | 
   if (mod && base) return `${mod}.${base}`;
   return base;
 };
+
+/** Canonical package comparison shared by workspace selection and local history. */
+export function normalizePackageName(value?: string | null): string {
+  return value ? normalizeModule(value) || value : "";
+}

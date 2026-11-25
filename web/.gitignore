@@ -26,3 +26,6 @@ dist-ssr
 
 /public/data/
 /public/pyodide/
+
+/playwright-report/
+/test-results/

@@ -119,18 +119,19 @@ describe('App editable quantity add flow', () => {
     mockPost.mockReset();
     mockPut.mockReset();
     mockDelete.mockReset();
-    mockPut.mockResolvedValue({
+    mockPut.mockImplementation(async (_url, updates) => ({
       data: {
-        workspace: { branch: 'main', package: 'pkg', base_namespace: 'pkg' },
+        workspace: { branch: 'main', package: 'pkg', base_namespace: 'pkg', ...updates },
       },
-    });
+    }));
 
     // Ensure deterministic workspace + scratch package.
+    useWorkspaceStore.getState().setBranch('main');
     useWorkspaceStore.getState().setPkg('pkg');
     useWorkspaceStore.getState().setBaseNamespace('pkg');
     useWorkspaceStore.getState().setStartEmpty(true);
 
-    // Prime localStorage with a token so App skips login form; no audit trail from earlier tests.
+    // No audit trail from earlier tests.
     window.localStorage.removeItem('schema-uml-audit');
 
     if (!('ResizeObserver' in window)) {
@@ -192,6 +193,7 @@ describe('App editable quantity add flow', () => {
 
     // Build an empty canvas graph.
     await user.click(await screen.findByRole('button', { name: /\+ Start from empty canvas/i }));
+    await waitFor(() => expect(screen.getByTestId('visible-nodes')).toHaveTextContent(classId));
 
     // Editing is available without a mode switch.
     expect(screen.queryByRole('button', { name: /^UML$/i })).not.toBeInTheDocument();
@@ -228,6 +230,7 @@ describe('App editable quantity add flow', () => {
   const addOneQuantity = async (user: ReturnType<typeof userEvent.setup>) => {
     render(<App />);
     await user.click(await screen.findByRole('button', { name: /\+ Start from empty canvas/i }));
+    await waitFor(() => expect(screen.getByTestId('visible-nodes')).toHaveTextContent(classId));
     expect(screen.queryByRole('button', { name: /^UML$/i })).not.toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: /^Trigger quantity add$/i }));
     // The audit trail starts closed; open it to reach its undo and clear buttons.
@@ -303,6 +306,7 @@ describe('App editable quantity add flow', () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    await waitFor(() => expect(screen.getByTestId('visible-nodes')).toHaveTextContent(classId));
     await user.click(await screen.findByRole('button', { name: 'Trigger quantity add' }));
     await user.click(screen.getByRole('button', { name: 'Back to home' }));
     await act(async () => finish({ data: graphWithQuantity }));
@@ -316,6 +320,7 @@ describe('App editable quantity add flow', () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    await waitFor(() => expect(screen.getByTestId('visible-nodes')).toHaveTextContent(classId));
     if (imported) {
       const input = document.querySelector<HTMLInputElement>('input[type="file"][accept="application/json"]')!;
       fireEvent.change(input, { target: { files: [new File([JSON.stringify(baseGraph)], 'graph.json', { type: 'application/json' })] } });
@@ -343,11 +348,13 @@ describe('App editable quantity add flow', () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    await waitFor(() => expect(screen.getByTestId('visible-nodes')).toHaveTextContent(classId));
     const saves: Array<{ resolve: (value: unknown) => void; reject: (error: unknown) => void }> = [];
     mockPost.mockReset().mockImplementation(() => new Promise((resolve, reject) => saves.push({ resolve, reject })));
     await user.click(screen.getByRole('button', { name: 'Trigger quantity add' }));
     await user.click(screen.getByRole('button', { name: 'Back to home' }));
     await user.click(screen.getByRole('button', { name: /Start from empty canvas/ }));
+    await waitFor(() => expect(screen.getByTestId('visible-nodes')).toHaveTextContent(classId));
     await user.click(screen.getByRole('button', { name: 'Trigger quantity add' }));
     await act(async () => success ? saves[0].resolve({ data: graphWithQuantity }) : saves[0].reject(new Error('old error')));
     expect(screen.getByTestId('quantity-progress')).toHaveTextContent(classId);
@@ -365,6 +372,7 @@ describe('App editable quantity add flow', () => {
     await user.click(screen.getByRole('button', { name: 'Reset canvas' }));
     await user.click(screen.getByRole('button', { name: 'Back to home' }));
     await user.click(screen.getByRole('button', { name: /Start from empty canvas/ }));
+    await waitFor(() => expect(screen.getByTestId('visible-nodes')).toHaveTextContent(classId));
     mockPost.mockReset().mockResolvedValue({ data: { ...graphWithQuantity, persisted_edits: [{ ...graphWithQuantity.persisted_edits[0], id: '8' }] } });
     await user.click(screen.getByRole('button', { name: 'Trigger quantity add' }));
     await act(async () => finish());
@@ -399,6 +407,7 @@ describe('App editable quantity add flow', () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    await waitFor(() => expect(screen.getByTestId('visible-nodes')).toHaveTextContent(classId));
     const reads: Array<(value: unknown) => void> = [];
     const originalGet = mockGet.getMockImplementation()!;
     mockGet.mockImplementation((url, options) => url === '/schema'
@@ -422,6 +431,7 @@ describe('App editable quantity add flow', () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    await waitFor(() => expect(screen.getByTestId('visible-nodes')).toHaveTextContent(classId));
     let resolveSave!: (value: unknown) => void;
     let rejectSave!: (error: unknown) => void;
     mockPost.mockReset().mockImplementation(() => new Promise((resolve, reject) => { resolveSave = resolve; rejectSave = reject; }));
@@ -444,6 +454,7 @@ describe('App editable quantity add flow', () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    await waitFor(() => expect(screen.getByTestId('visible-nodes')).toHaveTextContent(classId));
     const saves: Array<(value: unknown) => void> = [];
     mockPost.mockReset().mockImplementation(() => new Promise(resolve => saves.push(resolve)));
     await user.click(screen.getByRole('button', { name: 'Trigger quantity add' }));

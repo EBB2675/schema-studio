@@ -1,4 +1,8 @@
-import { getBrowserEditStore, LEGACY_EDIT_GENERATION } from "./static/editStore";
+import { useWorkspaceNavigation } from "./hooks/useWorkspaceNavigation";
+import { useGraphNavigation } from "./hooks/useGraphNavigation";
+import { applyForwardChange } from "./utils/auditReplay";
+import { useAuditTrail } from "./hooks/useAuditTrail";
+import { getBrowserEditStore } from "./static/editStore";
 import { readPreference, writePreference } from "./utils/browserStorage";
 import type { ChangeEvent, SyntheticEvent } from "react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -10,12 +14,9 @@ import DocPanel from "./components/DocPanel";
 import OverviewGrid from "./components/OverviewGrid";
 import UnderTheHoodPanel from "./components/UnderTheHoodPanel";
 import {
-  NOMAD_EDIT_RULES,
   VOCAB_TERM,
   dtypeNameFor,
-  parseEditRules,
   subsectionName,
-  type EditRules,
   type QuantityFormData,
 } from "./components/quantityShared";
 import CollapsibleSection from "./components/CollapsibleSection";
@@ -24,20 +25,14 @@ import ActionMenu from "./components/ActionMenu";
 import WorkbenchIcon from "./components/WorkbenchIcon";
 import "./workbench.css";
 import { useSelection } from "./store/selection";
-import { jsPDF } from "jspdf";
 import type { AuditTrailEntry, QuantityNode, UmlClassNode, UmlGraphState } from "./types/uml";
 import {
   ensureGraphResponse,
   ensureImportedGraph,
-  type ApiEdge,
   type ApiGraph,
   type ApiNode
 } from "./types/api";
-import type { WorkspaceState } from "./types/workspace";
-import { createApiClient } from "./client";
-import { DEFAULT_BRANCH, DEFAULT_NAMESPACE, DEFAULT_ROOT, DEFAULT_PACKAGE, WORKSPACE_PRESETS } from "./constants/defaults";
-import { useWorkspaceStore } from "./store/workspace";
-import { fqidFromParts, normalizeId, normalizeLabel, normalizeModule } from "./utils/identifier";
+import { fqidFromParts, normalizeId, normalizeLabel, normalizePackageName } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
 import { buildUmlStateFromGraph } from "./utils/umlState";
 import { initialTheme } from "./utils/theme";
@@ -47,61 +42,19 @@ import { initialLayoutDirection, LAYOUT_DIRECTION_STORAGE_KEY, LAYOUT_DIRECTIONS
 // Loaded on demand when the static site information panel is opened.
 const StaticSitePanel = lazy(() => import("./components/StaticSitePanel"));
 
-type WorkspaceEnvelope = { workspace?: WorkspaceState };
-type CanvasIdentity = { package: string; root: string; namespace: string; branch: string; empty: boolean };
-const sameCanvas = (a: CanvasIdentity | null, b: CanvasIdentity) =>
-  a !== null && a.package === b.package && a.root === b.root &&
-  a.namespace === b.namespace && a.branch === b.branch && a.empty === b.empty;
-
-// Responses carry the workspace the browser backend had when the request was handled.
-// A response that was requested before the user's latest workspace change must
-// not overwrite that change, however late it arrives.
-const WORKSPACE_EPOCH = "__workspaceEpoch";
-type EpochConfig = { workspaceEpoch?: number };
-
-type SchemaProfileSummary = {
-  key: string;
-  label: string;
-  default_branch: string;
-  default_package: string;
-  default_base_namespace: string;
-  default_root: string;
-  available: boolean;
-  current: boolean;
-  version?: string | null;
-  source?: string | null;
-  error?: string | null;
-  linkml_export?: boolean;
-  capabilities?: string[];
-  // Whether the schema can be edited (the LinkML path is on) and with which rules.
-  editable?: boolean;
-  edit_rules?: EditRules;
-  // The schema has no modules in this build (the static site knows it; from the snapshot index).
-  empty?: boolean;
-  // The tracked branch holds a draft of the schema, not a release.
-  draft?: boolean;
-};
-
-// One button per database in the Workspace panel.
-type DatabaseButton = Pick<SchemaProfileSummary, "key" | "label" | "available" | "version" | "source" | "empty" | "draft">
-  & Partial<Pick<SchemaProfileSummary, "default_branch">>;
-
 const EMPTY_DATABASE_NOTE = "not released on the tracked branch yet";
 
 export default function App() {
-
-  const [workspace, setWorkspace] = useState<WorkspaceState | null>({ branch: DEFAULT_BRANCH, package: DEFAULT_PACKAGE, base_namespace: DEFAULT_NAMESPACE });
-
+  const [err, setErr] = useState<string | null>(null);
+  const workspaceNavigation = useWorkspaceNavigation(setErr);
   const {
-    branch: workspaceBranch,
-    pkg,
-    baseNamespace: namespace,
-    startEmpty,
-    setPkg,
-    setStartEmpty,
-    applyWorkspace: applyWorkspaceInStore,
-  } = useWorkspaceStore();
-  const [root, setRoot] = useState<string>(DEFAULT_ROOT);
+    workspace, api, workspaceBranch, pkg, startEmpty, setPkg, setStartEmpty, root, setRoot,
+    normalizedNamespace, namespaceFilters, scratchPackage, wholeModelActive,
+    schemaProfileKey, schemaProfileError, currentSchemaProfile, editRules,
+    schemaSelectionRequired, selectedSchemaReady, databases, selectedDatabaseKey,
+    wholeModelOffered, selectedDatabaseLabel, overviewBranch,
+    syncWorkspaceFromResponse,
+  } = workspaceNavigation;
 
   const [includeQuantities, setIncludeQuantities] = useState<boolean>(true);
   const [includeSubsections, setIncludeSubsections] = useState<boolean>(true);
@@ -111,19 +64,58 @@ export default function App() {
 
   const [crossModules, setCrossModules] = useState<boolean>(true);
 
-  const [graph, setGraph] = useState<ApiGraph | null>(null);
-  const [baseGraph, setBaseGraph] = useState<ApiGraph | null>(null);
-  // Classes whose subclasses the canvas shows; cleared when the module or root changes.
-  const [expandedClasses, setExpandedClasses] = useState<string[]>([]);
+  const [auditTrail, setAuditTrail] = useAuditTrail();
+
+  const [quantityActionErr, setQuantityActionErr] = useState<string | null>(null);
+  const [creatingQuantityFor, setCreatingQuantityFor] = useState<string | null>(null);
+  const [creatingClass, setCreatingClass] = useState<boolean>(false);
+
+  const clearQuantityActionError = useCallback(() => setQuantityActionErr(null), []);
+
+  const filterActiveAuditForPackage = useCallback(
+    (entries: AuditTrailEntry[], targetPackage?: string | null) => {
+      const normalizedTarget = normalizePackageName(targetPackage);
+      return entries.filter(
+        (e) =>
+          e?.change &&
+          e.replayable !== false &&
+          (!e.package || normalizePackageName(e.package) === normalizedTarget)
+      );
+    },
+    []
+  );
+
+  const replayGraphWithAudit = useCallback(
+    (snapshotGraph: ApiGraph, extraChange?: AuditTrailEntry["change"]): ApiGraph => {
+      const targetPackage = normalizePackageName(snapshotGraph.package) || normalizePackageName(pkg);
+      // Stored edits are already in the snapshot graph; only local changes are replayed.
+      const scopedEntries = filterActiveAuditForPackage(auditTrail, targetPackage).filter((a) => !a.editIds?.length);
+      const changes = scopedEntries.map((a) => a.change).filter(Boolean) as AuditTrailEntry["change"][];
+      const allChanges = extraChange ? [...changes, extraChange] : changes;
+      return allChanges.reduce((acc, change) => applyForwardChange(acc, change), snapshotGraph);
+    },
+    [auditTrail, filterActiveAuditForPackage, pkg]
+  );
+
+  const onCanvasContextChange = useCallback(() => {
+    setCreatingQuantityFor(null);
+    setCreatingClass(false);
+  }, []);
+  const {
+    graph, setGraph, baseGraph, setBaseGraph, canvasKey, setCanvasKey, canvasStatus, setCanvasStatus,
+    expandedClasses, canvasSession, invalidateGraphRequests,
+    loadGraph, latestLoadGraph, toggleSubclasses, getExpansionIntent, commitMutationGraph,
+    mode, setMode, overviewQuery, setOverviewQuery, showOverview, openDatabase,
+    handleOverviewClassSelect, showWholeModel, closeCanvas,
+  } = useGraphNavigation({
+    workspace: workspaceNavigation,
+    filters: { includeQuantities, includeSubsections, includeInheritance, crossModules },
+    auditTrail, setAuditTrail, replayGraphWithAudit, setErr,
+    onContextChange: onCanvasContextChange, onLoadStart: clearQuantityActionError,
+  });
   // Built from the graph in the same render, so cards and canvas never disagree.
   const umlState = useMemo<UmlGraphState | null>(() => buildUmlStateFromGraph(graph), [graph]);
-  // Changes when a new graph is shown; the canvas then lays it out and fits it once.
-  const [canvasKey, setCanvasKey] = useState(0);
-  // Only the latest graph request may change what the canvas shows.
-  const graphRequestRef = useRef(0);
-  // Navigation ends an editing context; refreshes only supersede its displayed graph.
-  const canvasEpochRef = useRef(0);
-  const canvasIdentityRef = useRef<CanvasIdentity | null>(null);
+
   const pendingMutationsRef = useRef<Record<string, number>>({});
   const [pendingMutations, setPendingMutations] = useState<Record<string, number>>({});
   const withPendingMutation = useCallback(async <T,>(targetPackage: string, mutate: () => Promise<T>): Promise<T> => {
@@ -145,26 +137,12 @@ export default function App() {
   const quantityCreationRef = useRef(0);
   const classCreationRef = useRef(0);
   const beginEditUiOperation = () => {
-    const epoch = canvasEpochRef.current;
+    const contextIsCurrent = canvasSession.captureContext();
     const operation = ++editUiOperationRef.current;
-    return () => epoch === canvasEpochRef.current && operation === editUiOperationRef.current;
+    return () => contextIsCurrent() && operation === editUiOperationRef.current;
   };
-  // expandedRef mirrors expandedClasses; expandIntentRef is what the latest request asked for.
-  const expandedRef = useRef<string[]>([]);
-  const expandIntentRef = useRef<string[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedQuantityId, setSelectedQuantityId] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-  const invalidateGraphRequests = useCallback(() => {
-    canvasEpochRef.current += 1;
-    graphRequestRef.current += 1;
-    expandIntentRef.current = expandedRef.current;
-    setLoading(false);
-    setCreatingQuantityFor(null);
-    setCreatingClass(false);
-  }, []);
-  const [err, setErr] = useState<string | null>(null);
-
   // appearance
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     if (typeof window === "undefined") return "dark";
@@ -178,8 +156,6 @@ export default function App() {
 
   const appShellRef = useRef<HTMLElement | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
-  const workspaceStateRef = useRef<WorkspaceState | null>(null);
-  const workspaceEpochRef = useRef(0);
   const importFileRef = useRef<HTMLInputElement | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === "undefined") return 360;
@@ -198,78 +174,13 @@ export default function App() {
   const detailsHidden = isMobile ? mobilePanel !== "details" : docPanelCollapsed;
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [linkmlStatus, setLinkmlStatus] = useState<string | null>(null);
-  const [canvasStatus, setCanvasStatus] = useState<string | null>(null);
-
-  const [schemaProfileKey, setSchemaProfileKey] = useState<string | null>(null);
-  const [schemaProfileError, setSchemaProfileError] = useState<string | null>(null);
-  const [schemaProfiles, setSchemaProfiles] = useState<SchemaProfileSummary[]>([]);
-
-  // branch diff state
-
   // collapsible controls for accessibility / quick-open links
   const [leftPanel, setLeftPanel] = useState<"workspace" | "history">("workspace");
   const [openUnderTheHood, setOpenUnderTheHood] = useState<boolean>(false);
 
-
-
-
-  const isAuditChange = (value: unknown): value is AuditTrailEntry["change"] => {
-    if (!value || typeof value !== "object") return false;
-    const candidate = value as Record<string, unknown>;
-    return typeof candidate.type === "string";
-  };
-
-  const parseAuditEntry = (value: unknown): AuditTrailEntry | null => {
-    if (!value || typeof value !== "object") return null;
-    const entry = value as Record<string, unknown>;
-    if (typeof entry.id !== "string" || typeof entry.timestamp !== "string" || typeof entry.description !== "string") {
-      return null;
-    }
-    if (!isAuditChange(entry.change)) return null;
-    return {
-      id: entry.id,
-      timestamp: entry.timestamp,
-      description: entry.description,
-      change: entry.change,
-      replayable: entry.replayable === false ? false : true,
-      package: typeof entry.package === "string" ? entry.package : undefined,
-      editGeneration: typeof entry.editGeneration === "string" ? entry.editGeneration : LEGACY_EDIT_GENERATION,
-      editIds: Array.isArray(entry.editIds)
-        ? entry.editIds.filter((item): item is string => typeof item === "string")
-        : undefined,
-    };
-  };
-
-  const [auditTrail, setAuditTrail] = useState<AuditTrailEntry[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const raw = readPreference("schema-uml-audit");
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      const generation = getBrowserEditStore().getGeneration();
-      return parsed
-        .map(parseAuditEntry)
-        .filter((e): e is AuditTrailEntry => Boolean(e))
-        .filter(e => e.editGeneration === generation)
-        .filter((e) => !(typeof e.id === "string" && e.id.startsWith("persisted-")));
-    } catch {
-      return [];
-    }
-  });
-
-  // editable mode
-  const editableMode = true;
-
-  const [quantityActionErr, setQuantityActionErr] = useState<string | null>(null);
-  const [creatingQuantityFor, setCreatingQuantityFor] = useState<string | null>(null);
-  const [creatingClass, setCreatingClass] = useState<boolean>(false);
-
   const [graphHandle, setGraphHandle] = useState<GraphExportHandle | null>(null);
 
   const { selected, setSelected } = useSelection();
-
-  const clearQuantityActionError = useCallback(() => setQuantityActionErr(null), []);
 
   useEffect(() => {
     if (!selected) {
@@ -289,49 +200,9 @@ export default function App() {
   }, [selected]);
 
   // overview mode
-  const [mode, setMode] = useState<"graph" | "overview">("graph");
   useEffect(() => { setMobilePanel(null); }, [canvasKey, mode, graph?.package, setMobilePanel]);
-  const [overviewQuery, setOverviewQuery] = useState<string>("");
-  const [overviewBranch, setOverviewBranch] = useState<string>(workspaceBranch || DEFAULT_BRANCH);
+  const emptyCanvasActive = startEmpty && graph?.package === scratchPackage && (graph?.root === "" || graph?.root === null);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      writePreference("schema-uml-audit", JSON.stringify(auditTrail));
-    } catch {
-      // ignore storage errors
-    }
-  }, [auditTrail]);
-
-  const api = useMemo(() => {
-    const instance = createApiClient();
-    instance.interceptors.request.use((config) => {
-      (config as EpochConfig).workspaceEpoch = workspaceEpochRef.current;
-      return config;
-    });
-    instance.interceptors.response.use((response) => {
-      const epoch = (response.config as EpochConfig).workspaceEpoch;
-      if (typeof epoch === "number" && response.data && typeof response.data === "object") {
-        Object.defineProperty(response.data, WORKSPACE_EPOCH, { value: epoch, enumerable: false });
-      }
-      return response;
-    });
-    return instance;
-  }, []);
-
-  const isStaleResponse = useCallback((payload: unknown): boolean => {
-    if (!payload || typeof payload !== "object") return false;
-    const epoch = (payload as Record<string, unknown>)[WORKSPACE_EPOCH];
-    return typeof epoch === "number" && epoch < workspaceEpochRef.current;
-  }, []);
-  const normalizedNamespace = useMemo(() => {
-    const parts = namespace.split(",").map((p: string) => p.trim()).filter(Boolean);
-    return parts.length > 0 ? parts.join(",") : DEFAULT_NAMESPACE;
-  }, [namespace]);
-  const namespaceFilters = useMemo(
-    () => normalizedNamespace.split(",").map((p: string) => p.trim()).filter(Boolean),
-    [normalizedNamespace]
-  );
   const pinnedClassIds = useMemo(
     () =>
       auditTrail
@@ -341,114 +212,9 @@ export default function App() {
     [auditTrail]
   );
 
-  const basePackageForEmpty = useMemo(() => {
-    const parts = normalizedNamespace.split(",").map((p: string) => p.trim()).filter(Boolean);
-    if (parts.length > 0) {
-      return parts[0];
-    }
-    // fall back to stripping the last segment of the default package
-    const segments = pkg.split(".");
-    return segments.slice(0, Math.max(1, segments.length - 1)).join(".");
-  }, [normalizedNamespace, pkg]);
-
-  const scratchPackage = useMemo(
-    () => `${basePackageForEmpty}.custom_schema`,
-    [basePackageForEmpty]
-  );
-
-  const emptyCanvasActive = startEmpty && graph?.package === scratchPackage && (graph?.root === "" || graph?.root === null);
-  // The schema's base namespace is no module itself; its graph is every class of the data model.
-  const wholeModelPackage = basePackageForEmpty;
-  const wholeModelActive = !startEmpty && pkg === wholeModelPackage;
-
-  const normalizePackageName = useCallback((value?: string | null) => {
-    if (!value) return "";
-    return normalizeModule(value) || value;
-  }, []);
-
-  const inferProfileKey = useCallback((value?: string | null) => {
-    const normalized = normalizePackageName(value);
-    const within = (namespace: string) => normalized === namespace || normalized.startsWith(`${namespace}.`);
-    // The preset whose namespace holds the package, else the first one of its top-level package.
-    const preset = WORKSPACE_PRESETS.find((entry) => within(entry.namespace))
-      ?? WORKSPACE_PRESETS.find((entry) => within(entry.namespace.split(".")[0]));
-    return preset?.key ?? null;
-  }, [normalizePackageName]);
-
-  const applyWorkspace = useCallback((ws: WorkspaceState | null) => {
-    if (!ws) return;
-    const prev = workspaceStateRef.current;
-    const unchanged =
-      prev &&
-      prev.branch === ws.branch &&
-      prev.package === ws.package &&
-      prev.base_namespace === ws.base_namespace;
-    if (unchanged) return;
-
-    workspaceStateRef.current = ws;
-    setWorkspace(ws);
-    setSchemaProfileKey(inferProfileKey(ws.package));
-    applyWorkspaceInStore(ws);
-    if (ws.branch) {
-      setOverviewBranch(ws.branch);
-
-    }
-  }, [applyWorkspaceInStore, inferProfileKey]);
-
-  // Build-time defaults only fill in until the snapshot index reports the workspace.
-  // Re-applying them later would undo a schema the user has just selected.
-  const applyDefaultWorkspace = useCallback(() => {
-    if (workspaceStateRef.current) return;
-    applyWorkspace({ branch: DEFAULT_BRANCH, package: DEFAULT_PACKAGE, base_namespace: DEFAULT_NAMESPACE });
-  }, [applyWorkspace]);
-
-  const syncWorkspaceFromResponse = useCallback(
-    (payload: WorkspaceEnvelope | null | undefined) => {
-      if (isStaleResponse(payload)) return;
-      if (payload?.workspace) applyWorkspace(payload.workspace);
-    },
-    [applyWorkspace, isStaleResponse]
-  );
-
-  const updateWorkspace = useCallback(
-    async (updates: Partial<WorkspaceState>) => {
-
-      // From here on, answers to earlier requests describe an outdated workspace.
-      workspaceEpochRef.current += 1;
-      try {
-        const res = await api.put("/workspace", updates);
-        syncWorkspaceFromResponse(res.data);
-      } catch (error: unknown) {
-        console.error("Failed to update workspace", error);
-      }
-    },
-    [api, syncWorkspaceFromResponse]
-  );
-
-  const currentSchemaProfile = useMemo(
-    () => schemaProfiles.find((profile) => profile.key === schemaProfileKey) ?? null,
-    [schemaProfileKey, schemaProfiles]
-  );
-  const editRules: EditRules = currentSchemaProfile?.edit_rules ?? NOMAD_EDIT_RULES;
-  const schemaSelectionRequired = !startEmpty && !currentSchemaProfile;
-  const selectedSchemaReady = !schemaSelectionRequired && (!currentSchemaProfile || currentSchemaProfile.available);
-
-  const filterActiveAuditForPackage = useCallback(
-    (entries: AuditTrailEntry[], targetPackage?: string | null) => {
-      const normalizedTarget = normalizePackageName(targetPackage);
-      return entries.filter(
-        (e) =>
-          e?.change &&
-          e.replayable !== false &&
-          (!e.package || normalizePackageName(e.package) === normalizedTarget)
-      );
-    },
-    [normalizePackageName]
-  );
-
   const archiveAuditTrail = useCallback(() => {
     setAuditTrail((prev) => prev.map((entry) => ({ ...entry, replayable: false })));
-  }, []);
+  }, [setAuditTrail]);
 
   const appendAudit = useCallback(
     (change: AuditTrailEntry["change"], description: string, editIds?: string[], packageName?: string) => {
@@ -461,53 +227,8 @@ export default function App() {
         { change, description, id, timestamp: now, package: pkgForEntry, replayable: true, editIds, editGeneration },
       ]);
     },
-    [graph, pkg]
+    [graph, pkg, setAuditTrail]
   );
-
-  const loadSchemaProfiles = useCallback(async () => {
-
-    try {
-      const res = await api.get("/schema/profiles");
-      const profilesRaw = Array.isArray(res.data?.profiles) ? res.data.profiles : [];
-      const parsed: SchemaProfileSummary[] = profilesRaw
-        .filter((entry: unknown): entry is Record<string, unknown> => typeof entry === "object" && entry !== null)
-        .map((entry: Record<string, unknown>) => ({
-          key: typeof entry.key === "string" ? entry.key : "",
-          label: typeof entry.label === "string" ? entry.label : "",
-          default_branch: typeof entry.default_branch === "string" ? entry.default_branch : DEFAULT_BRANCH,
-          default_package: typeof entry.default_package === "string" ? entry.default_package : DEFAULT_PACKAGE,
-          default_base_namespace: typeof entry.default_base_namespace === "string" ? entry.default_base_namespace : DEFAULT_NAMESPACE,
-          default_root: typeof entry.default_root === "string" ? entry.default_root : DEFAULT_ROOT,
-          available: Boolean(entry.available),
-          current: Boolean(entry.current),
-          version: typeof entry.version === "string" ? entry.version : null,
-          source: typeof entry.source === "string" ? entry.source : null,
-          error: typeof entry.error === "string" ? entry.error : null,
-          linkml_export: typeof entry.linkml_export === "boolean" ? entry.linkml_export : undefined,
-          capabilities: Array.isArray(entry.capabilities)
-            ? entry.capabilities.filter((item: unknown): item is string => typeof item === "string")
-            : undefined,
-          editable: typeof entry.editable === "boolean" ? entry.editable : undefined,
-          edit_rules: parseEditRules(entry.edit_rules),
-          empty: entry.empty === true,
-          draft: entry.draft === true,
-        }))
-        .filter((entry: SchemaProfileSummary) => Boolean(entry.key));
-      setSchemaProfiles(parsed);
-      setSchemaProfileError(null);
-      if (isStaleResponse(res.data)) return;
-      const current = typeof res.data?.current_profile === "string" ? res.data.current_profile : null;
-      setSchemaProfileKey(current || parsed.find((entry: SchemaProfileSummary) => entry.current)?.key || inferProfileKey(pkg));
-      syncWorkspaceFromResponse(res.data);
-    } catch (error) {
-      setSchemaProfileError(`Could not load schema snapshots: ${formatApiError(error)}`);
-    }
-  }, [api, inferProfileKey, isStaleResponse, pkg, syncWorkspaceFromResponse]);
-
-  useEffect(() => {
-    applyDefaultWorkspace();
-    void loadSchemaProfiles();
-  }, [applyDefaultWorkspace, loadSchemaProfiles]);
 
   const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
   const clampDocWidth = useCallback((value: number) => {
@@ -552,16 +273,6 @@ export default function App() {
 
     return () => observer.disconnect();
   }, [clampDocWidth]);
-
-  useEffect(() => {
-    if (!workspace) return;
-    const updates: Partial<WorkspaceState> = {};
-
-    if (workspace.package !== pkg) updates.package = pkg;
-    if (workspace.base_namespace !== normalizedNamespace) updates.base_namespace = normalizedNamespace;
-
-    if (Object.keys(updates).length > 0) updateWorkspace(updates);
-  }, [normalizedNamespace, pkg, updateWorkspace, workspace]);
 
   const startSidebarResize = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -650,122 +361,13 @@ export default function App() {
     window.addEventListener("mouseup", stop);
   };
 
-  // Keeps the root a section of the selected package.
-  const loadRoots = useCallback(async () => {
-
-    if (startEmpty) {
-      setRoot("");
-      return;
-    }
-    setErr(null);
-    try {
-      const r = await api.get("/roots", { params: { package: pkg, branch: undefined } });
-      const list = r.data.sections || [];
-      // The whole data model has no root.
-      if (list.length > 0 && !list.includes(root) && !wholeModelActive) setRoot(list[0]);
-      syncWorkspaceFromResponse(r.data);
-    } catch (e: unknown) {
-      setErr(formatApiError(e));
-    }
-  }, [api, pkg, root, startEmpty, syncWorkspaceFromResponse, wholeModelActive]);
-
-  // Fetch and validate without changing UI state; callers must check freshness before syncing.
-  const fetchGraph = useCallback(async (
-    opts: { pkg: string; root: string; namespace: string; branch: string; empty: boolean; expand: string[] }
-  ): Promise<ApiGraph> => {
-    const expand = opts.expand.length ? opts.expand.join(",") : undefined;
-    const response = await api.get("/schema", {
-      params: {
-        package: opts.pkg,
-        root: opts.root,
-        include_quantities: includeQuantities,
-        include_subsections: includeSubsections,
-        include_inheritance: includeInheritance,
-        allow_cross_module: crossModules,
-        base_namespace: opts.namespace || undefined,
-        expand,
-        ...(opts.empty ? { empty: true } : {}),
-      },
-    });
-    const parsed = ensureGraphResponse(response.data);
-    // Retain the transport's workspace epoch through validation without syncing it yet.
-    Object.defineProperty(parsed, WORKSPACE_EPOCH, {
-      value: (response.data as Record<string, unknown>)[WORKSPACE_EPOCH],
-    });
-    return parsed;
-  }, [api, crossModules, includeQuantities, includeSubsections, includeInheritance]);
-
-  // Build the selected snapshot graph.
-  // keepView: the same graph again (after an undo, say), so the canvas keeps its layout and view.
-  const loadGraph = useCallback(async (
-    overrides?: { pkg?: string; root?: string; namespace?: string; branch?: string; forceEmpty?: boolean; expand?: string[]; keepView?: boolean }
-  ) => {
-
-    const pkgToUse = overrides?.pkg ?? pkg;
-    const rootToUse = overrides?.root ?? root;
-    const namespaceToUse = overrides?.namespace ?? normalizedNamespace;
-    const branchToUse = overrides?.branch ?? workspaceBranch ?? "";
-    const useEmpty = overrides?.forceEmpty ?? startEmpty;
-    const identity: CanvasIdentity = { package: pkgToUse, root: rootToUse, namespace: namespaceToUse, branch: branchToUse, empty: useEmpty };
-    const identityChanged = !sameCanvas(canvasIdentityRef.current, identity);
-    if (identityChanged) invalidateGraphRequests();
-    canvasIdentityRef.current = identity;
-    if (!useEmpty) {
-      setStartEmpty(false);
-      setCanvasStatus(null);
-    }
-    setErr(null);
-    setQuantityActionErr(null);
-    setLoading(true);
-
-    const request = ++graphRequestRef.current;
-    const auditIds = new Set(auditTrail.filter(entry =>
-      normalizePackageName(entry.package || pkg) === normalizePackageName(pkgToUse)
-    ).map(entry => entry.id));
-    // Another module or root starts with no class expanded.
-    const expand = overrides?.expand ?? (identityChanged ? [] : expandIntentRef.current);
-    try {
-      const parsed = await fetchGraph({
-        pkg: pkgToUse, root: rootToUse, namespace: namespaceToUse, branch: branchToUse, empty: useEmpty, expand,
-      });
-      if (request !== graphRequestRef.current) return false;
-      syncWorkspaceFromResponse(parsed);
-      expandedRef.current = expand;
-      expandIntentRef.current = expand;
-      setExpandedClasses(expand);
-      setGraph(parsed);
-      setBaseGraph(parsed);
-      if (!overrides?.keepView) setCanvasKey((key) => key + 1);
-      if (useEmpty) return true;
-      // If the browser backend returned a clean graph without applied persisted edits, archive any local audit history
-      // so “active edits” reflects only new work in this session.
-      if (!parsed.applied_edits || parsed.applied_edits.length === 0) {
-        setAuditTrail(prev => prev.map(entry => auditIds.has(entry.id) ? { ...entry, replayable: false } : entry));
-      }
-      return true;
-    } catch (e: unknown) {
-      if (request !== graphRequestRef.current) return false;
-      const message = formatApiError(e);
-      setErr(message || "Failed to load graph");
-      setGraph(null);
-      setBaseGraph(null);
-      return false;
-    } finally {
-      if (request === graphRequestRef.current) setLoading(false);
-    }
-  }, [auditTrail, fetchGraph, invalidateGraphRequests, normalizePackageName, normalizedNamespace, pkg, root, setStartEmpty, startEmpty, syncWorkspaceFromResponse, workspaceBranch]);
-
-  const latestLoadGraph = useRef(loadGraph);
-  useEffect(() => { latestLoadGraph.current = loadGraph; }, [loadGraph]);
-
   const resetEmptyCanvas = useCallback(async () => {
 
     const targetPkg = scratchPackage;
     // Also guard imperative callers and clicks before React renders disabled state.
     if (pendingMutationsRef.current[targetPkg]) return;
-    invalidateGraphRequests();
-    canvasIdentityRef.current = { package: targetPkg, root: "", namespace: normalizedNamespace, branch: workspaceBranch ?? "", empty: true };
-    const epoch = canvasEpochRef.current;
+    invalidateGraphRequests({ package: targetPkg, root: "", namespace: normalizedNamespace, branch: workspaceBranch ?? "", empty: true });
+    const contextIsCurrent = canvasSession.captureContext();
     // Capture only entries this deletion covers; later edits must retain their history.
     const archivedIds = new Set(auditTrail.filter(entry =>
       normalizePackageName(entry.package || graph?.package || pkg) === normalizePackageName(targetPkg)
@@ -775,7 +377,7 @@ export default function App() {
       setErr(null);
       await withPendingMutation(targetPkg, () => api.delete("/schema/edits", { params: { package: targetPkg } }));
       setAuditTrail(prev => prev.map(entry => archivedIds.has(entry.id) ? { ...entry, replayable: false } : entry));
-      if (epoch !== canvasEpochRef.current) return;
+      if (!contextIsCurrent()) return;
       setGraph(null);
       setBaseGraph(null);
       setSelected(null);
@@ -783,124 +385,18 @@ export default function App() {
       setSelectedQuantityId(null);
       const reload = latestLoadGraph.current({ pkg: targetPkg, root: "", namespace: normalizedNamespace, branch: workspaceBranch, forceEmpty: true, expand: [], keepView: true });
       setCanvasKey(key => key + 1);
-      const reloadRequest = graphRequestRef.current;
+      const reloadIsCurrent = canvasSession.captureRequest();
       const loaded = await reload;
-      if (epoch === canvasEpochRef.current && reloadRequest === graphRequestRef.current) {
+      if (contextIsCurrent() && reloadIsCurrent()) {
         const status = loaded ? "Canvas reset to empty." : "Reset failed: edits were cleared, but the canvas could not be reloaded.";
         setCanvasStatus(status);
         if (!loaded) setErr(status);
       }
     } catch (e: unknown) {
-      if (epoch !== canvasEpochRef.current) return;
+      if (!contextIsCurrent()) return;
       setCanvasStatus(`Reset failed: ${formatApiError(e)}`);
     }
-  }, [api, auditTrail, graph?.package, invalidateGraphRequests, normalizePackageName, normalizedNamespace, pkg, scratchPackage, setSelected, withPendingMutation, workspaceBranch]);
-
-
-  const applySchemaProfile = useCallback(async (profileKey: string) => {
-    const selected = schemaProfiles.find((profile) => profile.key === profileKey);
-    const fallbackPreset = WORKSPACE_PRESETS.find((preset) => preset.key === profileKey);
-    const nextPackage = selected?.default_package ?? fallbackPreset?.pkg;
-    const nextNamespace = selected?.default_base_namespace ?? fallbackPreset?.namespace;
-    const nextBranch = selected?.default_branch ?? fallbackPreset?.branch ?? DEFAULT_BRANCH;
-    const nextRoot = selected?.default_root ?? fallbackPreset?.root ?? DEFAULT_ROOT;
-    if (!nextPackage || !nextNamespace) return;
-
-    setSchemaProfileKey(profileKey);
-    setPkg(nextPackage);
-    setRoot(nextRoot);
-
-    applyWorkspace({ branch: nextBranch, package: nextPackage, base_namespace: nextNamespace });
-    await updateWorkspace({
-      branch: nextBranch,
-      package: nextPackage,
-      base_namespace: nextNamespace,
-    });
-  }, [applyWorkspace, schemaProfiles, setPkg, updateWorkspace]);
-
-  const databases = useMemo<DatabaseButton[]>(
-    () => (schemaProfiles.length
-      ? schemaProfiles
-      : WORKSPACE_PRESETS.map((preset) => ({
-        key: preset.key, label: preset.label, available: true, draft: preset.draft, default_branch: preset.branch,
-      }))),
-    [schemaProfiles]
-  );
-  const selectedDatabaseKey = schemaProfileKey ?? inferProfileKey(pkg);
-  // Only bam-masterdata offers the whole data model; the NOMAD schemas are too large to draw at once.
-  const wholeModelOffered = selectedDatabaseKey?.startsWith("bam-masterdata") ?? false;
-  const selectedDatabaseLabel = databases.find((entry) => entry.key === selectedDatabaseKey)?.label ?? null;
-
-  // A database button opens the bird's-eye view of that schema; a class there opens its diagram.
-  const showOverview = useCallback(() => {
-    canvasIdentityRef.current = null;
-    invalidateGraphRequests();
-    setMode("overview");
-  }, [invalidateGraphRequests]);
-
-  const openDatabase = useCallback(async (profileKey: string) => {
-    showOverview();
-    setOverviewQuery("");
-    await applySchemaProfile(profileKey);
-  }, [applySchemaProfile, showOverview]);
-
-  // Keeps the package one of the schema's modules on the selected branch.
-  const loadPackages = useCallback(async () => {
-
-    setErr(null);
-    try {
-      const r = await api.get("/git/packages", {
-        params: {
-          branch: undefined,
-          base_package: normalizedNamespace,
-        },
-      });
-      const raw: string[] = r.data.packages || [];
-      const filtered = raw.filter((p: string) => !p.endsWith(".__init__"));
-      const list = (filtered.length ? filtered : raw).filter(Boolean);
-      const augmented = startEmpty && scratchPackage ? [scratchPackage, ...list] : list;
-      // dedupe while preserving order
-      const seen = new Set<string>();
-      const unique = augmented.filter((p) => {
-        if (seen.has(p)) return false;
-        seen.add(p);
-        return true;
-      });
-      syncWorkspaceFromResponse(r.data);
-
-      // if current pkg is not in the list, default to the first entry (keep scratch when empty and the whole model)
-      if (unique.length > 0 && !unique.includes(pkg) && pkg !== wholeModelPackage) {
-        setPkg(startEmpty && scratchPackage ? scratchPackage : unique[0]);
-      }
-    } catch (e) {
-      console.error("Failed to load packages", e);
-      setErr(formatApiError(e));
-    }
-  }, [api, normalizedNamespace, pkg, scratchPackage, setPkg, startEmpty, syncWorkspaceFromResponse, wholeModelPackage]);
-
-  useEffect(() => {
-    if (!workspace) return;
-
-    loadSchemaProfiles();
-    loadPackages();
-    loadRoots();
-  }, [loadPackages, loadRoots, loadSchemaProfiles, workspace]);
-
-
-  const seedAuditFromAppliedEdits = useCallback(
-    (graphWithEdits: ApiGraph | null) => {
-      if (!graphWithEdits) return;
-
-      setAuditTrail((prev) => {
-        // Never keep snapshot persisted entries in the client audit panel.
-        const pruned = prev.filter(
-          (entry) => !(typeof entry.id === "string" && entry.id.startsWith("persisted-"))
-        );
-        return pruned.length === prev.length ? prev : pruned;
-      });
-    },
-    [setAuditTrail]
-  );
+  }, [canvasSession, setAuditTrail, api, auditTrail, graph?.package, invalidateGraphRequests, normalizedNamespace, pkg, scratchPackage, setSelected, withPendingMutation, workspaceBranch, latestLoadGraph, setBaseGraph, setCanvasKey, setCanvasStatus, setGraph]);
 
   const toggleEmptyMode = useCallback(async () => {
     const nextShouldBeEmpty = !emptyCanvasActive;
@@ -917,7 +413,7 @@ export default function App() {
       setMode("graph");
 
       archiveAuditTrail();
-      graphRequestRef.current += 1;
+      canvasSession.invalidateRequests();
       setGraph(blankGraph);
       setBaseGraph(blankGraph);
       setCanvasKey((key) => key + 1);
@@ -931,7 +427,7 @@ export default function App() {
     } else {
       await loadGraph({ forceEmpty: false });
     }
-  }, [archiveAuditTrail, auditTrail.length, baseGraph?.package, emptyCanvasActive, graph?.package, loadGraph, normalizedNamespace, resetEmptyCanvas, scratchPackage, setPkg, setSelected, setStartEmpty]);
+  }, [canvasSession, archiveAuditTrail, auditTrail.length, baseGraph?.package, emptyCanvasActive, graph?.package, loadGraph, normalizedNamespace, resetEmptyCanvas, scratchPackage, setPkg, setSelected, setStartEmpty, setBaseGraph, setCanvasKey, setCanvasStatus, setGraph, setRoot, setMode]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -943,83 +439,10 @@ export default function App() {
   }, [layoutDirection]);
 
   useEffect(() => {
-    expandedRef.current = [];
-    expandIntentRef.current = [];
-    setExpandedClasses([]);
-  }, [pkg, root]);
-
-  useEffect(() => {
-    seedAuditFromAppliedEdits(graph);
-  }, [graph, seedAuditFromAppliedEdits]);
-
-  useEffect(() => {
     if (!auditTrail.length && graph) {
       setBaseGraph(graph);
     }
-  }, [auditTrail.length, graph]);
-
-  // Archive audit entries that are already reflected in the snapshot baseline graph
-  // (so the "active" list only shows changes not yet persisted). We purposely compare against
-  // the baseline graph, not the current in-memory graph, otherwise freshly applied edits would
-  // be mis-flagged as archived immediately after the user makes them.
-  const archiveStaleAuditEntries = useCallback(
-    (baseline: ApiGraph | null) => {
-      if (!baseline) return;
-      const classIds = new Set(
-        baseline.nodes.filter((n) => n.kind === "section").map((n) => normalizeId(n.id))
-      );
-      const quantityIds = new Set(
-        baseline.nodes.filter((n) => n.kind === "quantity").map((n) => normalizeId(n.id))
-      );
-
-      setAuditTrail((prev) => {
-        let mutated = false;
-        const next = prev.map((entry) => {
-          if (entry.replayable === false) return entry;
-          const isServerSeeded = typeof entry.id === "string" && entry.id.startsWith("persisted-");
-          if (!isServerSeeded) return entry;
-          const change = entry.change;
-          const applied = (() => {
-            switch (change.type) {
-              case "add-class":
-                // Change is already reflected if class is present.
-                return classIds.has(normalizeId(change.cls.id));
-              case "remove-class":
-                // Reflected if class is gone.
-                return !classIds.has(normalizeId(change.cls.id));
-              case "edit-class":
-                // Reflected if the edited class is present.
-                return classIds.has(normalizeId(change.after.id));
-              case "add-quantity":
-                // Reflected if quantity is present.
-                return quantityIds.has(normalizeId(change.quantity.id));
-              case "remove-quantity":
-                // Do not auto-archive removals; keep them active so users can undo
-                // even when the baseline graph is missing that quantity (e.g., filtered loads).
-                return false;
-              case "edit-quantity":
-                // Reflected if the updated quantity exists.
-                return quantityIds.has(normalizeId(change.after.id));
-              default:
-                return false;
-            }
-          })();
-          // If the change is already applied in the browser backend graph, archive it.
-          if (applied) {
-            mutated = true;
-            return { ...entry, replayable: false };
-          }
-          return entry;
-        });
-        return mutated ? next : prev;
-      });
-    },
-    [setAuditTrail]
-  );
-
-  useEffect(() => {
-    archiveStaleAuditEntries(baseGraph);
-  }, [archiveStaleAuditEntries, baseGraph]);
+  }, [auditTrail.length, graph, setBaseGraph]);
 
   useEffect(() => {
     if (!umlState) {
@@ -1145,9 +568,9 @@ export default function App() {
     const targetPackage = graph?.package || pkg;
     // A failed save leaves pending reads and expansion intent intact. Only success
     // supersedes pre-mutation reads; navigation is tracked independently.
-    const expand = expandIntentRef.current;
-    const epoch = canvasEpochRef.current;
-    const request = graphRequestRef.current;
+    const expand = getExpansionIntent();
+    const contextIsCurrent = canvasSession.captureContext();
+    const requestIsCurrent = canvasSession.captureRequest();
     const res = await withPendingMutation(targetPackage, () => api.post(
       "/schema/edits",
       { package: targetPackage, edits },
@@ -1166,25 +589,18 @@ export default function App() {
       }
     ));
     const updated = ensureGraphResponse(res.data);
-    if (epoch !== canvasEpochRef.current) return updated;
+    if (!contextIsCurrent()) return updated;
     // A renamed root follows its class even when the graph needs reconciliation.
     if ((updated.root ?? "") !== (root ?? "")) setRoot(updated.root ?? "");
-    if (canvasIdentityRef.current) canvasIdentityRef.current = { ...canvasIdentityRef.current, root: updated.root ?? "" };
-    if (request !== graphRequestRef.current) {
+    canvasSession.updateRoot(updated.root ?? "");
+    if (!requestIsCurrent()) {
       // A refresh may have read before persistence. Re-read after the mutation,
       // retaining the user's latest expansion/filter choices in this canvas.
-      void latestLoadGraph.current({ keepView: true, root: updated.root ?? "", expand: expandIntentRef.current });
+      void latestLoadGraph.current({ keepView: true, root: updated.root ?? "", expand: getExpansionIntent() });
       return updated;
     }
-    graphRequestRef.current += 1;
     syncWorkspaceFromResponse(res.data);
-    const merged = replayGraphWithAudit(updated);
-    expandedRef.current = expand;
-    expandIntentRef.current = expand;
-    setExpandedClasses(expand);
-    setBaseGraph(updated);
-    setGraph(merged);
-    setLoading(false);
+    commitMutationGraph(updated, replayGraphWithAudit(updated), expand);
     return updated;
   };
 
@@ -1202,7 +618,7 @@ export default function App() {
     }
 
     const uiIsCurrent = beginEditUiOperation();
-    const epoch = canvasEpochRef.current;
+    const contextIsCurrent = canvasSession.captureContext();
     const creation = ++quantityCreationRef.current;
     setCreatingQuantityFor(classId);
     setQuantityActionErr(null);
@@ -1270,7 +686,7 @@ export default function App() {
       if (uiIsCurrent()) setQuantityActionErr(message);
       throw new Error(message);
     } finally {
-      if (epoch === canvasEpochRef.current && creation === quantityCreationRef.current) setCreatingQuantityFor(null);
+      if (contextIsCurrent() && creation === quantityCreationRef.current) setCreatingQuantityFor(null);
     }
   };
 
@@ -1281,7 +697,7 @@ export default function App() {
     }
 
     const uiIsCurrent = beginEditUiOperation();
-    const epoch = canvasEpochRef.current;
+    const contextIsCurrent = canvasSession.captureContext();
     const creation = ++classCreationRef.current;
     setCreatingClass(true);
     setQuantityActionErr(null);
@@ -1344,177 +760,9 @@ export default function App() {
       if (uiIsCurrent()) setQuantityActionErr(message);
       throw new Error(message);
     } finally {
-      if (epoch === canvasEpochRef.current && creation === classCreationRef.current) setCreatingClass(false);
+      if (contextIsCurrent() && creation === classCreationRef.current) setCreatingClass(false);
     }
   };
-
-  const removeQuantityFromGraphState = useCallback((g: ApiGraph, quantityId: string): ApiGraph => {
-    const nodes = (g.nodes || []).filter((n) => n.id !== quantityId);
-    const edges = (g.edges || []).filter((e) => e.source !== quantityId && e.target !== quantityId);
-    return { ...g, nodes, edges };
-  }, []);
-
-  const addQuantityToGraphState = useCallback((g: ApiGraph, quantity: QuantityNode): ApiGraph => {
-    const qNode: ApiNode = {
-      id: quantity.id,
-      kind: "quantity",
-      label: quantity.name,
-      dtype: quantity.dtype,
-      shape: quantity.shape ?? undefined,
-      card: quantity.card ?? undefined,
-      doc: quantity.doc ?? null,
-      owner: quantity.ownerId,
-      path: quantity.path ?? undefined,
-      line: quantity.line ?? undefined,
-    };
-    const hasNode = (g.nodes || []).some((n) => n.id === quantity.id);
-    const nodes: ApiNode[] = hasNode
-      ? (g.nodes || []).map((n) => (n.id === quantity.id ? { ...n, ...qNode } : n))
-      : [...(g.nodes || []), qNode];
-    const edgeExists = (g.edges || []).some((e) => e.source === quantity.ownerId && e.target === quantity.id);
-    const edges: ApiEdge[] = edgeExists
-      ? g.edges || []
-      : [...(g.edges || []), { source: quantity.ownerId, target: quantity.id, type: "hasQuantity" as const, card: quantity.card ?? null }];
-    return { ...g, nodes, edges };
-  }, []);
-
-  const removeClassFromGraphState = useCallback((g: ApiGraph, classId: string): ApiGraph => {
-    const removedQuantityIds = (g.nodes || []).filter((n) => n.owner === classId).map((n) => n.id);
-    const nodes = (g.nodes || []).filter(
-      (n) => n.id !== classId && !removedQuantityIds.includes(n.id)
-    );
-    const edges = (g.edges || []).filter(
-      (e) =>
-        e.source !== classId &&
-        e.target !== classId &&
-        !removedQuantityIds.includes(e.source) &&
-        !removedQuantityIds.includes(e.target)
-    );
-    return { ...g, nodes, edges };
-  }, []);
-
-  const editClassInGraphState = useCallback((g: ApiGraph, cls: UmlClassNode): ApiGraph => {
-    const nodes = (g.nodes || []).map((n) => {
-      if (n.kind !== "section" || n.id !== cls.id) return n;
-      return { ...n, doc: cls.doc ?? null };
-    });
-    return { ...g, nodes };
-  }, []);
-
-  const addClassToGraphState = useCallback((g: ApiGraph, cls: UmlClassNode): ApiGraph => {
-    const nodesWithoutClass = (g.nodes || []).filter((n) => !(n.kind === "section" && n.id === cls.id));
-    const sectionNode: ApiNode = {
-      id: cls.id,
-      kind: "section",
-      label: cls.name,
-      module: cls.module ?? g.package,
-      doc: cls.doc ?? null,
-      path: cls.path ?? null,
-      line: cls.line ?? null,
-    };
-    const ownedQuantities = cls.quantities.filter((q) => !q.inherited);
-    const qtyNodes: ApiNode[] = ownedQuantities.map((q) => ({
-      id: q.id,
-      kind: "quantity",
-      label: q.name,
-      dtype: q.dtype,
-      shape: q.shape ?? undefined,
-      card: q.card ?? undefined,
-      doc: q.doc ?? null,
-      owner: q.ownerId,
-      path: q.path ?? undefined,
-      line: q.line ?? undefined,
-    }));
-    const qtyEdges: ApiEdge[] = ownedQuantities.map((q) => ({
-      source: q.ownerId,
-      target: q.id,
-      type: "hasQuantity" as const,
-      card: q.card ?? null,
-    }));
-    const relationType: ApiEdge["type"] = cls.parentRelation === "hasSubSection" ? "hasSubSection" : "inherits";
-    const parentLinkEdge: ApiEdge[] = cls.parentId
-      ? relationType === "inherits"
-        ? [{ source: cls.id, target: cls.parentId, type: relationType, card: null }]
-        : [{ source: cls.parentId, target: cls.id, type: relationType, card: cls.parentCard ?? null }]
-      : [];
-
-    return {
-      ...g,
-      nodes: [...nodesWithoutClass, sectionNode, ...qtyNodes],
-      edges: [
-        ...(g.edges || []).filter(
-          (e) =>
-            !((e.type === "inherits" && e.source === cls.id) || (e.type === "hasSubSection" && e.target === cls.id))
-        ),
-        ...qtyEdges,
-        ...parentLinkEdge
-      ],
-    };
-  }, []);
-
-  const applyForwardChange = useCallback((current: ApiGraph, change: AuditTrailEntry["change"]): ApiGraph => {
-    switch (change.type) {
-      case "add-class":
-        return addClassToGraphState(current, change.cls);
-      case "remove-class":
-        return removeClassFromGraphState(current, change.cls.id);
-      case "edit-class":
-        return editClassInGraphState(current, change.after);
-      case "add-quantity":
-        return addQuantityToGraphState(current, change.quantity);
-      case "remove-quantity":
-        return removeQuantityFromGraphState(current, change.quantity.id);
-      case "edit-quantity": {
-        const withoutBefore = removeQuantityFromGraphState(current, change.before.id);
-        return addQuantityToGraphState(withoutBefore, change.after);
-      }
-      default:
-        return current;
-    }
-  }, [addClassToGraphState, addQuantityToGraphState, editClassInGraphState, removeClassFromGraphState, removeQuantityFromGraphState]);
-
-  const replayGraphWithAudit = useCallback(
-    (snapshotGraph: ApiGraph, extraChange?: AuditTrailEntry["change"]): ApiGraph => {
-      const targetPackage = normalizePackageName(snapshotGraph.package) || normalizePackageName(pkg);
-      // Stored edits are already in the snapshot graph; only local changes are replayed.
-      const scopedEntries = filterActiveAuditForPackage(auditTrail, targetPackage).filter((a) => !a.editIds?.length);
-      const changes = scopedEntries.map((a) => a.change).filter(Boolean) as AuditTrailEntry["change"][];
-      const allChanges = extraChange ? [...changes, extraChange] : changes;
-      return allChanges.reduce((acc, change) => applyForwardChange(acc, change), snapshotGraph);
-    },
-    [applyForwardChange, auditTrail, filterActiveAuditForPackage, normalizePackageName, pkg]
-  );
-
-  // Shows or hides a class's subclasses: the browser core rebuilds the graph with the new set of expanded
-  // classes, and the canvas adds or removes only the classes that differ. A quick second click builds
-  // on the first; only the answer to the latest request is shown.
-  const toggleSubclasses = useCallback(
-    async (classId: string) => {
-      if (loading) return;
-      const current = expandIntentRef.current;
-      const next = current.includes(classId) ? current.filter((id) => id !== classId) : [...current, classId];
-      expandIntentRef.current = next;
-      const request = ++graphRequestRef.current;
-      setErr(null);
-      try {
-        const parsed = await fetchGraph({
-          pkg: graph?.package || pkg, root: startEmpty ? "" : root, namespace: normalizedNamespace,
-          branch: workspaceBranch ?? "", empty: startEmpty, expand: next,
-        });
-        if (request !== graphRequestRef.current) return;
-        syncWorkspaceFromResponse(parsed);
-        expandedRef.current = next;
-        setExpandedClasses(next);
-        setBaseGraph(parsed);
-        setGraph(replayGraphWithAudit(parsed));
-      } catch (e: unknown) {
-        if (request !== graphRequestRef.current) return;
-        expandIntentRef.current = expandedRef.current;
-        setErr(formatApiError(e) || "Failed to load graph");
-      }
-    },
-    [fetchGraph, graph?.package, loading, normalizedNamespace, pkg, replayGraphWithAudit, root, startEmpty, syncWorkspaceFromResponse, workspaceBranch]
-  );
 
   const rebuildGraphWithAudit = useCallback(
     (entries: AuditTrailEntry[]) => {
@@ -1525,7 +773,7 @@ export default function App() {
       const rebuilt = applicable.reduce((acc, curr) => applyForwardChange(acc, curr.change), baseline);
       setGraph(rebuilt);
     },
-    [applyForwardChange, baseGraph, filterActiveAuditForPackage, graph, normalizePackageName, pkg]
+    [baseGraph, filterActiveAuditForPackage, graph, pkg, setGraph]
   );
 
   // Deletes the stored edits of audit entries (and a module's own edits) in one request: all or none.
@@ -1540,18 +788,18 @@ export default function App() {
     const entry = auditTrail.find((a) => a.id === id);
     if (!entry || !entry.change) return;
     setQuantityActionErr(null);
-    const epoch = canvasEpochRef.current;
+    const contextIsCurrent = canvasSession.captureContext();
 
     if (entry.editIds?.length) {
       try {
         await deleteStoredEdits(entry.editIds);
       } catch (e: unknown) {
         // Nothing was deleted; the entry stays so the undo can be tried again.
-        if (epoch === canvasEpochRef.current) setQuantityActionErr(`Undo failed: ${formatApiError(e)}`);
+        if (contextIsCurrent()) setQuantityActionErr(`Undo failed: ${formatApiError(e)}`);
         return;
       }
       setAuditTrail(prev => prev.filter(item => item.id !== id && item.change));
-      if (epoch === canvasEpochRef.current) await latestLoadGraph.current({ keepView: true });
+      if (contextIsCurrent()) await latestLoadGraph.current({ keepView: true });
       return;
     }
 
@@ -1567,22 +815,18 @@ export default function App() {
     const hasLocalAudit = auditEntriesForCurrentPackage.length > 0;
     const hasPersistedEdits = (graph?.applied_edits?.length ?? 0) > 0 || (graph?.edit_conflicts?.length ?? 0) > 0;
     if (!hasLocalAudit && !hasPersistedEdits) return;
-    const epoch = canvasEpochRef.current;
+    const contextIsCurrent = canvasSession.captureContext();
     const ids = auditEntriesForCurrentPackage.flatMap((entry) => entry.editIds ?? []);
     setQuantityActionErr(null);
     try {
       await deleteStoredEdits(ids, targetPackage);
     } catch (e: unknown) {
-      if (epoch === canvasEpochRef.current) setQuantityActionErr(`Clear failed: ${formatApiError(e)}`);
+      if (contextIsCurrent()) setQuantityActionErr(`Clear failed: ${formatApiError(e)}`);
       return;
     }
     setAuditTrail((prev) => prev.filter((entry) => !auditEntriesForCurrentPackage.includes(entry)));
-    if (epoch === canvasEpochRef.current) await latestLoadGraph.current({ keepView: true });
+    if (contextIsCurrent()) await latestLoadGraph.current({ keepView: true });
   };
-
-  useEffect(() => {
-    loadRoots();
-  }, [pkg, startEmpty, loadRoots]);
 
   // If user switches away from the scratch package, exit empty mode to restore schema-backed behavior.
   useEffect(() => {
@@ -1590,12 +834,7 @@ export default function App() {
       setStartEmpty(false);
       setCanvasStatus(null);
     }
-  }, [pkg, scratchPackage, setStartEmpty, startEmpty]);
-
-  useEffect(() => {
-
-    loadPackages();
-  }, [loadPackages, normalizedNamespace]);
+  }, [pkg, scratchPackage, setStartEmpty, startEmpty, setCanvasStatus]);
 
   const addBlockedReason =
     mode !== "graph"
@@ -1613,7 +852,7 @@ export default function App() {
       auditTrail.filter(
         (entry) => entry?.change && (!entry.package || normalizePackageName(entry.package) === currentPackageForAudit)
       ),
-    [auditTrail, currentPackageForAudit, normalizePackageName]
+    [auditTrail, currentPackageForAudit]
   );
   const activeAuditEntries = useMemo(
     () => filterActiveAuditForPackage(auditEntriesForCurrentPackage, currentPackageForAudit),
@@ -1692,13 +931,7 @@ export default function App() {
   }, [currentGraph, root, setSelected, setSelectedClassId, setSelectedQuantityId]);
 
   const returnToHome = useCallback(() => {
-    canvasIdentityRef.current = null;
-    invalidateGraphRequests();
-    setErr(null);
-    setMode("graph");
-    setGraph(null);
-    setBaseGraph(null);
-
+    closeCanvas();
     setSelectedClassId(null);
     setSelectedQuantityId(null);
     setSelected(null);
@@ -1706,32 +939,7 @@ export default function App() {
     setQuantityActionErr(null);
     setCreatingQuantityFor(null);
     setCreatingClass(false);
-  }, [invalidateGraphRequests, setSelected]);
-
-  const handleOverviewClassSelect = (pkgName: string, className: string) => {
-    setMode("graph");
-    setPkg(pkgName);
-    setRoot(className);
-    loadGraph({
-      pkg: pkgName,
-      root: className,
-      namespace: normalizedNamespace,
-      branch: overviewBranch,
-    });
-  };
-
-  const showWholeModel = () => {
-    setMode("graph");
-    setPkg(wholeModelPackage);
-    setRoot("");
-    loadGraph({
-      pkg: wholeModelPackage,
-      root: "",
-      namespace: normalizedNamespace,
-      branch: overviewBranch,
-      expand: [],
-    });
-  };
+  }, [closeCanvas, setSelected, setCanvasStatus]);
 
   const ensureEditableReady = () => {
     if (addBlockedReason) {
@@ -2079,11 +1287,11 @@ export default function App() {
       throw new Error("Expected nodes[] and edges[] in the workspace file.");
     };
 
-    const request = graphRequestRef.current;
+    const requestIsCurrent = canvasSession.captureRequest();
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        if (request !== graphRequestRef.current) return;
+        if (!requestIsCurrent()) return;
         const raw = JSON.parse(String(reader.result ?? "{}"));
         const candidate = extractGraphCandidate(raw);
         const nextGraph = ensureImportedGraph({
@@ -2092,11 +1300,10 @@ export default function App() {
         });
         setMode("graph");
 
-        invalidateGraphRequests();
-        canvasIdentityRef.current = {
+        invalidateGraphRequests({
           package: nextGraph.package, root: nextGraph.root ?? "", namespace: normalizedNamespace,
           branch: workspaceBranch ?? "", empty: startEmpty && nextGraph.package === scratchPackage,
-        };
+        });
         setGraph(nextGraph);
         setBaseGraph(nextGraph);
         setCanvasKey((key) => key + 1);
@@ -2125,24 +1332,14 @@ export default function App() {
   const exportPdf = async () => {
     if (!currentGraph || !graphHandle) return;
 
-    let png: string | null;
-    try { png = await graphHandle.toPng(); }
-    catch (error) { setErr(`PDF export failed: ${formatApiError(error)}`); return; }
-    if (!png) return;
-
-    const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const props = pdf.getImageProperties(png);
-
-    const ratio = Math.min(pageWidth / props.width, pageHeight / props.height);
-    const w = props.width * ratio;
-    const h = props.height * ratio;
-    const x = (pageWidth - w) / 2;
-    const y = (pageHeight - h) / 2;
-
-    pdf.addImage(png, "PNG", x, y, w, h);
-    pdf.save(`${currentGraph.package}_${currentGraph.root || "all"}.pdf`);
+    try {
+      const png = await graphHandle.toPng();
+      if (!png) return;
+      const { savePngPdf } = await import("./utils/exportPdf");
+      savePngPdf(png, `${currentGraph.package}_${currentGraph.root || "all"}.pdf`);
+    } catch (error) {
+      setErr(`PDF export failed: ${formatApiError(error)}`);
+    }
   };
 
   if (!workspace) {
@@ -2573,7 +1770,7 @@ export default function App() {
                       ) : null}
                     </div>
                   ) : null}
-                  {editableMode && addBlockedReason ? (
+                  {addBlockedReason ? (
                     <div className="small" style={{ color: "var(--muted)" }}>{addBlockedReason}</div>
                   ) : null}
                 </div>
@@ -2606,7 +1803,7 @@ export default function App() {
                   creatingQuantityFor={creatingQuantityFor}
                   creatingClass={creatingClass}
                   onClearSelection={handleCanvasClear}
-                  editableMode={editableMode && !addBlockedReason}
+                  editableMode={!addBlockedReason}
                   expandedClassIds={expandedClasses}
                   onToggleSubclasses={toggleSubclasses}
                 />
@@ -2747,7 +1944,7 @@ export default function App() {
               <section id="section-documentation">
                 <DocPanel
                   editRules={editRules}
-                  editableMode={editableMode}
+                  editableMode
                   onRemoveQuantity={removeQuantity}
                   onEditQuantity={async (id, data) => { await editQuantity(id, data); }}
                   onEditClass={editClassDoc}
