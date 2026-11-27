@@ -214,16 +214,23 @@ export default function App() {
     [auditTrail]
   );
 
+  type StoredRefs = { editIds: string[]; editGeneration?: string };
+
   const archiveAuditTrail = useCallback(() => {
     setAuditTrail((prev) => prev.map((entry) => ({ ...entry, replayable: false })));
   }, [setAuditTrail]);
 
   const appendAudit = useCallback(
-    (change: AuditTrailEntry["change"], description: string, editIds?: string[], packageName?: string) => {
+    (change: AuditTrailEntry["change"], description: string, refs?: StoredRefs, packageName?: string) => {
       const now = new Date().toISOString();
       const id = `${now}-${Math.random().toString(16).slice(2)}`;
       const pkgForEntry = packageName || graph?.package || pkg;
-      const editGeneration = getBrowserEditStore().getGeneration();
+      const editIds = refs?.editIds;
+      const currentGeneration = getBrowserEditStore().getGeneration();
+      // The save finished after its log was replaced (restore, discard all): its edits are
+      // gone, so an entry would point at nothing, or at unrelated edits with the same ids.
+      if (editIds?.length && refs?.editGeneration && refs.editGeneration !== currentGeneration) return;
+      const editGeneration = refs?.editGeneration ?? currentGeneration;
       setAuditTrail((prev) => [
         ...prev,
         { change, description, id, timestamp: now, package: pkgForEntry, replayable: true, editIds, editGeneration },
@@ -562,8 +569,11 @@ export default function App() {
 
   type EditRequest = { op: string; target: string; payload: Record<string, unknown> };
 
-  const editIdsOf = (updated: ApiGraph): string[] =>
-    (updated.persisted_edits ?? []).map((edit) => edit.id).filter((id): id is string => Boolean(id));
+  // The stored edits a save response made, and the edit-log generation they belong to.
+  const storedRefs = (updated: ApiGraph): StoredRefs => ({
+    editIds: (updated.persisted_edits ?? []).map((edit) => edit.id).filter((id): id is string => Boolean(id)),
+    editGeneration: updated.edit_generation,
+  });
 
   // Store edits on the browser backend (all or none) and show the graph it rebuilds from the edited schema.
   const submitEdits = async (edits: EditRequest[]): Promise<ApiGraph> => {
@@ -678,7 +688,7 @@ export default function App() {
       appendAudit(
         { type: "add-quantity", classId, quantity: addedQuantity },
         `Added ${isVocabulary ? "term" : "quantity"} ${addedQuantity.name}${addedQuantity.dtype ? `: ${addedQuantity.dtype}` : ""} to class ${targetClass.name}`,
-        editIdsOf(updated),
+        storedRefs(updated),
         updated.package
       );
       if (uiIsCurrent()) setSelectedClassId(classId);
@@ -752,7 +762,7 @@ export default function App() {
       appendAudit(
         { type: "add-class", cls: newCls },
         parentId ? `Added class ${newCls.name} extending ${parentId}` : `Added class ${newCls.name}`,
-        editIdsOf(next),
+        storedRefs(next),
         next.package
       );
       if (uiIsCurrent()) setSelectedClassId(newCls.id);
@@ -913,7 +923,9 @@ export default function App() {
   // Replacement may reuse IDs for unrelated edits in any schema.
   // Clear rather than archive: archived entries can be reactivated.
   const resetAfterEditsReplaced = () => {
-    setAuditTrail([]);
+    // Keep only entries a save made in the new log after the replacement.
+    const generation = getBrowserEditStore().getGeneration();
+    setAuditTrail(prev => prev.filter(entry => entry.editIds?.length && entry.editGeneration === generation));
     void loadGraph({ keepView: true });
   };
 
@@ -1048,7 +1060,7 @@ export default function App() {
     appendAudit(
       { type: "edit-class", before, after },
       `Edited class ${before.name} docstring`,
-      editIdsOf(updated),
+      storedRefs(updated),
       updated.package
     );
 
@@ -1068,7 +1080,7 @@ export default function App() {
     const updated = await submitEdits([{ op: "rename_class", target: classId, payload: { new_name: name } }]);
     const newId = before.module ? `${before.module}.${name}` : name;
     const after = buildUmlStateFromGraph(updated)?.classes.find(c => c.id === newId);
-    if (after) appendAudit({ type: "edit-class", before, after }, `Renamed class ${before.name} to ${name}`, editIdsOf(updated), updated.package);
+    if (after) appendAudit({ type: "edit-class", before, after }, `Renamed class ${before.name} to ${name}`, storedRefs(updated), updated.package);
     if (uiIsCurrent()) setSelectedClassId(newId);
     if (uiIsCurrent()) setSelectedQuantityId(null);
     if (uiIsCurrent()) setQuantityActionErr(null);
@@ -1178,7 +1190,7 @@ export default function App() {
     appendAudit(
       { type: "edit-quantity", classId: owner, before, after },
       `Edited quantity ${before.name} on ${owner}`,
-      editIdsOf(updated),
+      storedRefs(updated),
       updated.package
     );
 
@@ -1217,7 +1229,7 @@ export default function App() {
     appendAudit(
       { type: "remove-quantity", classId: target.owner, quantity: removed },
       `Removed quantity ${removed.name} from ${target.owner}`,
-      editIdsOf(updated),
+      storedRefs(updated),
       updated.package
     );
 
@@ -1538,6 +1550,7 @@ export default function App() {
                   onEditsChanged={() => void loadGraph({ keepView: true })}
                   onBackupRestored={resetAfterEditsReplaced}
                   onAllEditsDiscarded={resetAfterEditsReplaced}
+                  discardBlocked={Object.values(pendingMutations).some(count => count > 0)}
                 />
               </Suspense>
             )}

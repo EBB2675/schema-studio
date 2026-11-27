@@ -355,7 +355,9 @@ export function createStaticBackend(options: StaticBackendOptions) {
           ids: edits.nextIds(requested.length), created_at: now(),
         }) as Record<string, unknown>;
         edits.add((result.persisted_edits as StoredEdit[]) ?? []);
-        return ok({ ...result, workspace: workspacePayload(ws) });
+        // Read under the same lock as the save: History stamps its entry with it and drops
+        // the entry if the log was replaced (restore, discard all) before the response landed.
+        return ok({ ...result, edit_generation: edits.generation(), workspace: workspacePayload(ws) });
       });
     }
     if (method.toUpperCase() === "DELETE" && path.startsWith("/schema/edits/")) {

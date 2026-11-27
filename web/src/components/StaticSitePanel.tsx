@@ -13,10 +13,12 @@ const ENGINE_TEXT: Partial<Record<CoreStatus, string>> = {
  * What the static site shows instead of the server controls: the edit log kept in this browser,
  * and the in-browser engine status while it loads or if it fails.
  */
-export default function StaticSitePanel({ onEditsChanged, onBackupRestored, onAllEditsDiscarded }: {
+export default function StaticSitePanel({ onEditsChanged, onBackupRestored, onAllEditsDiscarded, discardBlocked = false }: {
   onEditsChanged: () => void;
   onBackupRestored: () => void;
   onAllEditsDiscarded: () => void;
+  /** True while an edit is being saved: discarding then could race with its History entry. */
+  discardBlocked?: boolean;
 }) {
   const [engine, setEngine] = useState<CoreStatus>(coreStatus());
   const [message, setMessage] = useState<string | null>(null);
@@ -63,6 +65,7 @@ export default function StaticSitePanel({ onEditsChanged, onBackupRestored, onAl
   };
 
   const discardAll = async () => {
+    if (discardBlocked) return;
     try {
       const store = (await getStaticBackend()).edits;
       let count: number | null = null;
@@ -117,7 +120,14 @@ export default function StaticSitePanel({ onEditsChanged, onBackupRestored, onAl
           Restore backup
         </button>
         <input ref={restoreRef} type="file" accept="application/json,.json" style={{ display: "none" }} onChange={restoreLog} aria-label="Backup file" />
-        <button className="btn secondary" type="button" style={{ color: "var(--danger)" }} onClick={discardAll} title="Remove every saved edit of every schema from this browser">
+        <button
+          className="btn secondary"
+          type="button"
+          style={{ color: "var(--danger)" }}
+          onClick={discardAll}
+          disabled={discardBlocked}
+          title={discardBlocked ? "Wait until the current edit is saved" : "Remove every saved edit of every schema from this browser"}
+        >
           Discard all saved edits…
         </button>
       </div>

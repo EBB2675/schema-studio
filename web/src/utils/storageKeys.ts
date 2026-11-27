@@ -15,23 +15,15 @@ export const EDITS_STORAGE_KEY = scopedStorageKey(LEGACY_EDITS_STORAGE_KEY);
 export const AUDIT_STORAGE_KEY = scopedStorageKey(LEGACY_AUDIT_STORAGE_KEY);
 
 /**
- * Reads `key`; when it was never written, copies the value of the unscoped `legacyKey`
- * into it once, so edits saved before keys were scoped are not lost. The legacy value
- * is kept, so another deployment on the same origin can still pick it up.
- * Errors from reading storage are left to the caller.
+ * Reads `key`, or the unscoped `legacyKey` when `key` was never written, so data saved
+ * before keys were scoped is not lost. It never writes: an unlocked write here could copy
+ * the old value over a newer save from another tab. The scoped key is created by the next
+ * save (for edits, inside the edit lock). The legacy value is kept, so another deployment
+ * on the same origin can still pick it up. Errors from reading storage are left to the caller.
  *
  * Migration only: this fallback (and the LEGACY_* keys) can be removed once saved
  * data under the unscoped keys is no longer expected.
  */
 export function readWithLegacyFallback(storage: Storage, key: string, legacyKey: string): string | null {
-  const value = storage.getItem(key);
-  if (value !== null) return value;
-  const legacy = storage.getItem(legacyKey);
-  if (legacy === null) return null;
-  try {
-    storage.setItem(key, legacy);
-  } catch {
-    // Not copied yet: the legacy value is read again next time.
-  }
-  return legacy;
+  return storage.getItem(key) ?? storage.getItem(legacyKey);
 }

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { useWorkspaceStore } from '../src/store/workspace';
 import { AUDIT_STORAGE_KEY } from '../src/utils/storageKeys';
+import { getBrowserEditStore } from '../src/static/editStore';
 
 const classId = 'pkg.custom_schema.Class';
 const baseGraph = {
@@ -489,4 +490,49 @@ describe('App editable quantity add flow', () => {
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY) ?? '[]')).toEqual([]));
   });
 
+  it('drops the History entry of a save that finished after its edit log was replaced', async () => {
+    const store = getBrowserEditStore();
+    let finish!: (value: unknown) => void;
+    mockPost.mockReset().mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    await waitFor(() => expect(screen.getByTestId('visible-nodes')).toHaveTextContent(classId));
+    await user.click(await screen.findByRole('button', { name: 'Trigger quantity add' }));
+    // The save stored its edit in this generation, then "Discard all" replaced the log
+    // before the response reached the UI.
+    const savedIn = store.getGeneration();
+    await act(async () => { await store.discardAll(); });
+    expect(store.getGeneration()).not.toBe(savedIn);
+    await act(async () => finish({ data: { ...graphWithQuantity, edit_generation: savedIn } }));
+    expect(JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY) ?? '[]')).toEqual([]);
+  });
+
+  it('records a save in the generation the store reports for it', async () => {
+    const generation = getBrowserEditStore().getGeneration();
+    mockPost.mockReset().mockResolvedValue({ data: { ...graphWithQuantity, edit_generation: generation } });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    await waitFor(() => expect(screen.getByTestId('visible-nodes')).toHaveTextContent(classId));
+    await user.click(await screen.findByRole('button', { name: 'Trigger quantity add' }));
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY) ?? '[]')).toEqual([
+      expect.objectContaining({ editIds: ['7'], editGeneration: generation }),
+    ]));
+  });
+
+  it('never offers local Undo for edit references inside an imported graph file', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    await waitFor(() => expect(screen.getByTestId('visible-nodes')).toHaveTextContent(classId));
+    // Exported elsewhere: id "7" there says nothing about edit 7 in this browser.
+    const input = document.querySelector<HTMLInputElement>('input[type="file"][accept="application/json"]')!;
+    fireEvent.change(input, { target: { files: [new File([JSON.stringify(graphWithQuantity)], 'graph.json', { type: 'application/json' })] } });
+    await screen.findByText('Imported graph.json');
+    await user.click(screen.getByRole('button', { name: 'Show edit history' }));
+    expect(screen.queryByTestId('older-saved-edit')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
+    expect(mockDelete).not.toHaveBeenCalled();
+  });
 });

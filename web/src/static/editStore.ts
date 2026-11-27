@@ -38,6 +38,8 @@ export { EDITS_STORAGE_KEY };
 
 export interface EditTransaction {
   list(profile: string, pkg?: string): StoredEdit[];
+  /** The generation of the log this transaction reads and writes. */
+  generation(): string;
   nextIds(count: number): number[];
   add(edits: StoredEdit[]): void;
   remove(ids: number[], scope?: { profile: string; package?: string; allPackages?: boolean }): number;
@@ -134,6 +136,9 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
     list(profile, pkg) {
       return read().edits.filter(edit => edit.profile === profile && (pkg === undefined || edit.package === pkg));
     },
+    generation() {
+      return read().generation;
+    },
     nextIds(count) {
       const start = read().nextId;
       return Array.from({ length: count }, (_, index) => start + index);
@@ -196,13 +201,17 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
     }),
     discardAll: () => serialize(() => {
       let count = 0;
+      let nextId = memory.nextId;
       try {
-        count = read().edits.length;
+        const saved = read();
+        count = saved.edits.length;
+        nextId = saved.nextId;
       } catch {
         // Discarding is also the way out of a log that cannot be read.
       }
-      // A fresh generation drops history entries that point at the discarded edits.
-      write({ nextId: 1, edits: [], generation: crypto.randomUUID() });
+      // A fresh generation drops history entries that point at the discarded edits;
+      // ids keep counting up so a late reference cannot name a new edit.
+      write({ nextId, edits: [], generation: crypto.randomUUID() });
       return count;
     }),
     retrySave: () => serialize(() => {

@@ -10,7 +10,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
-import { createEditStore, EDITS_STORAGE_KEY } from '../src/static/editStore';
+import { createEditStore, EDITS_STORAGE_KEY, getBrowserEditStore } from '../src/static/editStore';
 import { writePreference } from '../src/utils/browserStorage';
 import { useWorkspaceStore } from '../src/store/workspace';
 import { AUDIT_STORAGE_KEY } from '../src/utils/storageKeys';
@@ -171,6 +171,8 @@ describe('Audit trail seeding from applied edits', () => {
     await screen.findByRole('button', { name: 'Simulate backup restore' });
     expect(JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY)!).map((entry: { id: string }) => entry.id)).toEqual(['local-0', 'local-1']);
     const previousRequests = mockGet.mock.calls.filter(([url]) => url === '/schema').length;
+    // The panel calls back after the store replaced the log, which always starts a new generation.
+    if (operation === 'restore') await getBrowserEditStore().restoreLog({ format: 'schema-studio-edits', version: 1, edits: [] });
     await user.click(screen.getByRole('button', { name: operation === 'restore' ? 'Simulate backup restore' : 'Simulate additive import' }));
     await waitFor(() => expect(mockGet.mock.calls.filter(([url]) => url === '/schema').length).toBeGreaterThan(previousRequests));
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY)!).length).toBe(operation === 'restore' ? 0 : 2));

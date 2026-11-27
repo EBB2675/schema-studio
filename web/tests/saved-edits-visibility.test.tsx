@@ -28,24 +28,44 @@ describe("storage keys scoped to the base path", () => {
     expect(AUDIT_STORAGE_KEY).not.toBe(LEGACY_AUDIT_STORAGE_KEY);
   });
 
-  it("copies a legacy value once and keeps the legacy key", () => {
+  it("falls back to the legacy value without ever writing", () => {
     localStorage.setItem("old", "v1");
+    const writes = vi.spyOn(Storage.prototype, "setItem");
     expect(readWithLegacyFallback(localStorage, "new", "old")).toBe("v1");
-    expect(localStorage.getItem("new")).toBe("v1");
-    expect(localStorage.getItem("old")).toBe("v1");
+    expect(writes).not.toHaveBeenCalled();
+    expect(localStorage.getItem("new")).toBeNull();
     // Once the scoped key exists, the legacy one is no longer consulted.
     localStorage.setItem("new", "v2");
-    localStorage.setItem("old", "v3");
     expect(readWithLegacyFallback(localStorage, "new", "old")).toBe("v2");
   });
 
-  it("migrates saved edits from the unscoped key without deleting it", () => {
+  it("reads legacy edits and moves them to the scoped key on the first locked save", async () => {
     const legacy = savedLog([edit(1), edit(2)]);
     localStorage.setItem(LEGACY_EDITS_STORAGE_KEY, legacy);
     const store = createEditStore(localStorage);
     expect(store.list("p").map(e => e.id)).toEqual([1, 2]);
-    expect(localStorage.getItem(EDITS_STORAGE_KEY)).toBe(legacy);
+    expect(localStorage.getItem(EDITS_STORAGE_KEY)).toBeNull();
+    await store.transaction(tx => tx.add([edit(3)]));
+    expect(JSON.parse(localStorage.getItem(EDITS_STORAGE_KEY)!).edits.map((e: StoredEdit) => e.id)).toEqual([1, 2, 3]);
     expect(localStorage.getItem(LEGACY_EDITS_STORAGE_KEY)).toBe(legacy);
+  });
+
+  // Two tabs on an unmigrated deployment: A reads first (legacy fallback), then B saves.
+  it.each([
+    ["saves another edit", (b: ReturnType<typeof createEditStore>) => b.transaction(tx => tx.add([edit(2)])), [1, 2]],
+    ["discards all edits", (b: ReturnType<typeof createEditStore>) => b.discardAll(), []],
+  ] as const)("a reading tab never overwrites what another tab %s", async (_name, other, expected) => {
+    localStorage.setItem(LEGACY_EDITS_STORAGE_KEY, savedLog([edit(1)]));
+    const tabA = createEditStore(localStorage);
+    const tabB = createEditStore(localStorage);
+    expect(tabA.list("p").map(e => e.id)).toEqual([1]);
+    await other(tabB);
+    // A's earlier read wrote nothing, so it cannot have clobbered B; it now sees B's log.
+    expect(tabA.list("p").map(e => e.id)).toEqual(expected);
+    expect(tabA.exportLog().edits.map(e => e.id)).toEqual(expected);
+    // A's next locked save builds on B's log, not on the legacy one.
+    await tabA.transaction(tx => tx.add([edit(9)]));
+    expect(JSON.parse(localStorage.getItem(EDITS_STORAGE_KEY)!).edits.map((e: StoredEdit) => e.id)).toEqual([...expected, 9]);
   });
 
   it("does not let the legacy log come back after the scoped log was emptied", async () => {
@@ -77,6 +97,8 @@ describe("discarding all saved edits", () => {
     expect(store.list("q")).toEqual([]);
     expect(store.getGeneration()).not.toBe(generation);
     expect(JSON.parse(localStorage.getItem(EDITS_STORAGE_KEY)!).edits).toEqual([]);
+    // Ids keep counting up, so a late reference to a discarded edit cannot name a new one.
+    expect(await store.transaction(tx => tx.nextIds(1))).toEqual([3]);
   });
 
   it("recovers from a log that cannot be read", async () => {
@@ -94,7 +116,10 @@ describe("discarding all saved edits", () => {
     const confirm = vi.fn().mockReturnValue(false);
     vi.stubGlobal("confirm", confirm);
     const discarded = vi.fn();
-    render(<StaticSitePanel onEditsChanged={vi.fn()} onBackupRestored={vi.fn()} onAllEditsDiscarded={discarded} />);
+    const { rerender } = render(<StaticSitePanel onEditsChanged={vi.fn()} onBackupRestored={vi.fn()} onAllEditsDiscarded={discarded} discardBlocked />);
+    // While an edit is being saved, discarding is not offered.
+    expect(screen.getByRole("button", { name: "Discard all saved edits…" })).toBeDisabled();
+    rerender(<StaticSitePanel onEditsChanged={vi.fn()} onBackupRestored={vi.fn()} onAllEditsDiscarded={discarded} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Discard all saved edits…" }));
     await waitFor(() => expect(confirm).toHaveBeenCalledOnce());
