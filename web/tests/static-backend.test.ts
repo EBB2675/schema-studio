@@ -347,3 +347,27 @@ describe("edit store", () => {
     await expect(other.importLog({ edits: [] })).rejects.toThrow(/not a Schema Studio edit log/);
   });
 });
+
+describe("edit ids across log generations", () => {
+  it("reports the generation with every graph and never deletes by an id from a replaced log", async () => {
+    const { backend } = setup();
+    const store = () => createEditStore(window.localStorage);
+    const added = await backend.request("POST", "/schema/edits", { root: "Root" }, EDIT_BODY);
+    const savedIn = (added.data as { edit_generation: string }).edit_generation;
+    expect(savedIn).toBe(store().getGeneration());
+    const read = await backend.request("GET", "/schema", { package: "ns.pkg.a", root: "Root", base_namespace: "ns.pkg" });
+    expect((read.data as { edit_generation: string }).edit_generation).toBe(savedIn);
+
+    // Another tab restores a backup in which id 1 is an unrelated edit.
+    const replacement = { id: 1, profile: "nomad-simulations", package: "ns.pkg.b", commit: null, op: "add_class", target: "", payload: { name: "ImportantReplacementClass" }, created_at: null };
+    await store().restoreLog({ format: "schema-studio-edits", version: 1, edits: [replacement] });
+
+    await expect(backend.request("DELETE", "/schema/edits", {}, { ids: [1], generation: savedIn }))
+      .rejects.toMatchObject({ status: 409 });
+    expect(store().list("nomad-simulations")).toEqual([replacement]);
+    // In the current generation the same id can be deleted.
+    const current = store().getGeneration();
+    await backend.request("DELETE", "/schema/edits", {}, { ids: [1], generation: current });
+    expect(store().list("nomad-simulations")).toEqual([]);
+  });
+});

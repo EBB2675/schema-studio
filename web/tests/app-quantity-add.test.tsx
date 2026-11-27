@@ -1,11 +1,11 @@
 vi.mock('../src/components/StaticSitePanel', () => ({ default: () => <div data-testid="static-site-panel" /> }));
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { useWorkspaceStore } from '../src/store/workspace';
 import { AUDIT_STORAGE_KEY } from '../src/utils/storageKeys';
-import { getBrowserEditStore } from '../src/static/editStore';
+import { createEditStore, getBrowserEditStore } from '../src/static/editStore';
 
 const classId = 'pkg.custom_schema.Class';
 const baseGraph = {
@@ -245,8 +245,10 @@ describe('App editable quantity add flow', () => {
     await addOneQuantity(user);
 
     await user.click(await screen.findByRole('button', { name: 'Undo' }));
+    // The entry's generation goes along, so a replaced log refuses the delete.
+    const generation = getBrowserEditStore().getGeneration();
     await waitFor(() =>
-      expect(mockDelete).toHaveBeenCalledWith('/schema/edits', { params: { package: undefined }, data: { ids: ['7'] } })
+      expect(mockDelete).toHaveBeenCalledWith('/schema/edits', { params: { package: undefined }, data: { ids: ['7'], generation } })
     );
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument());
   });
@@ -490,7 +492,7 @@ describe('App editable quantity add flow', () => {
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY) ?? '[]')).toEqual([]));
   });
 
-  it('drops the History entry of a save that finished after its edit log was replaced', async () => {
+  it('discards a save response that arrives after another tab replaced the edit log', async () => {
     const store = getBrowserEditStore();
     let finish!: (value: unknown) => void;
     mockPost.mockReset().mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
@@ -499,13 +501,51 @@ describe('App editable quantity add flow', () => {
     await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
     await waitFor(() => expect(screen.getByTestId('visible-nodes')).toHaveTextContent(classId));
     await user.click(await screen.findByRole('button', { name: 'Trigger quantity add' }));
-    // The save stored its edit in this generation, then "Discard all" replaced the log
-    // before the response reached the UI.
+    // The save committed edit 7 in this generation; before its response reached the UI,
+    // another tab restored a backup in which id 7 is an unrelated edit.
     const savedIn = store.getGeneration();
-    await act(async () => { await store.discardAll(); });
+    const replacement = {
+      id: 7, profile: 'p', package: 'other.module', commit: null, op: 'add_class', target: '',
+      payload: { name: 'ImportantReplacementClass' }, created_at: null,
+    };
+    await act(async () => {
+      await createEditStore(window.localStorage).restoreLog({ format: 'schema-studio-edits', version: 1, edits: [replacement] });
+    });
     expect(store.getGeneration()).not.toBe(savedIn);
+    const reads = mockGet.mock.calls.filter(([url]) => url === '/schema').length;
     await act(async () => finish({ data: { ...graphWithQuantity, edit_generation: savedIn } }));
+
+    // Nothing of the obsolete response is shown or actionable, and the view is refreshed.
+    await waitFor(() => expect(mockGet.mock.calls.filter(([url]) => url === '/schema').length).toBeGreaterThan(reads));
+    expect(screen.getByTestId('visible-nodes')).not.toHaveTextContent(`${classId}.new_qty`);
+    expect(screen.getByTestId('selected-class')).toBeEmptyDOMElement();
+    await user.click(screen.getByRole('button', { name: 'Show edit history' }));
+    expect(screen.queryByTestId('older-saved-edit')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument();
     expect(JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY) ?? '[]')).toEqual([]);
+    expect(mockDelete).not.toHaveBeenCalled();
+    // The restored edit with the same id survives.
+    expect(store.list('p')).toEqual([replacement]);
+  });
+
+  it('undo of an older saved edit sends the generation its graph was built from', async () => {
+    const generation = getBrowserEditStore().getGeneration();
+    mockGet.mockImplementation(async (url: string) => {
+      if (url === '/workspace') return { data: { workspace: { branch: 'main', package: 'pkg', base_namespace: 'pkg' }, user: { username: 'tester' } } };
+      if (url === '/schema') return { data: { ...graphWithQuantity, persisted_edits: undefined, edit_generation: generation } };
+      return { data: {} };
+    });
+    mockDelete.mockRejectedValue({ response: { status: 409, data: { detail: 'The saved edits were replaced.' } } });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
+    await user.click(screen.getByRole('button', { name: 'Show edit history' }));
+    const row = await screen.findByTestId('older-saved-edit');
+    const reads = mockGet.mock.calls.filter(([url]) => url === '/schema').length;
+    await user.click(within(row).getByRole('button', { name: 'Undo' }));
+    expect(mockDelete).toHaveBeenCalledWith('/schema/edits', { params: { package: undefined }, data: { ids: ['7'], generation } });
+    // A refused undo refreshes the view instead of leaving out-of-date rows.
+    await waitFor(() => expect(mockGet.mock.calls.filter(([url]) => url === '/schema').length).toBeGreaterThan(reads));
   });
 
   it('records a save in the generation the store reports for it', async () => {

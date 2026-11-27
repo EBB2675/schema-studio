@@ -43,6 +43,8 @@ export type SiteIndex = { format: number; static: boolean; generated_at: string;
 
 export type StaticAnswer = { status: number; data: unknown; contentType?: string };
 
+export const EDITS_REPLACED = "The saved edits were replaced (backup restored or all edits discarded, possibly in another tab). Nothing was deleted; the view now shows the current edits.";
+
 export class StaticHttpError extends Error {
   status: number;
   detail: string;
@@ -330,8 +332,10 @@ export function createStaticBackend(options: StaticBackendOptions) {
       const namespace = text(query.base_namespace) ?? ws.base_namespace;
       const profile = profileFor(data, pkg, namespace);
       if (text(query.package) || text(query.base_namespace)) ws = setWorkspace(data, pkg, namespace);
-      const result = await graph(profile, pkg, query, namespace, edits.list(profile.key));
-      return ok({ ...result, workspace: workspacePayload(ws) });
+      const { edits: stored, generation } = edits.snapshot(profile.key);
+      const result = await graph(profile, pkg, query, namespace, stored);
+      // The ids in applied_edits are only meaningful within this generation.
+      return ok({ ...result, edit_generation: generation, workspace: workspacePayload(ws) });
     }
     if (route === "GET /schema/edits") {
       const pkg = text(query.package) ?? ws.package;
@@ -369,7 +373,13 @@ export function createStaticBackend(options: StaticBackendOptions) {
       const all = flag(query.all_packages, false);
       const profile = profileFor(data, pkg ?? ws.package, ws.base_namespace);
       const ids = Array.isArray(payload.ids) ? (payload.ids as unknown[]).map(Number).filter(Number.isInteger) : [];
-      const deleted = await edits.remove(ids, pkg || all ? { profile: profile.key, package: pkg, allPackages: all } : undefined);
+      const expected = text(payload.generation);
+      const deleted = await edits.transaction(tx => {
+        // Ids name edits only within one log: after a restore or discard (here or in another
+        // tab) the same id can be an unrelated edit, so never delete across generations.
+        if (expected !== undefined && tx.generation() !== expected) throw new StaticHttpError(409, EDITS_REPLACED);
+        return tx.remove(ids, pkg || all ? { profile: profile.key, package: pkg, allPackages: all } : undefined);
+      });
       return ok({ deleted, workspace: workspacePayload(ws) });
     }
     if (route === "GET /usage") {

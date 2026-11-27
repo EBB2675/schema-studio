@@ -601,6 +601,13 @@ export default function App() {
       }
     ));
     const updated = ensureGraphResponse(res.data);
+    // The log was replaced (restore, discard all, possibly in another tab) after this save
+    // committed: its edits and ids are gone or now name unrelated edits. Show nothing from it,
+    // refresh from the current log, and stop the caller's own updates (selection, History).
+    if (updated.edit_generation && updated.edit_generation !== getBrowserEditStore().getGeneration()) {
+      if (contextIsCurrent()) void latestLoadGraph.current({ keepView: true });
+      throw new Error("This edit was not kept: the saved edits were replaced (backup restored or all edits discarded) while it was being saved.");
+    }
     if (!contextIsCurrent()) return updated;
     // A renamed root follows its class even when the graph needs reconciliation.
     if ((updated.root ?? "") !== (root ?? "")) setRoot(updated.root ?? "");
@@ -790,8 +797,12 @@ export default function App() {
 
   // Deletes the stored edits of audit entries (and a module's own edits) in one request: all or none.
   const deleteStoredEdits = useCallback(
-    async (ids: string[], packageName?: string) => {
-      await withPendingMutation(packageName || graph?.package || pkg, () => api.delete("/schema/edits", { params: { package: packageName }, data: { ids } }));
+    // With `generation`, the store deletes nothing unless its log is still that generation.
+    async (ids: string[], packageName?: string, generation?: string) => {
+      await withPendingMutation(packageName || graph?.package || pkg, () => api.delete("/schema/edits", {
+        params: { package: packageName },
+        data: generation ? { ids, generation } : { ids },
+      }));
     },
     [api, graph?.package, pkg, withPendingMutation]
   );
@@ -804,9 +815,15 @@ export default function App() {
 
     if (entry.editIds?.length) {
       try {
-        await deleteStoredEdits(entry.editIds);
+        await deleteStoredEdits(entry.editIds, undefined, entry.editGeneration);
       } catch (e: unknown) {
-        // Nothing was deleted; the entry stays so the undo can be tried again.
+        // Nothing was deleted. If the log was replaced, entries of the old one can never be
+        // undone: drop them and show the current edits; otherwise keep the entry to retry.
+        const generation = getBrowserEditStore().getGeneration();
+        if (entry.editGeneration && entry.editGeneration !== generation) {
+          setAuditTrail(prev => prev.filter(item => !item.editIds?.length || item.editGeneration === generation));
+          if (contextIsCurrent()) void latestLoadGraph.current({ keepView: true });
+        }
         if (contextIsCurrent()) setQuantityActionErr(`Undo failed: ${formatApiError(e)}`);
         return;
       }
@@ -823,14 +840,19 @@ export default function App() {
   // Undoes one applied edit that has no History entry. Only its id is sent, never the
   // package: a package scope would delete all of that package's edits.
   // Later edits that depend on it no longer apply and come back as edit conflicts.
-  const undoSavedEdit = async (editId: string) => {
+  const undoSavedEdit = async (editId: string, generation?: string) => {
     if (pendingMutationsRef.current[currentPackageForAudit || pkg]) return;
     setQuantityActionErr(null);
     const contextIsCurrent = canvasSession.captureContext();
     try {
-      await deleteStoredEdits([editId]);
+      // The id is only valid in the log the shown graph was built from.
+      await deleteStoredEdits([editId], undefined, generation);
     } catch (e: unknown) {
-      if (contextIsCurrent()) setQuantityActionErr(`Undo failed: ${formatApiError(e)}`);
+      if (contextIsCurrent()) {
+        setQuantityActionErr(`Undo failed: ${formatApiError(e)}`);
+        // The rows may be out of date (log replaced): show the current edits.
+        void latestLoadGraph.current({ keepView: true });
+      }
       return;
     }
     if (contextIsCurrent()) await latestLoadGraph.current({ keepView: true });
@@ -1678,7 +1700,7 @@ export default function App() {
                         <button
                           className="btn secondary"
                           type="button"
-                          onClick={() => undoSavedEdit(String(edit.id))}
+                          onClick={() => undoSavedEdit(String(edit.id), currentGraph?.edit_generation)}
                           disabled={Boolean(pendingMutations[currentPackageForAudit || pkg])}
                           title="Remove this saved edit"
                           style={{ padding: "6px 10px" }}

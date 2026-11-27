@@ -54,6 +54,8 @@ export interface EditStore {
   hasUnsavedChanges(): boolean;
   subscribe(listener: () => void): () => void;
   list: EditTransaction["list"];
+  /** A profile's edits and the generation of the log they come from, in one read. */
+  snapshot(profile: string): { edits: StoredEdit[]; generation: string };
   exportLog: EditTransaction["exportLog"];
   transaction<T>(operation: (edits: EditTransaction) => T | Promise<T>): Promise<T>;
   remove(...args: Parameters<EditTransaction["remove"]>): Promise<number>;
@@ -227,6 +229,10 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
       return () => { listeners.delete(listener); };
     },
     list: access.list,
+    snapshot(profile) {
+      const saved = read();
+      return { edits: saved.edits.filter(edit => edit.profile === profile), generation: saved.generation };
+    },
     exportLog: access.exportLog,
     transaction,
     remove: (...args) => transaction(store => store.remove(...args)),
