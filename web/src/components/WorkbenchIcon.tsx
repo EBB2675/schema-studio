@@ -1,5 +1,7 @@
-type IconName = 'schema' | 'controls' | 'history' | 'theme';
+type IconName = 'schema' | 'controls' | 'history' | 'theme' | 'layers' | 'folder';
 const paths: Record<IconName, string> = {
+  folder: 'M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z',
+  layers: 'M12 3 2 8l10 5 10-5-10-5Z M2 12l10 5 10-5 M2 16l10 5 10-5',
   schema: 'M4 3h6v6H4z M14 15h6v6h-6z M14 3h6v6h-6z M7 9v9h7 M10 6h4',
   controls: 'M4 6h16 M4 12h16 M4 18h16 M8 3v6 M16 9v6 M10 15v6',
   history: 'M4 5v5h5 M4 10a8 8 0 1 1 1 8 M12 7v5l3 2',

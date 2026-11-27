@@ -24,7 +24,7 @@ vi.mock('../src/client', () => {
     delete: vi.fn(),
     interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
   });
-  return { createApiClient: create, apiFetch: vi.fn(async () => new Response("[]")) };
+  return { createApiClient: create, apiFetch: vi.fn(async () => new Response(JSON.stringify({ branch: 'main', base: 'pkg', items: [] }))) };
 });
 
 // FlowGraphView reduced to the direction it is given.

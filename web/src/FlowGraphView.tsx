@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import WorkbenchIcon from "./components/WorkbenchIcon";
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Background, Controls, Handle, MarkerType, Panel, Position, ReactFlow, ReactFlowProvider, applyNodeChanges, useNodesInitialized, useReactFlow, type Node, type NodeProps } from "@xyflow/react";
 import { arrangeGraph } from "./utils/arrangeGraph";
@@ -152,9 +153,8 @@ function ClassCard({ data, selected }: NodeProps<CardNode>) {
   return <article className={`flow-class ${selected ? "is-selected" : ""}`}>
     <Handle type="target" position={target} isConnectable={false} />
     <header className="flow-class-header" onDoubleClick={() => { if (editable) setRename(true); }}>
-      <div className="flow-node-caption"><span>CLASS</span><span>{cls.quantities.length} {cls.quantities.length === 1 ? "field" : "fields"}</span></div>
       {rename && editable ? <InlineName name={cls.name} onSave={name => props.onRenameClass(cls.id, name)} onClose={() => setRename(false)} /> :
-        <button className="flow-title nodrag" onClick={() => { if (editable && touchEditing()) setRename(true); }} title={editable ? "Double-click to rename · Enter to edit" : cls.name} onKeyDown={e => { if (e.key === "Enter" && editable) { e.preventDefault(); setRename(true); } }}>{cls.name}</button>}
+        <button className="flow-title nodrag" onClick={() => { if (editable && touchEditing()) setRename(true); }} title={editable ? "Double-click to rename · Enter to edit" : cls.name} onKeyDown={e => { if (e.key === "Enter" && editable) { e.preventDefault(); setRename(true); } }}><WorkbenchIcon name="layers" /><span>{cls.name}</span></button>}
     </header>
     {!props.compact && <div className="flow-quantities">{(showAllFields ? ownQuantities : ownQuantities.slice(0, 6)).map(renderQuantity)}{ownQuantities.length > 6 && <button className="flow-inherited-toggle nodrag" aria-expanded={showAllFields} onClick={e => { e.stopPropagation(); setShowAllFields(value => !value); }}>{showAllFields ? "Show fewer fields" : `Show ${ownQuantities.length - 6} more fields`}</button>}{inheritedQuantities.length > 0 && <button className="flow-inherited-toggle nodrag" aria-expanded={showInherited} onClick={e => { e.stopPropagation(); setShowInherited(v => !v); }}>{showInherited ? "▾ Hide" : "▸"} {inheritedQuantities.length} inherited</button>}{showInherited && inheritedQuantities.map(renderQuantity)}{!cls.quantities.length && <div className="flow-empty">No quantities yet</div>}</div>}
     {editing && editable ? props.mobile ? <MobileEditSheet title={editing === "new" ? "Add quantity" : "Edit quantity"} onClose={() => setEditing(null)}><QuantityForm key={typeof editing === "string" ? editing : editing.id} cls={cls} quantity={editing === "new" ? undefined : editing} props={props} onClose={() => setEditing(null)} /></MobileEditSheet> : <QuantityForm key={typeof editing === "string" ? editing : editing.id} cls={cls} quantity={editing === "new" ? undefined : editing} props={props} onClose={() => setEditing(null)} /> : editable && <button className="flow-add nodrag" onClick={e => { e.stopPropagation(); selectClass(cls, props); setAddingSubclass(false); setEditing("new"); }}>+ Add {props.editRules?.codes && cls.quantities.some(q => q.dtype === VOCAB_TERM) ? "term" : "quantity"}</button>}

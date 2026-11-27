@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { DEFAULT_OVERVIEW_NAMESPACE } from "../constants/defaults";
 import { apiFetch } from "../client";
+import WorkbenchIcon from "./WorkbenchIcon";
 
 type OverviewItem = { package: string; classes: string[] };
 type OverviewResp = { branch: string; base: string; items: OverviewItem[] };
@@ -11,6 +12,7 @@ export default function OverviewGrid({
   onClassSelect,
   query,
   onQueryChange,
+  layout = "grid",
 }: {
   branch: string;
   base?: string;
@@ -18,6 +20,7 @@ export default function OverviewGrid({
   // Passing the filter in keeps it when the caller leaves and comes back.
   query?: string;
   onQueryChange?: (query: string) => void;
+  layout?: "grid" | "tree";
 }) {
   const [data, setData] = useState<OverviewResp | null>(null);
   const [ownQuery, setOwnQuery] = useState("");
@@ -25,6 +28,8 @@ export default function OverviewGrid({
   const setQ = onQueryChange ?? setOwnQuery;
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [searchCollapsed, setSearchCollapsed] = useState<{ query: string; packages: Set<string> }>({ query: "", packages: new Set() });
 
   useEffect(() => {
     const path = `/overview?branch=${encodeURIComponent(branch)}&base=${encodeURIComponent(base)}`;
@@ -60,6 +65,46 @@ export default function OverviewGrid({
   if (loading) return <div className="p-2 text-sm">Loading…</div>;
   if (err) return <div className="p-2 text-sm" style={{ color: "var(--danger)" }}>{err}</div>;
   if (!data) return <div className="p-2 text-sm">No data.</div>;
+
+  if (layout === "tree") return (
+    <div className="package-tree">
+      <input className="package-search" aria-label="Find package or class" placeholder="Find package or class…" value={q} onChange={e => setQ(e.target.value)} />
+      <ul className="package-list">
+        {items.map(it => {
+          const searching = Boolean(q);
+          const open = searching ? searchCollapsed.query !== q || !searchCollapsed.packages.has(it.package) : expanded.has(it.package);
+          const classes = searching && !it.package.toLowerCase().includes(q.toLowerCase())
+            ? it.classes.filter(c => c.toLowerCase().includes(q.toLowerCase())) : it.classes;
+          return <li key={it.package}>
+            <button type="button" className="package-toggle" aria-expanded={open} onClick={() => {
+              if (searching) {
+                setSearchCollapsed(previous => {
+                  const packages = new Set(previous.query === q ? previous.packages : []);
+                  if (open) packages.add(it.package); else packages.delete(it.package);
+                  return { query: q, packages };
+                });
+                return;
+              }
+              setExpanded(previous => {
+                const next = new Set(previous);
+                if (open) next.delete(it.package); else next.add(it.package);
+                return next;
+              });
+            }}>
+              <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+              <WorkbenchIcon name="folder" />
+              <span className="package-name" title={it.package}>{it.package.split('.').pop()}</span>
+              <span className="overview-count" aria-label={`${it.classes.length} classes`}>{it.classes.length}</span>
+            </button>
+            {open && <ul className="package-classes">{classes.map(c => <li key={c}>
+              <button type="button" title={c} onClick={() => onClassSelect?.(it.package, c)}>{c}</button>
+            </li>)}</ul>}
+          </li>;
+        })}
+        {!items.length && <li className="package-empty">No packages or classes match.</li>}
+      </ul>
+    </div>
+  );
 
   return (
     <div

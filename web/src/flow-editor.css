@@ -54,8 +54,9 @@
 .flow-editor .react-flow__edge-textbg { fill: var(--flow-card); }
 .flow-editor .react-flow__handle { background: var(--flow-muted); border-color: var(--flow-card); width: 6px; height: 6px; }
 
-.flow-node-caption { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-family: var(--font-mono); font-size: 12px; letter-spacing: .04em; color: var(--flow-muted); margin-bottom: 7px; }
-.flow-node-caption > span:first-child { color: var(--flow-accent); font-weight: 600; }
+.flow-title { display: flex; align-items: flex-start; gap: 8px; }
+.flow-title > svg { width: 18px; height: 18px; flex: 0 0 18px; margin-top: 3px; }
+.flow-title > span { min-width: 0; }
 .flow-class.is-selected .flow-class-header { background: var(--selection-bg); }
 .flow-class.is-selected { box-shadow: 0 0 0 1px var(--accent), 0 8px 28px var(--input-focus-shadow); }
 .flow-quantity code { font-family: var(--font-mono); padding: 2px 5px; background: var(--flow-soft); border-radius: 4px; }
