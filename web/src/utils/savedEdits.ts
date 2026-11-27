@@ -49,14 +49,24 @@ export function listedOnCanvas(edit: AppliedEdit, pkg: string, unavailable: stri
   return belongsToPackage(edit.package, pkg) || (Boolean(edit.package) && unavailable.includes(edit.package!));
 }
 
-/** The canvas's older saved edits: listed on it, and not covered by its History rows. */
+/**
+ * The canvas's older saved edits: listed on it, and not covered by its History rows. Stored
+ * edits of unavailable packages that did not apply come last; `notApplied` tells them apart.
+ */
 export function olderSavedEditsOf(
-  graph: { applied_edits?: AppliedEdit[]; edit_generation?: string; unavailable_packages?: string[] } | null | undefined,
+  graph: {
+    applied_edits?: AppliedEdit[]; edit_generation?: string; unavailable_packages?: string[]; unavailable_edits?: AppliedEdit[];
+  } | null | undefined,
   pkg: string,
   canvasHistory: AuditTrailEntry[],
 ): AppliedEdit[] {
   const own = (graph?.applied_edits ?? []).filter(edit => listedOnCanvas(edit, pkg, graph?.unavailable_packages));
-  return unlistedAppliedEdits(own, canvasHistory, graph?.edit_generation);
+  return unlistedAppliedEdits([...own, ...(graph?.unavailable_edits ?? [])], canvasHistory, graph?.edit_generation);
+}
+
+/** Whether an older saved edit is one that did not apply (its package is not on the site). */
+export function notApplied(edit: AppliedEdit, graph: { unavailable_edits?: AppliedEdit[] } | null | undefined): boolean {
+  return (graph?.unavailable_edits ?? []).includes(edit);
 }
 
 /** Applied edits of other packages the site has: they are listed on those packages' canvases. */

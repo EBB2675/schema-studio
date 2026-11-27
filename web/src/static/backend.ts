@@ -168,13 +168,18 @@ export function createStaticBackend(options: StaticBackendOptions) {
   const snapshotOf = (profile: SiteProfile, pkg: string): string | undefined =>
     pkg.endsWith(SCRATCH_SUFFIX) || pkg === profile.default_base_namespace ? profile.snapshot : moduleOf(profile, pkg)?.snapshot;
 
-  // Packages of applied edits that this site cannot open (e.g. a module a newer snapshot
-  // removed or renamed): their edits still apply, but no canvas of their own lists them.
-  const withUnavailablePackages = <T extends Record<string, unknown>>(result: T, profile: SiteProfile): T => {
-    const applied = Array.isArray(result.applied_edits) ? result.applied_edits as { package?: unknown }[] : [];
-    const missing = [...new Set(applied.map(edit => edit.package).filter((pkg): pkg is string => typeof pkg === "string" && pkg !== ""))]
-      .filter(pkg => !snapshotOf(profile, pkg)).sort();
-    return missing.length ? { ...result, unavailable_packages: missing } : result;
+  // Stored edits of packages this site cannot open (e.g. a module a newer snapshot removed or
+  // renamed) have no canvas of their own to list them. Report their packages, and the ones
+  // that did not apply: those are in no applied list, and the core keeps only the current
+  // package's conflicts, so they would be listed nowhere.
+  const withUnavailablePackages = <T extends Record<string, unknown>>(result: T, profile: SiteProfile, stored: StoredEdit[]): T => {
+    const unavailable = (pkg: unknown): pkg is string => typeof pkg === "string" && pkg !== "" && !snapshotOf(profile, pkg);
+    const applied = Array.isArray(result.applied_edits) ? result.applied_edits as { id?: unknown; package?: unknown }[] : [];
+    const appliedIds = new Set(applied.map(edit => String(edit.id)));
+    const notApplied = stored.filter(edit => unavailable(edit.package) && !appliedIds.has(String(edit.id)));
+    const missing = [...new Set([...applied.map(edit => edit.package), ...notApplied.map(edit => edit.package)].filter(unavailable))].sort();
+    if (!missing.length) return result;
+    return { ...result, unavailable_packages: missing, ...(notApplied.length ? { unavailable_edits: notApplied } : {}) };
   };
 
   const profileRequest = (profile: SiteProfile) => ({
@@ -344,7 +349,7 @@ export function createStaticBackend(options: StaticBackendOptions) {
       const { edits: stored, generation } = edits.snapshot(profile.key);
       const result = await graph(profile, pkg, query, namespace, stored);
       // The ids in applied_edits are only meaningful within this generation.
-      return ok({ ...withUnavailablePackages(result as Record<string, unknown>, profile), edit_generation: generation, workspace: workspacePayload(ws) });
+      return ok({ ...withUnavailablePackages(result as Record<string, unknown>, profile, stored), edit_generation: generation, workspace: workspacePayload(ws) });
     }
     if (route === "GET /schema/edits") {
       const pkg = text(query.package) ?? ws.package;
@@ -370,7 +375,7 @@ export function createStaticBackend(options: StaticBackendOptions) {
         edits.add((result.persisted_edits as StoredEdit[]) ?? []);
         // Read under the same lock as the save: History stamps its entry with it and drops
         // the entry if the log was replaced (restore, discard all) before the response landed.
-        return ok({ ...withUnavailablePackages(result, profile), edit_generation: edits.generation(), workspace: workspacePayload(ws) });
+        return ok({ ...withUnavailablePackages(result, profile, stored), edit_generation: edits.generation(), workspace: workspacePayload(ws) });
       });
     }
     if (method.toUpperCase() === "DELETE" && path.startsWith("/schema/edits/")) {

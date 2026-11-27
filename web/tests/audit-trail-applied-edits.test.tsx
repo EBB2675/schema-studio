@@ -369,4 +369,29 @@ describe('Audit trail seeding from applied edits', () => {
     expect(screen.getByRole('button', { name: /^Clear$/ })).toBeDisabled();
     expect(screen.getByText(/1 edit from other\.module also applies here/)).toBeInTheDocument();
   });
+
+  it('lists an edit of an unavailable package that did not apply, with Undo, and Clear removes it', async () => {
+    const generation = getBrowserEditStore().getGeneration();
+    let current: object = {
+      ...graphWithoutApplied, unavailable_packages: ['removed.module'], unavailable_edits: [goneEdit], edit_generation: generation,
+    };
+    mockGet.mockImplementation(async (url: string, options?: { params?: Record<string, unknown> }) => commonGet(current)(url, options));
+    mockPut.mockResolvedValue({ data: { workspace: { branch: 'develop', package: 'pkg.custom_schema', base_namespace: 'pkg' } } });
+    mockDelete.mockImplementation(async () => { current = { ...graphWithoutApplied, edit_generation: generation }; return { data: { deleted: 1 } }; });
+    const user = await openHistory();
+
+    const row = await screen.findByTestId('older-saved-edit');
+    expect(row).toHaveTextContent('Older saved edit: add class FromRemoved');
+    expect(row).toHaveTextContent('in removed.module, which this site cannot open');
+    expect(row).toHaveTextContent('Not applied: its package is not on this site.');
+    expect(within(row).getByRole('button', { name: 'Undo' })).toBeEnabled();
+    expect(screen.queryByText(/No edits on this canvas yet/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('History actions'));
+    await user.click(screen.getByRole('button', { name: /^Clear$/ }));
+    expect(mockDelete).toHaveBeenCalledWith('/schema/edits', {
+      params: { package: 'pkg.custom_schema' }, data: { ids: ['6'], generation },
+    });
+    await waitFor(() => expect(screen.queryByTestId('older-saved-edit')).not.toBeInTheDocument());
+  });
 });

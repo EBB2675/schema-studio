@@ -434,4 +434,20 @@ describe("edits of packages the site cannot open", () => {
     // ns.pkg.a is a module of the site; ns.pkg.removed is not.
     expect((read.data as { unavailable_packages?: string[] }).unavailable_packages).toEqual(["ns.pkg.removed"]);
   });
+
+  it("also reports their edits that did not apply, which no list would show", async () => {
+    const { backend, runCore } = setup();
+    // As when the module is gone: the core cannot apply its edits and keeps no conflict for them.
+    const implementation = runCore.getMockImplementation()!;
+    runCore.mockImplementation(async request => request.op === "graph"
+      ? { ok: { package: request.package, nodes: [], edges: [],
+        applied_edits: (request.stored as { package: string }[]).filter(edit => edit.package !== "ns.pkg.removed") } }
+      : implementation(request));
+    const edit = (id: number, pkg: string) => ({ id, profile: "nomad-simulations", package: pkg, commit: null, op: "add_class", target: "", payload: { name: `C${id}` }, created_at: null });
+    await createEditStore(window.localStorage).restoreLog({
+      format: "schema-studio-edits", version: 1, edits: [edit(1, "ns.pkg.a"), edit(2, "ns.pkg.removed")],
+    });
+    const read = await backend.request("GET", "/schema", { package: "ns.pkg.a", root: "Root", base_namespace: "ns.pkg" });
+    expect(read.data).toMatchObject({ unavailable_packages: ["ns.pkg.removed"], unavailable_edits: [edit(2, "ns.pkg.removed")] });
+  });
 });

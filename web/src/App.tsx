@@ -35,7 +35,7 @@ import {
 } from "./types/api";
 import { belongsToPackage, fqidFromParts, normalizeId, normalizeLabel, normalizePackageName } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
-import { describeSavedEdit, editsOfOtherPackages, olderSavedEditsOf } from "./utils/savedEdits";
+import { describeSavedEdit, editsOfOtherPackages, notApplied, olderSavedEditsOf } from "./utils/savedEdits";
 import { buildUmlStateFromGraph } from "./utils/umlState";
 import { initialTheme } from "./utils/theme";
 import { canvasPositionKey } from "./utils/canvasPositions";
@@ -1825,6 +1825,9 @@ export default function App() {
                           {edit.created_at ? new Date(edit.created_at).toLocaleString() : "Date unknown"}
                           {otherPackage ? ` · in ${otherPackage}, which this site cannot open` : ""}
                         </div>
+                        {notApplied(edit, currentGraph) ? (
+                          <div style={{ color: "var(--pill-warning-fg)" }}>Not applied: its package is not on this site.</div>
+                        ) : null}
                         {edit.id ? null : (
                           <div style={{ color: "var(--subtitle)" }}>
                             This edit has no ID, so it cannot be undone on its own. Use &ldquo;Discard all saved edits&rdquo; above to remove it.
