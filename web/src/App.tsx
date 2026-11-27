@@ -1719,7 +1719,7 @@ export default function App() {
                   <span>Packages</span><span aria-hidden="true">{packagesExpanded ? "‹" : "›"}</span>
                 </button>
                 <div id="graph-packages" hidden={!packagesExpanded}>
-                  <OverviewGrid layout="tree" branch={overviewBranch} base={normalizedNamespace} onClassSelect={handleOverviewClassSelect} query={overviewQuery} onQueryChange={setOverviewQuery} />
+                  <OverviewGrid layout="tree" activePackage={graph.package} branch={overviewBranch} base={normalizedNamespace} onClassSelect={handleOverviewClassSelect} query={overviewQuery} onQueryChange={setOverviewQuery} />
                 </div>
               </aside>}
               <div className="schema-graph-canvas">

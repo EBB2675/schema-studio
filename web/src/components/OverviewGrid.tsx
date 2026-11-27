@@ -13,6 +13,7 @@ export default function OverviewGrid({
   query,
   onQueryChange,
   layout = "grid",
+  activePackage,
 }: {
   branch: string;
   base?: string;
@@ -21,6 +22,7 @@ export default function OverviewGrid({
   query?: string;
   onQueryChange?: (query: string) => void;
   layout?: "grid" | "tree";
+  activePackage?: string;
 }) {
   const [data, setData] = useState<OverviewResp | null>(null);
   const [ownQuery, setOwnQuery] = useState("");
@@ -76,7 +78,7 @@ export default function OverviewGrid({
           const classes = searching && !it.package.toLowerCase().includes(q.toLowerCase())
             ? it.classes.filter(c => c.toLowerCase().includes(q.toLowerCase())) : it.classes;
           return <li key={it.package}>
-            <button type="button" className="package-toggle" aria-expanded={open} onClick={() => {
+            <button type="button" className="package-toggle" aria-current={it.package === activePackage ? "true" : undefined} aria-expanded={open} onClick={() => {
               if (searching) {
                 setSearchCollapsed(previous => {
                   const packages = new Set(previous.query === q ? previous.packages : []);
