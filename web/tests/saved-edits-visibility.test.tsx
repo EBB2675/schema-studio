@@ -7,7 +7,7 @@ import { createEditStore, EDITS_STORAGE_KEY, LEGACY_EDIT_GENERATION, type Stored
 import {
   AUDIT_STORAGE_KEY, LEGACY_AUDIT_STORAGE_KEY, LEGACY_EDITS_STORAGE_KEY, readWithLegacyFallback, scopedStorageKey,
 } from "../src/utils/storageKeys";
-import { describeSavedEdit, unlistedAppliedEdits } from "../src/utils/savedEdits";
+import { describeSavedEdit, packagesListingAppliedEdits, unlistedAppliedEdits } from "../src/utils/savedEdits";
 import type { AuditTrailEntry } from "../src/types/uml";
 
 vi.mock("../src/client", () => ({ getStaticBackend: vi.fn() }));
@@ -158,6 +158,16 @@ describe("applied edits without a History entry", () => {
     const stale = { ...history(["1"]), editGeneration: "G0" };
     expect(unlistedAppliedEdits([restored], [stale], "G1")).toEqual([restored]);
     expect(unlistedAppliedEdits([restored], [{ ...stale, editGeneration: "G1" }], "G1")).toEqual([]);
+  });
+
+  it("names the other packages whose History lists edits applied here", () => {
+    const inA = { ...history(["1", "2"]), package: "pkg.a", editGeneration: "G" };
+    const inB = { ...history(["3"]), package: "pkg.b", editGeneration: "G" };
+    const old = { ...history(["4"]), package: "pkg.c", editGeneration: "G0" };
+    const here = (pkg?: string) => pkg === "pkg.b";
+    expect(packagesListingAppliedEdits([applied("1"), applied("3"), applied("4")], [inA, inB, old], "G", here))
+      .toEqual({ count: 1, packages: ["pkg.a"] });
+    expect(packagesListingAppliedEdits([], [inA], "G", here)).toEqual({ count: 0, packages: [] });
   });
 
   it("describes edits in plain words", () => {

@@ -39,3 +39,30 @@ export function describeSavedEdit(edit: AppliedEdit): string {
   if (name && target) return `${op} ${name} on ${target}`;
   return `${op} ${name ?? target}`.trim();
 }
+
+/**
+ * The other packages whose History lists edits applied to this graph: such edits are
+ * neither History rows here (History is per package) nor older saved edits (they are
+ * listed), so the panel names where to find them.
+ */
+export function packagesListingAppliedEdits(
+  applied: AppliedEdit[] | undefined,
+  history: AuditTrailEntry[],
+  generation: string | undefined,
+  isCurrentPackage: (pkg: string | undefined) => boolean,
+): { count: number; packages: string[] } {
+  const ids = new Set((applied ?? []).map(edit => edit.id).filter((id): id is string => Boolean(id)).map(String));
+  const elsewhere = history.filter(entry => entry.package && !isCurrentPackage(entry.package)
+    && (generation === undefined || entry.editGeneration === generation));
+  const listed = new Set<string>();
+  const packages = new Set<string>();
+  for (const entry of elsewhere) {
+    for (const id of entry.editIds ?? []) {
+      if (ids.has(id)) {
+        listed.add(id);
+        packages.add(entry.package!);
+      }
+    }
+  }
+  return { count: listed.size, packages: [...packages].sort() };
+}

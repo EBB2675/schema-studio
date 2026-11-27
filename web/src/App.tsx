@@ -30,11 +30,12 @@ import {
   ensureGraphResponse,
   ensureImportedGraph,
   type ApiGraph,
-  type ApiNode
+  type ApiNode,
+  type AppliedEdit
 } from "./types/api";
 import { fqidFromParts, normalizeId, normalizeLabel, normalizePackageName } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
-import { describeSavedEdit, unlistedAppliedEdits } from "./utils/savedEdits";
+import { describeSavedEdit, packagesListingAppliedEdits, unlistedAppliedEdits } from "./utils/savedEdits";
 import { buildUmlStateFromGraph } from "./utils/umlState";
 import { initialTheme } from "./utils/theme";
 import { canvasPositionKey } from "./utils/canvasPositions";
@@ -608,7 +609,7 @@ export default function App() {
     // committed: its edits and ids are gone or now name unrelated edits. Show nothing from it,
     // refresh from the current log, and stop the caller's own updates (selection, History).
     if (updated.edit_generation && updated.edit_generation !== getBrowserEditStore().getGeneration()) {
-      if (contextIsCurrent()) void latestLoadGraph.current({ keepView: true });
+      if (contextIsCurrent()) void reloadAfterEditsRemoved(shownAppliedEdits());
       throw new Error("This edit was not kept: the saved edits were replaced (backup restored or all edits discarded) while it was being saved.");
     }
     if (!contextIsCurrent()) return updated;
@@ -819,6 +820,38 @@ export default function App() {
       return undefined;
     }
   };
+  // Shows the current schema after stored edits were removed or replaced. The open root may
+  // have been added or renamed by those edits: follow a removed rename back to the earlier
+  // name, keep the root if the package still has it, else open the package's first root (as
+  // loadRoots does). The root is passed explicitly: setRoot only applies on the next render.
+  const reloadAfterEditsRemoved = async (removed: AppliedEdit[] = []) => {
+    let nextRoot = root;
+    if (root && !startEmpty) {
+      for (const edit of [...removed].reverse()) {
+        if (edit.op === "rename_class" && edit.payload?.new_name === nextRoot && edit.target) {
+          nextRoot = edit.target.split(".").pop() || nextRoot;
+        }
+      }
+      try {
+        const response = await api.get("/roots", { params: { package: graph?.package || pkg, branch: undefined } });
+        const sections: unknown = response.data?.sections;
+        if (Array.isArray(sections) && !sections.includes(nextRoot)) nextRoot = String(sections[0] ?? "");
+      } catch {
+        // Keep the root; the graph load reports what is wrong.
+      }
+    }
+    if (nextRoot === root) {
+      await latestLoadGraph.current({ keepView: true });
+      return;
+    }
+    // The same canvas following its class, as a save that renames the root does.
+    setRoot(nextRoot);
+    canvasSession.updateRoot(nextRoot);
+    await latestLoadGraph.current({ root: nextRoot });
+  };
+  // Every applied edit of the shown graph, for when the whole log was replaced.
+  const shownAppliedEdits = () => graph?.applied_edits ?? [];
+
   // History entries of a replaced log can never be undone or cleared by id.
   const dropReplacedHistory = (generation: string) =>
     setAuditTrail(prev => prev.filter(item => !item.editIds?.length || item.editGeneration === generation));
@@ -839,13 +872,14 @@ export default function App() {
         const generation = readEditGeneration();
         if (generation !== undefined && entry.editGeneration && entry.editGeneration !== generation) {
           dropReplacedHistory(generation);
-          if (contextIsCurrent()) await latestLoadGraph.current({ keepView: true });
+          if (contextIsCurrent()) await reloadAfterEditsRemoved(shownAppliedEdits());
         }
         if (contextIsCurrent()) setHistoryActionErr(`Undo failed: ${formatApiError(e)}`);
         return;
       }
       setAuditTrail(prev => prev.filter(item => item.id !== id && item.change));
-      if (contextIsCurrent()) await latestLoadGraph.current({ keepView: true });
+      const ids = new Set(entry.editIds);
+      if (contextIsCurrent()) await reloadAfterEditsRemoved(shownAppliedEdits().filter(edit => edit.id && ids.has(String(edit.id))));
       return;
     }
 
@@ -857,7 +891,8 @@ export default function App() {
   // Undoes one applied edit that has no History entry. Only its id is sent, never the
   // package: a package scope would delete all of that package's edits.
   // Later edits that depend on it no longer apply and come back as edit conflicts.
-  const undoSavedEdit = async (editId: string, generation?: string) => {
+  const undoSavedEdit = async (edit: AppliedEdit, generation?: string) => {
+    const editId = String(edit.id);
     if (pendingMutationsRef.current[currentPackageForAudit || pkg]) return;
     setHistoryActionErr(null);
     const contextIsCurrent = canvasSession.captureContext();
@@ -867,12 +902,12 @@ export default function App() {
     } catch (e: unknown) {
       if (contextIsCurrent()) {
         // The rows may be out of date (log replaced): show the current edits.
-        await latestLoadGraph.current({ keepView: true });
+        await reloadAfterEditsRemoved(shownAppliedEdits());
         if (contextIsCurrent()) setHistoryActionErr(`Undo failed: ${formatApiError(e)}`);
       }
       return;
     }
-    if (contextIsCurrent()) await latestLoadGraph.current({ keepView: true });
+    if (contextIsCurrent()) await reloadAfterEditsRemoved([edit]);
   };
 
   // Clears what the audit panel shows: this module's stored edits and the edits its entries made.
@@ -899,13 +934,18 @@ export default function App() {
       const current = readEditGeneration();
       if (current !== undefined && current !== generation) {
         dropReplacedHistory(current);
-        if (contextIsCurrent()) await latestLoadGraph.current({ keepView: true });
+        if (contextIsCurrent()) await reloadAfterEditsRemoved(shownAppliedEdits());
       }
       if (contextIsCurrent()) setHistoryActionErr(`Clear failed: ${formatApiError(e)}`);
       return;
     }
     setAuditTrail((prev) => prev.filter((entry) => !auditEntriesForCurrentPackage.includes(entry)));
-    if (contextIsCurrent()) await latestLoadGraph.current({ keepView: true });
+    // Clear removed this package's edits and the listed ids.
+    const cleared = new Set(ids);
+    if (contextIsCurrent()) {
+      await reloadAfterEditsRemoved(shownAppliedEdits().filter(edit =>
+        (edit.id && cleared.has(String(edit.id))) || normalizePackageName(edit.package || "") === targetPackage));
+    }
   };
 
   // If user switches away from the scratch package, exit empty mode to restore schema-backed behavior.
@@ -943,6 +983,13 @@ export default function App() {
   const olderSavedEdits = useMemo(
     () => unlistedAppliedEdits(currentGraph?.applied_edits, auditTrail, currentGraph?.edit_generation),
     [auditTrail, currentGraph?.applied_edits, currentGraph?.edit_generation]
+  );
+  const listedElsewhere = useMemo(
+    () => packagesListingAppliedEdits(
+      currentGraph?.applied_edits, auditTrail, currentGraph?.edit_generation,
+      (entryPackage) => normalizePackageName(entryPackage || "") === currentPackageForAudit,
+    ),
+    [auditTrail, currentGraph?.applied_edits, currentGraph?.edit_generation, currentPackageForAudit]
   );
   // A graph from the current log (e.g. after another tab restored a backup) retires History
   // entries of earlier logs: their ids now name other edits or nothing, so they would
@@ -996,7 +1043,7 @@ export default function App() {
     // Keep only entries a save made in the new log after the replacement.
     const generation = getBrowserEditStore().getGeneration();
     setAuditTrail(prev => prev.filter(entry => entry.editIds?.length && entry.editGeneration === generation));
-    void loadGraph({ keepView: true });
+    void reloadAfterEditsRemoved(shownAppliedEdits());
   };
 
   const handleCanvasClassSelect = useCallback((cls: UmlClassNode) => {
@@ -1666,13 +1713,16 @@ export default function App() {
               </div>
             ) : null}
             <div className="small" style={{ color: "var(--muted)" }}>
-              {auditEntriesForCurrentPackage.length || olderSavedEdits.length
+              {auditEntriesForCurrentPackage.length || olderSavedEdits.length || listedElsewhere.count
                 ? [
                     auditEntriesForCurrentPackage.length
                       ? `${activeAuditCount} active edits${archivedAuditCount > 0 ? ` (${archivedAuditCount} archived)` : ""}`
                       : null,
                     olderSavedEdits.length
                       ? `${olderSavedEdits.length} older saved edit${olderSavedEdits.length === 1 ? "" : "s"}`
+                      : null,
+                    listedElsewhere.count
+                      ? `${listedElsewhere.count} applied edit${listedElsewhere.count === 1 ? " is" : "s are"} listed in the History of ${listedElsewhere.packages.join(", ")}`
                       : null,
                   ].filter(Boolean).join(" · ")
                 : "No edits on this canvas yet"}
@@ -1751,7 +1801,7 @@ export default function App() {
                         <button
                           className="btn secondary"
                           type="button"
-                          onClick={() => undoSavedEdit(String(edit.id), currentGraph?.edit_generation)}
+                          onClick={() => undoSavedEdit(edit, currentGraph?.edit_generation)}
                           disabled={Boolean(pendingMutations[currentPackageForAudit || pkg])}
                           title="Remove this saved edit"
                           style={{ padding: "6px 10px" }}

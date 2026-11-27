@@ -330,4 +330,19 @@ describe('Audit trail seeding from applied edits', () => {
     // The stale entry is retired, so it no longer counts anywhere.
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY)!)).toEqual([]));
   });
+
+  it('says where an applied edit is listed when its History entry belongs to another package', async () => {
+    const generation = getBrowserEditStore().getGeneration();
+    window.localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify([{
+      id: 'in-a', timestamp: new Date().toISOString(), description: 'Added quantity in A', package: 'other.module',
+      replayable: true, editIds: ['1'], editGeneration: generation,
+      change: { type: 'add-class', cls: { id: 'other.module.X', name: 'X', module: 'other.module', quantities: [] } },
+    }]));
+    mockGet.mockImplementation(commonGet({ ...graphWithApplied, edit_generation: generation }));
+    mockPut.mockResolvedValue({ data: { workspace: { branch: 'develop', package: 'pkg.custom_schema', base_namespace: 'pkg' } } });
+    await openHistory();
+    expect(await screen.findByText('1 applied edit is listed in the History of other.module')).toBeInTheDocument();
+    expect(screen.queryByText(/No edits on this canvas yet/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('older-saved-edit')).not.toBeInTheDocument();
+  });
 });
