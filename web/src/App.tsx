@@ -171,6 +171,7 @@ export default function App() {
   const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
   const [docPanelCollapsed, setDocPanelCollapsed] = useState<boolean>(true);
   const { isMobile, mobilePanel, setMobilePanel } = useMobilePanels();
+  const [packagesExpanded, setPackagesExpanded] = useState(() => typeof matchMedia !== "function" || !matchMedia("(max-width: 900px)").matches);
   const detailsHidden = isMobile ? mobilePanel !== "details" : docPanelCollapsed;
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [linkmlStatus, setLinkmlStatus] = useState<string | null>(null);
@@ -1712,8 +1713,16 @@ export default function App() {
               />
             </div>
           ) : graph ? (
-            <>
-              <div style={{ position: "relative", flex: 1 }}>
+            <div className="schema-graph-layout">
+              {!emptyCanvasActive && <aside className={`package-sidebar${packagesExpanded ? "" : " is-collapsed"}`} aria-label="Packages">
+                <button type="button" className="package-sidebar-toggle" aria-expanded={packagesExpanded} aria-controls="graph-packages" onClick={() => setPackagesExpanded(value => !value)}>
+                  <span>Packages</span><span aria-hidden="true">{packagesExpanded ? "‹" : "›"}</span>
+                </button>
+                <div id="graph-packages" hidden={!packagesExpanded}>
+                  <OverviewGrid layout="tree" activePackage={graph.package} branch={overviewBranch} base={normalizedNamespace} onClassSelect={handleOverviewClassSelect} query={overviewQuery} onQueryChange={setOverviewQuery} />
+                </div>
+              </aside>}
+              <div className="schema-graph-canvas">
                 <div id="mobile-tools" className="graph-toolbar" data-mobile-panel="tools" role={isMobile && mobilePanel === "tools" ? "dialog" : undefined} aria-modal={isMobile && mobilePanel === "tools" || undefined} aria-label="Canvas tools" tabIndex={-1}>
                   <div className="mobile-panel-heading"><strong>Canvas tools</strong><button type="button" onClick={() => setMobilePanel(null)} aria-label="Close tools">✕</button></div>
                   <div className="row" style={{ gap: 6, alignSelf: "flex-start" }}>
@@ -1808,7 +1817,7 @@ export default function App() {
                   onToggleSubclasses={toggleSubclasses}
                 />
               </div>
-            </>
+            </div>
           ) : (
             <div className="start-page">
               <div className="start-heading">

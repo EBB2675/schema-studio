@@ -47,7 +47,7 @@ vi.mock('../src/client', () => {
     delete: mockDelete,
     interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
   });
-  return { createApiClient: create, apiFetch: vi.fn(async () => new Response("[]")) };
+  return { createApiClient: create, apiFetch: vi.fn(async () => new Response(JSON.stringify({ branch: 'main', base: 'pkg', items: [] }))) };
 });
 
 // What the canvas was given on each render.

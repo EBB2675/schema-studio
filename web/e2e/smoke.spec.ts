@@ -104,3 +104,55 @@ test('persists a real Python edit, exports PDF, undoes after reload, and restore
   await expect(title).toBeVisible();
   await expect(page.getByRole('button', { name: 'Undo', exact: true })).toHaveCount(0);
 });
+
+test('renamed and added classes remain navigable in the package sidebar', async ({ page, request, baseURL }) => {
+  const response = await request.get(new URL('data/index.json', baseURL!).href);
+  const index = await response.json() as { profiles: Profile[] };
+  const profile = index.profiles.find(p => p.key === 'nomad-simulations')!;
+  // ModelMethod in real snapshots; the first fixture module in CI.
+  const module = profile.modules.find(m => m.sections.includes('ModelMethod')) ?? profile.modules.find(m => m.sections.length)!;
+  const original = module.sections.includes('ModelMethod') ? 'ModelMethod' : module.sections[0];
+  await openHome(page);
+  await page.getByRole('button', { name: profile.label, exact: true }).click();
+  await page.locator('.overview-card').filter({ has: page.getByText(module.package, { exact: true }) }).getByRole('button', { name: original, exact: true }).click();
+  const sidebar = page.getByRole('complementary', { name: 'Packages', exact: true });
+  await sidebar.getByRole('button', { name: `${module.package},`, exact: false }).click();
+  await expect(sidebar.getByRole('button', { name: original, exact: true })).toBeVisible();
+
+  const renamed = 'ReviewRenamedMethod';
+  await page.getByRole('button', { name: 'Fit to view', exact: true }).click();
+  await page.locator('.flow-class-header').getByRole('button', { name: original, exact: true }).dblclick();
+  const input = page.getByRole('textbox', { name: 'Class name', exact: true });
+  await input.fill(renamed);
+  await input.press('Enter');
+  await expect(sidebar.getByRole('button', { name: renamed, exact: true })).toBeVisible({ timeout: 60000 });
+  await expect(sidebar.getByRole('button', { name: original, exact: true })).toHaveCount(0);
+  await sidebar.getByRole('button', { name: renamed, exact: true }).click();
+  await expect(page.locator('.flow-title').filter({ hasText: renamed })).toBeVisible();
+
+  // At the CI viewport, fitting the entire graph can place the class actions
+  // behind the selection panel. Focus the card using the normal canvas control.
+  await page.getByRole('button', { name: 'Zoom to class', exact: true }).click();
+  await page.locator('.flow-class').filter({ has: page.locator('.flow-title').getByText(renamed, { exact: true }) }).getByRole('button', { name: '+ Add subclass', exact: true }).click();
+  const form = page.getByRole('form', { name: 'Add subclass', exact: true });
+  await form.getByRole('textbox', { name: 'Name', exact: true }).fill('ReviewAddedClass');
+  await form.getByRole('button', { name: 'Add subclass', exact: true }).click();
+  await expect(sidebar.getByRole('button', { name: 'ReviewAddedClass', exact: true })).toBeVisible({ timeout: 60000 });
+  await sidebar.getByRole('button', { name: 'ReviewAddedClass', exact: true }).click();
+  await expect(page.locator('.flow-title').filter({ hasText: 'ReviewAddedClass' })).toBeVisible();
+  await sidebar.getByRole('button', { name: renamed, exact: true }).click();
+  await page.getByRole('button', { name: 'Show edit history', exact: true }).click();
+  const backupPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download edits', exact: true }).click();
+  const backup = await downloadBytes(await backupPromise);
+  await page.getByRole('button', { name: 'Undo', exact: true }).first().click();
+  await expect(sidebar.getByRole('button', { name: 'ReviewAddedClass', exact: true })).toHaveCount(0);
+  await expect(sidebar.getByRole('button', { name: renamed, exact: true })).toBeVisible();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByLabel('Backup file', { exact: true }).setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: backup });
+  await expect(page.getByText('Restored 2 edits.', { exact: true })).toBeVisible();
+  await expect(sidebar.getByRole('button', { name: 'ReviewAddedClass', exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: profile.label, exact: true }).click();
+  await expect(page.locator('.overview-card').filter({ has: page.getByText(module.package, { exact: true }) }).getByRole('button', { name: renamed, exact: true })).toBeVisible();
+});

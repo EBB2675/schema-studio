@@ -31,7 +31,7 @@ vi.mock('../src/client', () => {
     delete: mockDelete,
     interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
   });
-  return { createApiClient: create, apiFetch: vi.fn(async () => new Response("[]")) };
+  return { createApiClient: create, apiFetch: vi.fn(async () => new Response(JSON.stringify({ branch: 'main', base: 'pkg', items: [] }))) };
 });
 
 // Minimal FlowGraphView stub to isolate the canvas in tests.
@@ -125,6 +125,7 @@ describe('Audit trail — archived quantity removals', () => {
     const saved = JSON.parse(window.localStorage.getItem('schema-uml-audit') ?? '[]');
     expect(saved[0].replayable).toBe(false);
     expect(screen.queryByTitle('Undo this change')).not.toBeInTheDocument();
+    expect(await screen.findByText('FlowGraphView')).toBeVisible();
   });
   it('keeps persisted removal history archived after reset and reload', async () => {
     mockGet.mockImplementation(commonGet(graphWithQuantity));
@@ -144,6 +145,7 @@ describe('Audit trail — archived quantity removals', () => {
     ])));
     await user.click(screen.getByRole('button', { name: 'Reset canvas' }));
     await screen.findByText('Canvas reset to empty.');
+    expect(screen.getByText('FlowGraphView')).toBeVisible();
     expect(readAudit()).toEqual(expect.arrayContaining([expect.objectContaining({ editIds: ['7'], replayable: false })]));
     view.unmount();
     render(<App />);

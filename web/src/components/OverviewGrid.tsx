@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { DEFAULT_OVERVIEW_NAMESPACE } from "../constants/defaults";
 import { apiFetch } from "../client";
+import WorkbenchIcon from "./WorkbenchIcon";
+import { getBrowserEditStore } from "../static/editStore";
 
 type OverviewItem = { package: string; classes: string[] };
 type OverviewResp = { branch: string; base: string; items: OverviewItem[] };
@@ -11,6 +13,8 @@ export default function OverviewGrid({
   onClassSelect,
   query,
   onQueryChange,
+  layout = "grid",
+  activePackage,
 }: {
   branch: string;
   base?: string;
@@ -18,13 +22,21 @@ export default function OverviewGrid({
   // Passing the filter in keeps it when the caller leaves and comes back.
   query?: string;
   onQueryChange?: (query: string) => void;
+  layout?: "grid" | "tree";
+  activePackage?: string;
 }) {
-  const [data, setData] = useState<OverviewResp | null>(null);
+  const editStore = getBrowserEditStore();
+  const editRevision = useSyncExternalStore(editStore.subscribe, editStore.getCatalogRevision);
+  const context = `${branch}\0${base}`;
+  const [loaded, setLoaded] = useState<{ context: string; data: OverviewResp } | null>(null);
+  const data = loaded?.context === context ? loaded.data : null;
   const [ownQuery, setOwnQuery] = useState("");
   const q = query ?? ownQuery;
   const setQ = onQueryChange ?? setOwnQuery;
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [searchCollapsed, setSearchCollapsed] = useState<{ query: string; packages: Set<string> }>({ query: "", packages: new Set() });
 
   useEffect(() => {
     const path = `/overview?branch=${encodeURIComponent(branch)}&base=${encodeURIComponent(base)}`;
@@ -37,14 +49,27 @@ export default function OverviewGrid({
         if (!r.ok) throw new Error((await r.text()) || `HTTP ${r.status}`);
         return r.json();
       })
-      .then((json) => !cancelled && setData(json))
+      .then((json) => !cancelled && setLoaded({ context, data: json }))
       .catch((e) => !cancelled && setErr(e.message || String(e)))
       .finally(() => !cancelled && setLoading(false));
 
     return () => {
       cancelled = true;
     };
-  }, [branch, base]);
+  }, [branch, base, context, editRevision]);
+
+  // Resolve labels against the complete catalog so filtering cannot rename folders.
+  const packageLabels = useMemo(() => {
+    const packages = data?.items.map(item => item.package) ?? [];
+    return new Map(packages.map(pkg => {
+      const parts = pkg.split('.');
+      for (let length = 1; length <= parts.length; length++) {
+        const suffix = parts.slice(-length).join('.');
+        if (!packages.some(other => other !== pkg && (other === suffix || other.endsWith(`.${suffix}`)))) return [pkg, suffix];
+      }
+      return [pkg, pkg];
+    }));
+  }, [data]);
 
   const items = useMemo(() => {
     if (!data) return [];
@@ -57,12 +82,57 @@ export default function OverviewGrid({
     );
   }, [data, q]);
 
-  if (loading) return <div className="p-2 text-sm">Loading…</div>;
-  if (err) return <div className="p-2 text-sm" style={{ color: "var(--danger)" }}>{err}</div>;
+  if (loading && !data) return <div className="p-2 text-sm">Loading…</div>;
+  if (err && !data) return <div className="p-2 text-sm" style={{ color: "var(--danger)" }}>{err}</div>;
   if (!data) return <div className="p-2 text-sm">No data.</div>;
+  const refreshStatus = <div hidden={!loading && !err} role={err ? "alert" : "status"} className="small" style={{ color: err ? "var(--danger)" : "var(--muted)" }}>
+    {err ? `Could not refresh classes: ${err}` : "Updating classes…"}
+  </div>;
+
+  if (layout === "tree") return (
+    <div className="package-tree" aria-busy={loading}>
+      <input className="package-search" aria-label="Find package or class" placeholder="Find package or class…" value={q} onChange={e => setQ(e.target.value)} />
+      {refreshStatus}
+      <ul className="package-list">
+        {items.map(it => {
+          const searching = Boolean(q);
+          const open = searching ? searchCollapsed.query !== q || !searchCollapsed.packages.has(it.package) : expanded.has(it.package);
+          const classes = searching && !it.package.toLowerCase().includes(q.toLowerCase())
+            ? it.classes.filter(c => c.toLowerCase().includes(q.toLowerCase())) : it.classes;
+          return <li key={it.package}>
+            <button type="button" className="package-toggle" aria-label={`${it.package}, ${it.classes.length} classes`} aria-current={it.package === activePackage ? "true" : undefined} aria-expanded={open} onClick={() => {
+              if (searching) {
+                setSearchCollapsed(previous => {
+                  const packages = new Set(previous.query === q ? previous.packages : []);
+                  if (open) packages.add(it.package); else packages.delete(it.package);
+                  return { query: q, packages };
+                });
+                return;
+              }
+              setExpanded(previous => {
+                const next = new Set(previous);
+                if (open) next.delete(it.package); else next.add(it.package);
+                return next;
+              });
+            }}>
+              <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+              <WorkbenchIcon name="folder" />
+              <span className="package-name" title={it.package}>{packageLabels.get(it.package)}</span>
+              <span className="overview-count" aria-label={`${it.classes.length} classes`}>{it.classes.length}</span>
+            </button>
+            {open && <ul className="package-classes">{classes.map(c => <li key={c}>
+              <button type="button" title={c} disabled={loading || Boolean(err)} onClick={() => onClassSelect?.(it.package, c)}>{c}</button>
+            </li>)}</ul>}
+          </li>;
+        })}
+        {!items.length && <li className="package-empty">No packages or classes match.</li>}
+      </ul>
+    </div>
+  );
 
   return (
     <div
+      aria-busy={loading}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -84,6 +154,7 @@ export default function OverviewGrid({
         </div>
       </div>
 
+      {refreshStatus}
       <div
         style={{
           display: "grid",
@@ -131,6 +202,7 @@ export default function OverviewGrid({
                 <button
                   key={`${it.package}.${c}`}
                   type="button"
+                  disabled={loading || Boolean(err)}
                   onClick={() => onClassSelect?.(it.package, c)}
                   className={`overview-chip${onClassSelect ? " is-clickable" : ""}`}
                   title={c}

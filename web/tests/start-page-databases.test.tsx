@@ -152,6 +152,18 @@ describe('Start page databases', () => {
     await user.click(screen.getByRole('button', { name: 'Entity' }));
     expect(await screen.findByText('graph view')).toBeInTheDocument();
 
+    const packagesToggle = screen.getByRole('button', { name: 'Packages' });
+    expect(packagesToggle).toHaveAttribute('aria-expanded', 'true');
+    await user.click(packagesToggle);
+    expect(screen.queryByRole('textbox', { name: 'Filter' })).not.toBeInTheDocument();
+    expect(screen.getByText('graph view')).toBeInTheDocument();
+    await user.click(packagesToggle);
+    expect(screen.getByRole('textbox', { name: 'Filter' })).toHaveValue('act');
+    await user.click(screen.getByRole('button', { name: 'Activity' }));
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith('/schema', expect.objectContaining({
+      params: expect.objectContaining({ package: `${V1}.base_objects`, root: 'Activity', base_namespace: V1 }),
+    })));
+
     await user.click(screen.getByRole('button', { name: '← bam-masterdata v1' }));
     expect(await screen.findByText(`overview of ${V1}`)).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Filter' })).toHaveValue('act');
