@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { useWorkspaceStore } from '../src/store/workspace';
 import { AUDIT_STORAGE_KEY } from '../src/utils/storageKeys';
-import { createEditStore, getBrowserEditStore } from '../src/static/editStore';
+import { createEditStore, EDITS_STORAGE_KEY, getBrowserEditStore } from '../src/static/editStore';
 
 const classId = 'pkg.custom_schema.Class';
 const baseGraph = {
@@ -289,6 +289,63 @@ describe('App editable quantity add flow', () => {
     expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
   });
 
+  it('a failed undo still reports its error when the saved log cannot be read', async () => {
+    const user = userEvent.setup();
+    await addOneQuantity(user);
+    // The failure and the generation lookup in its error handler have the same cause.
+    window.localStorage.setItem(EDITS_STORAGE_KEY, 'broken json');
+    mockDelete.mockRejectedValue({ response: { data: { detail: 'Saved edits could not be read.' } } });
+    try {
+      await user.click(await screen.findByRole('button', { name: 'Undo' }));
+      expect(await screen.findByText(/Undo failed: Saved edits could not be read/)).toBeInTheDocument();
+      // Without a readable generation the entry is kept, so the undo can be tried again.
+      expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument();
+    } finally {
+      window.localStorage.removeItem(EDITS_STORAGE_KEY);
+    }
+  });
+
+  const restoreInAnotherTab = async (pkg: string) => {
+    const replacement = { id: 7, profile: 'p', package: pkg, commit: null, op: 'add_class', target: '', payload: { name: 'ImportantReplacementClass' }, created_at: null };
+    await act(async () => {
+      await createEditStore(window.localStorage).restoreLog({ format: 'schema-studio-edits', version: 1, edits: [replacement] });
+    });
+  };
+
+  it('clear never sends ids that History recorded in a replaced log', async () => {
+    const user = userEvent.setup();
+    await addOneQuantity(user);
+    await screen.findByRole('button', { name: 'Undo' });
+    // Another tab restores a backup in which id 7 is an edit of a different package.
+    await restoreInAnotherTab('other.module');
+    const generation = getBrowserEditStore().getGeneration();
+    mockDelete.mockResolvedValue({ data: { deleted: 0 } });
+    await user.click(screen.getByLabelText('History actions'));
+    await user.click(screen.getByRole('button', { name: /^Clear$/ }));
+    await waitFor(() => expect(mockDelete).toHaveBeenCalledWith('/schema/edits', {
+      params: { package: 'pkg.custom_schema' }, data: { ids: [], generation },
+    }));
+  });
+
+  it('clear on a graph from a replaced log is refused and refreshes the view', async () => {
+    const shownIn = getBrowserEditStore().getGeneration();
+    mockPost.mockReset().mockResolvedValue({ data: { ...graphWithQuantity, edit_generation: shownIn } });
+    const user = userEvent.setup();
+    await addOneQuantity(user);
+    await screen.findByRole('button', { name: 'Undo' });
+    await restoreInAnotherTab('pkg.custom_schema');
+    mockDelete.mockRejectedValue({ response: { status: 409, data: { detail: 'The saved edits were replaced.' } } });
+    const reads = mockGet.mock.calls.filter(([url]) => url === '/schema').length;
+    await user.click(screen.getByLabelText('History actions'));
+    await user.click(screen.getByRole('button', { name: /^Clear$/ }));
+    expect(mockDelete).toHaveBeenCalledWith('/schema/edits', {
+      params: { package: 'pkg.custom_schema' }, data: { ids: ['7'], generation: shownIn },
+    });
+    expect(await screen.findByText(/Clear failed: The saved edits were replaced/)).toBeInTheDocument();
+    await waitFor(() => expect(mockGet.mock.calls.filter(([url]) => url === '/schema').length).toBeGreaterThan(reads));
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY) ?? '[]')).toEqual([]));
+  });
+
   it('clear deletes this module\'s edits and the edits its entries made', async () => {
     const user = userEvent.setup();
     mockDelete.mockResolvedValue({ data: { deleted: 1 } });
@@ -300,7 +357,7 @@ describe('App editable quantity add flow', () => {
     await waitFor(() =>
       expect(mockDelete).toHaveBeenCalledWith('/schema/edits', {
         params: { package: 'pkg.custom_schema' },
-        data: { ids: ['7'] },
+        data: { ids: ['7'], generation: getBrowserEditStore().getGeneration() },
       })
     );
   });
@@ -487,7 +544,8 @@ describe('App editable quantity add flow', () => {
     mockDelete.mockResolvedValue({ data: { deleted: success ? 2 : 1 } });
     await user.click(clear);
     await waitFor(() => expect(mockDelete).toHaveBeenCalledWith('/schema/edits', {
-      params: { package: 'pkg.custom_schema' }, data: { ids: success ? ['7', '8'] : ['7'] },
+      params: { package: 'pkg.custom_schema' },
+      data: { ids: success ? ['7', '8'] : ['7'], generation: getBrowserEditStore().getGeneration() },
     }));
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY) ?? '[]')).toEqual([]));
   });

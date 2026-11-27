@@ -68,6 +68,9 @@ export default function App() {
   const [auditTrail, setAuditTrail] = useAuditTrail();
 
   const [quantityActionErr, setQuantityActionErr] = useState<string | null>(null);
+  // Failures of History actions (Undo, Clear), shown in the History panel: unlike the class
+  // panel's action error, they must stay visible when nothing is selected.
+  const [historyActionErr, setHistoryActionErr] = useState<string | null>(null);
   const [creatingQuantityFor, setCreatingQuantityFor] = useState<string | null>(null);
   const [creatingClass, setCreatingClass] = useState<boolean>(false);
 
@@ -807,10 +810,23 @@ export default function App() {
     [api, graph?.package, pkg, withPendingMutation]
   );
 
+  // Best effort: in an error path the store may be unreadable for the same reason the
+  // request failed, and that must not hide the original error.
+  const readEditGeneration = (): string | undefined => {
+    try {
+      return getBrowserEditStore().getGeneration();
+    } catch {
+      return undefined;
+    }
+  };
+  // History entries of a replaced log can never be undone or cleared by id.
+  const dropReplacedHistory = (generation: string) =>
+    setAuditTrail(prev => prev.filter(item => !item.editIds?.length || item.editGeneration === generation));
+
   const undoAuditEntry = async (id: string) => {
     const entry = auditTrail.find((a) => a.id === id);
     if (!entry || !entry.change) return;
-    setQuantityActionErr(null);
+    setHistoryActionErr(null);
     const contextIsCurrent = canvasSession.captureContext();
 
     if (entry.editIds?.length) {
@@ -818,13 +834,14 @@ export default function App() {
         await deleteStoredEdits(entry.editIds, undefined, entry.editGeneration);
       } catch (e: unknown) {
         // Nothing was deleted. If the log was replaced, entries of the old one can never be
-        // undone: drop them and show the current edits; otherwise keep the entry to retry.
-        const generation = getBrowserEditStore().getGeneration();
-        if (entry.editGeneration && entry.editGeneration !== generation) {
-          setAuditTrail(prev => prev.filter(item => !item.editIds?.length || item.editGeneration === generation));
-          if (contextIsCurrent()) void latestLoadGraph.current({ keepView: true });
+        // undone: drop them and show the current edits. Otherwise (or if the generation cannot
+        // be read) keep the entry so the undo can be tried again. Always report why.
+        const generation = readEditGeneration();
+        if (generation !== undefined && entry.editGeneration && entry.editGeneration !== generation) {
+          dropReplacedHistory(generation);
+          if (contextIsCurrent()) await latestLoadGraph.current({ keepView: true });
         }
-        if (contextIsCurrent()) setQuantityActionErr(`Undo failed: ${formatApiError(e)}`);
+        if (contextIsCurrent()) setHistoryActionErr(`Undo failed: ${formatApiError(e)}`);
         return;
       }
       setAuditTrail(prev => prev.filter(item => item.id !== id && item.change));
@@ -842,16 +859,16 @@ export default function App() {
   // Later edits that depend on it no longer apply and come back as edit conflicts.
   const undoSavedEdit = async (editId: string, generation?: string) => {
     if (pendingMutationsRef.current[currentPackageForAudit || pkg]) return;
-    setQuantityActionErr(null);
+    setHistoryActionErr(null);
     const contextIsCurrent = canvasSession.captureContext();
     try {
       // The id is only valid in the log the shown graph was built from.
       await deleteStoredEdits([editId], undefined, generation);
     } catch (e: unknown) {
       if (contextIsCurrent()) {
-        setQuantityActionErr(`Undo failed: ${formatApiError(e)}`);
         // The rows may be out of date (log replaced): show the current edits.
-        void latestLoadGraph.current({ keepView: true });
+        await latestLoadGraph.current({ keepView: true });
+        if (contextIsCurrent()) setHistoryActionErr(`Undo failed: ${formatApiError(e)}`);
       }
       return;
     }
@@ -866,12 +883,25 @@ export default function App() {
     const hasPersistedEdits = (graph?.applied_edits?.length ?? 0) > 0 || (graph?.edit_conflicts?.length ?? 0) > 0;
     if (!hasLocalAudit && !hasPersistedEdits) return;
     const contextIsCurrent = canvasSession.captureContext();
-    const ids = auditEntriesForCurrentPackage.flatMap((entry) => entry.editIds ?? []);
-    setQuantityActionErr(null);
+    // Clear acts on the log the shown graph was built from; the store refuses it if that log
+    // was replaced since. Only ids recorded in that same log are sent: an id from another
+    // generation can name an unrelated edit, even in another package.
+    const generation = graph?.edit_generation ?? readEditGeneration();
+    const ids = generation === undefined
+      ? []
+      : auditEntriesForCurrentPackage
+        .filter((entry) => entry.editGeneration === generation)
+        .flatMap((entry) => entry.editIds ?? []);
+    setHistoryActionErr(null);
     try {
-      await deleteStoredEdits(ids, targetPackage);
+      await deleteStoredEdits(ids, targetPackage, generation);
     } catch (e: unknown) {
-      if (contextIsCurrent()) setQuantityActionErr(`Clear failed: ${formatApiError(e)}`);
+      const current = readEditGeneration();
+      if (current !== undefined && current !== generation) {
+        dropReplacedHistory(current);
+        if (contextIsCurrent()) await latestLoadGraph.current({ keepView: true });
+      }
+      if (contextIsCurrent()) setHistoryActionErr(`Clear failed: ${formatApiError(e)}`);
       return;
     }
     setAuditTrail((prev) => prev.filter((entry) => !auditEntriesForCurrentPackage.includes(entry)));
@@ -1599,6 +1629,9 @@ export default function App() {
               </button>
               </ActionMenu>
             </div>
+            {historyActionErr ? (
+              <div className="small" role="alert" style={{ color: "var(--danger)" }}>{historyActionErr}</div>
+            ) : null}
             {graph?.edit_conflicts?.length ? (
               <div className="small" role="status" style={{ color: "var(--pill-warning-fg)" }}>
                 <div>
