@@ -42,7 +42,7 @@ The development server serves the same static application. Python is used only f
 
 Set the repository's Pages source to **GitHub Actions**. The workflow in `.github/workflows/pages.yml` first runs the reusable CI verification pipeline, then builds the frontend, refreshes the schema environments, generates snapshots, and smoke-tests the complete `web/dist` artifact in Chromium before uploading it. Deployment depends on both verification and the successful artifact build. It runs on pushes to `main`, published releases, nightly, or manually.
 
-`web/.env.pages` sets the project URL prefix to `/ss-test/`. Change `VITE_BASE_PATH` for another repository, or use `/` for a user/organization root site. Assets, snapshots, and Pyodide resolve relative to this prefix.
+`web/.env.pages` sets the project URL prefix to `/schema-studio/`. Change `VITE_BASE_PATH` for another repository, or use `/` for a user/organization root site. Assets, snapshots, and Pyodide resolve relative to this prefix.
 
 To prepare the same artifact locally:
 
@@ -52,7 +52,7 @@ uv run python scripts/build_snapshots.py --out web/dist/data --graphs
 npm --prefix web run preview -- --host 127.0.0.1
 ```
 
-Open the preview at `/ss-test/`. Always generate snapshots after the build, because Vite clears `dist`.
+Open the preview at `/schema-studio/`. Always generate snapshots after the build, because Vite clears `dist`.
 
 ## Verification
 
