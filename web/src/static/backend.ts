@@ -175,6 +175,16 @@ export function createStaticBackend(options: StaticBackendOptions) {
     return answer.ok;
   };
 
+  // Both navigation catalogs must list the same roots as the edited graph.
+  const sectionsFor = async (profile: SiteProfile, pkg: string, stored: StoredEdit[]): Promise<string[]> => {
+    const module = moduleOf(profile, pkg);
+    const snapshot = snapshotOf(profile, pkg);
+    if (snapshot && (stored.length > 0 || pkg.endsWith(SCRATCH_SUFFIX) || !module)) {
+      return await core({ op: "sections", snapshots: [snapshot], snapshot, profile: profileRequest(profile), package: pkg, stored }) as string[];
+    }
+    return [...(module?.sections ?? [])].sort();
+  };
+
   const graphFlags = (params: Params, root: string | undefined, namespace: string) => ({
     root: root ?? null,
     include_quantities: flag(params.include_quantities, true),
@@ -284,26 +294,21 @@ export function createStaticBackend(options: StaticBackendOptions) {
     if (route === "GET /overview") {
       const base = text(query.base) ?? ws.base_namespace;
       const bases = base.split(",").map(b => b.trim()).filter(Boolean);
-      const items = bases.flatMap(b => {
+      const items = (await Promise.all(bases.map(async b => {
         const profile = data.profiles.find(p => inNamespace(b, p.default_base_namespace));
-        return (profile?.overview ?? [])
+        if (!profile) return [];
+        const stored = edits.list(profile.key);
+        return Promise.all(profile.overview
           .filter(m => inNamespace(m.package, b))
-          .map(m => ({ package: m.package, classes: [...m.sections].sort() }));
-      });
+          .map(async m => ({ package: m.package, classes: stored.length ? await sectionsFor(profile, m.package, stored) : [...m.sections].sort() })));
+      }))).flat();
       return ok({ branch: profileFor(data, ws.package, ws.base_namespace).default_branch, base, items, workspace: workspacePayload(ws) });
     }
     if (route === "GET /roots") {
       const pkg = text(query.package) ?? ws.package;
       const profile = profileFor(data, pkg, ws.base_namespace);
       const stored = edits.list(profile.key);
-      const module = moduleOf(profile, pkg);
-      const snapshot = snapshotOf(profile, pkg);
-      let sections: string[] = [];
-      if (snapshot && (stored.length > 0 || pkg.endsWith(SCRATCH_SUFFIX) || !module)) {
-        sections = await core({ op: "sections", snapshots: [snapshot], snapshot, profile: profileRequest(profile), package: pkg, stored }) as string[];
-      } else if (module) {
-        sections = [...module.sections].sort();
-      }
+      const sections = await sectionsFor(profile, pkg, stored);
       return ok({ package: pkg, sections, workspace: workspacePayload(ws) });
     }
     if (route === "GET /schema") {

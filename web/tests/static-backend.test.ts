@@ -94,6 +94,27 @@ function pauseNextSave(runCore: ReturnType<typeof setup>["runCore"]) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("static backend", () => {
+  it("uses the edited roots in overview after saves, undo, import, and restore", async () => {
+    const { backend, runCore } = setup();
+    const overview = async () => (await backend.request("GET", "/overview", { base: "ns.pkg" })).data;
+    const original = { items: [{ package: "ns.pkg.a", classes: ["Other", "Root"] }] };
+    expect(await overview()).toMatchObject(original);
+    expect(runCore).not.toHaveBeenCalled();
+    await backend.request("POST", "/schema/edits", {}, EDIT_BODY);
+    const backup = backend.edits.exportLog();
+    expect(await overview()).toMatchObject({ items: [{ package: "ns.pkg.a", classes: ["Added", "Other", "Root"] }] });
+    const roots = (await backend.request("GET", "/roots", { package: "ns.pkg.a" })).data;
+    expect(roots).toMatchObject({ sections: ["Added", "Other", "Root"] });
+    expect(runCore).toHaveBeenLastCalledWith(expect.objectContaining({ op: "sections", stored: backup.edits }));
+    await backend.edits.remove([1]);
+    expect(await overview()).toMatchObject(original);
+    await backend.edits.importLog(backup);
+    expect(await overview()).toMatchObject({ items: [{ classes: ["Added", "Other", "Root"] }] });
+    await backend.edits.restoreLog({ ...backup, edits: [] });
+    expect(await overview()).toMatchObject(original);
+    await backend.edits.restoreLog(backup);
+    expect(await overview()).toMatchObject({ items: [{ classes: ["Added", "Other", "Root"] }] });
+  });
   it.each([false, true])("serializes overlapping saves and Undo (Web Locks: %s)", async useLocks => {
     const { backend, runCore, readJson } = setup();
     let lockQueue = Promise.resolve<unknown>(undefined);

@@ -46,12 +46,14 @@ it("preserves failed saves across reads, exports, ID allocation, imports and del
   failedWrite.mockRestore();
   await store.transaction(tx => tx.add([edit(tx.nextIds(1)[0])]));
   expect(store.hasUnsavedChanges()).toBe(false);
-  expect(listener).toHaveBeenCalledTimes(2);
+  // Catalog subscribers need every edit change, even if persistence status is unchanged.
+  expect(listener).toHaveBeenCalledTimes(5);
+  expect(store.getRevision()).toBe(6);
   expect(createEditStore(storage).list("p").map(e => e.id)).toEqual([2, 3, 4, 5]);
   stop();
   fail();
   await store.remove([5]);
-  expect(listener).toHaveBeenCalledTimes(2);
+  expect(listener).toHaveBeenCalledTimes(5);
 });
 
 it("retains failed deletes and imports even when they are the first failed write", async () => {

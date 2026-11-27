@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { DEFAULT_OVERVIEW_NAMESPACE } from "../constants/defaults";
 import { apiFetch } from "../client";
 import WorkbenchIcon from "./WorkbenchIcon";
+import { getBrowserEditStore } from "../static/editStore";
 
 type OverviewItem = { package: string; classes: string[] };
 type OverviewResp = { branch: string; base: string; items: OverviewItem[] };
@@ -24,6 +25,8 @@ export default function OverviewGrid({
   layout?: "grid" | "tree";
   activePackage?: string;
 }) {
+  const editStore = getBrowserEditStore();
+  const editRevision = useSyncExternalStore(editStore.subscribe, editStore.getRevision);
   const [data, setData] = useState<OverviewResp | null>(null);
   const [ownQuery, setOwnQuery] = useState("");
   const q = query ?? ownQuery;
@@ -51,7 +54,20 @@ export default function OverviewGrid({
     return () => {
       cancelled = true;
     };
-  }, [branch, base]);
+  }, [branch, base, editRevision]);
+
+  // Resolve labels against the complete catalog so filtering cannot rename folders.
+  const packageLabels = useMemo(() => {
+    const packages = data?.items.map(item => item.package) ?? [];
+    return new Map(packages.map(pkg => {
+      const parts = pkg.split('.');
+      for (let length = 1; length <= parts.length; length++) {
+        const suffix = parts.slice(-length).join('.');
+        if (!packages.some(other => other !== pkg && (other === suffix || other.endsWith(`.${suffix}`)))) return [pkg, suffix];
+      }
+      return [pkg, pkg];
+    }));
+  }, [data]);
 
   const items = useMemo(() => {
     if (!data) return [];
@@ -78,7 +94,7 @@ export default function OverviewGrid({
           const classes = searching && !it.package.toLowerCase().includes(q.toLowerCase())
             ? it.classes.filter(c => c.toLowerCase().includes(q.toLowerCase())) : it.classes;
           return <li key={it.package}>
-            <button type="button" className="package-toggle" aria-current={it.package === activePackage ? "true" : undefined} aria-expanded={open} onClick={() => {
+            <button type="button" className="package-toggle" aria-label={`${it.package}, ${it.classes.length} classes`} aria-current={it.package === activePackage ? "true" : undefined} aria-expanded={open} onClick={() => {
               if (searching) {
                 setSearchCollapsed(previous => {
                   const packages = new Set(previous.query === q ? previous.packages : []);
@@ -95,7 +111,7 @@ export default function OverviewGrid({
             }}>
               <span aria-hidden="true">{open ? "▾" : "▸"}</span>
               <WorkbenchIcon name="folder" />
-              <span className="package-name" title={it.package}>{it.package.split('.').pop()}</span>
+              <span className="package-name" title={it.package}>{packageLabels.get(it.package)}</span>
               <span className="overview-count" aria-label={`${it.classes.length} classes`}>{it.classes.length}</span>
             </button>
             {open && <ul className="package-classes">{classes.map(c => <li key={c}>

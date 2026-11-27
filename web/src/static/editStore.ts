@@ -43,6 +43,7 @@ export interface EditTransaction {
 }
 
 export interface EditStore {
+  getRevision(): number;
   getGeneration(): string;
   hasUnsavedChanges(): boolean;
   subscribe(listener: () => void): () => void;
@@ -78,6 +79,7 @@ function isEdit(value: unknown): value is StoredEdit {
 export function createEditStore(storage: Storage | null = browserStorage()): EditStore {
   let memory: Saved = { nextId: 1, edits: [], generation: LEGACY_EDIT_GENERATION };
   let unsaved = false;
+  let revision = 0;
   const listeners = new Set<() => void>();
 
   const read = (): Saved => {
@@ -113,10 +115,9 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
     } catch {
       // Keep memory authoritative until the entire current log is saved.
     }
-    if (unsaved !== !persisted) {
-      unsaved = !persisted;
-      listeners.forEach(listener => listener());
-    }
+    unsaved = !persisted;
+    revision += 1;
+    listeners.forEach(listener => listener());
   };
 
   const access: EditTransaction = {
@@ -188,6 +189,7 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
       return !unsaved;
     }),
     getGeneration: () => read().generation,
+    getRevision: () => revision,
     hasUnsavedChanges: () => unsaved,
     subscribe(listener) {
       listeners.add(listener);

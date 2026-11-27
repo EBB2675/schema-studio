@@ -1,13 +1,16 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import OverviewGrid from '../src/components/OverviewGrid';
 import { apiFetch } from '../src/client';
+import { getBrowserEditStore } from '../src/static/editStore';
 
 vi.mock('../src/client', () => ({ apiFetch: vi.fn(async () => new Response(JSON.stringify({
   branch: 'main', base: 'schema', items: [
     { package: 'schema.model', classes: ['Model', 'Symmetry'] },
     { package: 'schema.outputs', classes: ['Result'] },
+    { package: 'nomad_measurements.xrd.schema', classes: ['XRD'] },
+    { package: 'nomad_measurements.transmission.schema', classes: ['Transmission'] },
   ],
 }))) }));
 afterEach(cleanup);
@@ -39,4 +42,41 @@ it('expands packages, searches classes, and selects through the existing callbac
   await user.type(search, 'missing');
   expect(screen.getByText('No packages or classes match.')).toBeInTheDocument();
   expect(apiFetch).toHaveBeenCalledTimes(1);
+});
+
+it('keeps colliding module names distinct and accessible, including after filtering', async () => {
+  const user = userEvent.setup();
+  render(<OverviewGrid branch="main" layout="tree" />);
+  const xrd = await screen.findByRole('button', { name: 'nomad_measurements.xrd.schema, 1 classes' });
+  expect(xrd).toHaveTextContent('xrd.schema');
+  expect(screen.getByRole('button', { name: 'nomad_measurements.transmission.schema, 1 classes' })).toHaveTextContent('transmission.schema');
+  await user.type(screen.getByRole('textbox'), 'xrd');
+  expect(xrd).toHaveTextContent('xrd.schema');
+});
+
+it('refreshes the mounted catalog on save, undo, import, and backup replacement', async () => {
+  const store = getBrowserEditStore();
+  const empty = { format: 'schema-studio-edits', version: 1, edits: [] };
+  await store.restoreLog(empty);
+  const reply = (name: string) => vi.mocked(apiFetch).mockResolvedValueOnce(new Response(JSON.stringify({
+    branch: 'main', base: 'schema', items: [{ package: 'schema.model', classes: [name] }],
+  })));
+  reply('Model');
+  render(<OverviewGrid branch="main" base="schema" layout="tree" query="model" />);
+  expect(await screen.findByRole('button', { name: 'Model', exact: true })).toBeVisible();
+  const edit = { id: 1, profile: 'test', package: 'schema.model', commit: null, op: 'rename_class', target: 'schema.model.Model', payload: { new_name: 'RenamedModel' }, created_at: null };
+  reply('RenamedModel');
+  await act(async () => { await store.transaction(tx => tx.add([edit])); });
+  expect(await screen.findByRole('button', { name: 'RenamedModel', exact: true })).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Model', exact: true })).not.toBeInTheDocument();
+  const backup = store.exportLog();
+  reply('Model');
+  await act(async () => { await store.remove([1]); });
+  expect(await screen.findByRole('button', { name: 'Model', exact: true })).toBeVisible();
+  reply('RenamedModel');
+  await act(async () => { await store.importLog(backup); });
+  expect(await screen.findByRole('button', { name: 'RenamedModel', exact: true })).toBeVisible();
+  reply('Model');
+  await act(async () => { await store.restoreLog(empty); });
+  expect(await screen.findByRole('button', { name: 'Model', exact: true })).toBeVisible();
 });
