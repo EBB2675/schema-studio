@@ -6,10 +6,19 @@ import type { AuditTrailEntry } from "../types/uml";
  * log (its entries can be dropped for another edit generation or failed validation),
  * so these are listed on their own as "older saved edits" to keep every applied edit
  * visible and removable. An edit without an id never matches a History entry.
+ *
+ * An id names an edit only within one log generation (a restore can reuse it for an
+ * unrelated edit), so with `generation` (the one the graph was built from) only History
+ * entries of that generation count.
  */
-export function unlistedAppliedEdits(applied: AppliedEdit[] | undefined, history: AuditTrailEntry[]): AppliedEdit[] {
+export function unlistedAppliedEdits(
+  applied: AppliedEdit[] | undefined,
+  history: AuditTrailEntry[],
+  generation?: string,
+): AppliedEdit[] {
   if (!applied?.length) return [];
-  const listed = new Set(history.flatMap(entry => entry.editIds ?? []));
+  const sameLog = generation === undefined ? history : history.filter(entry => entry.editGeneration === generation);
+  const listed = new Set(sameLog.flatMap(entry => entry.editIds ?? []));
   return applied.filter(edit => !edit.id || !listed.has(String(edit.id)));
 }
 

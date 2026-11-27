@@ -941,9 +941,27 @@ export default function App() {
   const activeAuditCount = activeAuditEntries.length;
   // Applied edits with no History entry anywhere (any package): listed so none is invisible.
   const olderSavedEdits = useMemo(
-    () => unlistedAppliedEdits(currentGraph?.applied_edits, auditTrail),
-    [auditTrail, currentGraph?.applied_edits]
+    () => unlistedAppliedEdits(currentGraph?.applied_edits, auditTrail, currentGraph?.edit_generation),
+    [auditTrail, currentGraph?.applied_edits, currentGraph?.edit_generation]
   );
+  // A graph from the current log (e.g. after another tab restored a backup) retires History
+  // entries of earlier logs: their ids now name other edits or nothing, so they would
+  // miscount active edits and can never be undone. A graph from an older log than the
+  // store's (a late response) changes nothing.
+  const shownGeneration = currentGraph?.edit_generation;
+  useEffect(() => {
+    if (!shownGeneration) return;
+    let current: string | undefined;
+    try {
+      current = getBrowserEditStore().getGeneration();
+    } catch {
+      return;
+    }
+    if (current !== shownGeneration) return;
+    setAuditTrail(prev => (prev.some(entry => entry.editIds?.length && entry.editGeneration !== current)
+      ? prev.filter(entry => !entry.editIds?.length || entry.editGeneration === current)
+      : prev));
+  }, [setAuditTrail, shownGeneration]);
   const archivedAuditCount = auditEntriesForCurrentPackage.length - activeAuditCount;
 
   const restoreArchivedEntry = (id: string) => {

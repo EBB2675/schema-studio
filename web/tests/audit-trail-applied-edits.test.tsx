@@ -301,4 +301,33 @@ describe('Audit trail seeding from applied edits', () => {
     expect(conflicts).toHaveTextContent('1 stored edit(s) could not be applied');
     expect(conflicts).toHaveTextContent("rename_attribute AtomsState: AtomsState has no attribute 'x' (not_found)");
   });
+
+  it('a restore in another tab neither hides the restored edit nor keeps counting stale History', async () => {
+    // This tab's History: edit 1 of package X, in the log it was mounted with.
+    const store = getBrowserEditStore();
+    const stale = [{
+      id: 'local-x', timestamp: new Date().toISOString(), description: 'Added class in X', package: 'other.module',
+      replayable: true, editIds: ['1'], editGeneration: store.getGeneration(),
+      change: { type: 'add-class', cls: { id: 'other.module.X', name: 'X', module: 'other.module', quantities: [] } },
+    }];
+    window.localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(stale));
+    let current: object = graphWithoutApplied;
+    mockGet.mockImplementation(async (url: string, options?: { params?: Record<string, unknown> }) => commonGet(current)(url, options));
+    mockPut.mockResolvedValue({ data: { workspace: { branch: 'develop', package: 'pkg.custom_schema', base_namespace: 'pkg' } } });
+    const user = await openHistory();
+    expect(JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY)!).map((entry: { id: string }) => entry.id)).toEqual(['local-x']);
+
+    // Another tab restores a backup in which id 1 is an attribute of this package.
+    const restoredEdit = { id: 1, profile: 'p', package: 'pkg.custom_schema', commit: null, op: 'add_attribute', target: classId, payload: { name: 'restored_attr', kind: 'quantity', dtype: 'float' }, created_at: null };
+    await createEditStore(window.localStorage).restoreLog({ format: 'schema-studio-edits', version: 1, edits: [restoredEdit] });
+    const generation = store.getGeneration();
+    current = { ...graphWithApplied, applied_edits: [{ ...restoredEdit, id: '1' }], edit_generation: generation };
+    await user.click(screen.getByRole('button', { name: 'Simulate additive import' }));
+
+    const row = await screen.findByTestId('older-saved-edit');
+    expect(row).toHaveTextContent('Older saved edit: add attribute restored_attr on AtomsState');
+    expect(screen.queryByText(/No edits on this canvas yet/i)).not.toBeInTheDocument();
+    // The stale entry is retired, so it no longer counts anywhere.
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY)!)).toEqual([]));
+  });
 });

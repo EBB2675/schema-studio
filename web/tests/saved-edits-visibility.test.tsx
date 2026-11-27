@@ -153,6 +153,13 @@ describe("applied edits without a History entry", () => {
     expect(unlistedAppliedEdits(undefined, [])).toEqual([]);
   });
 
+  it("counts only History entries of the graph's generation, since ids are reused across logs", () => {
+    const restored = applied("1");
+    const stale = { ...history(["1"]), editGeneration: "G0" };
+    expect(unlistedAppliedEdits([restored], [stale], "G1")).toEqual([restored]);
+    expect(unlistedAppliedEdits([restored], [{ ...stale, editGeneration: "G1" }], "G1")).toEqual([]);
+  });
+
   it("describes edits in plain words", () => {
     expect(describeSavedEdit({ op: "add_attribute", target: "pkg.m.AtomsState", payload: { name: "x" } }))
       .toBe("add attribute x on AtomsState");
