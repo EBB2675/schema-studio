@@ -130,7 +130,9 @@ test('renamed and added classes remain navigable in the package sidebar', async 
   await sidebar.getByRole('button', { name: renamed, exact: true }).click();
   await expect(page.locator('.flow-title').filter({ hasText: renamed })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Fit to view', exact: true }).click();
+  // At the CI viewport, fitting the entire graph can place the class actions
+  // behind the selection panel. Focus the card using the normal canvas control.
+  await page.getByRole('button', { name: 'Zoom to class', exact: true }).click();
   await page.locator('.flow-class').filter({ has: page.locator('.flow-title').getByText(renamed, { exact: true }) }).getByRole('button', { name: '+ Add subclass', exact: true }).click();
   const form = page.getByRole('form', { name: 'Add subclass', exact: true });
   await form.getByRole('textbox', { name: 'Name', exact: true }).fill('ReviewAddedClass');
