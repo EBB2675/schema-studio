@@ -43,6 +43,8 @@ export type SiteIndex = { format: number; static: boolean; generated_at: string;
 
 export type StaticAnswer = { status: number; data: unknown; contentType?: string };
 
+export const EDITS_REPLACED = "The saved edits were replaced (backup restored or all edits discarded, possibly in another tab). Nothing was deleted; the view now shows the current edits.";
+
 export class StaticHttpError extends Error {
   status: number;
   detail: string;
@@ -165,6 +167,20 @@ export function createStaticBackend(options: StaticBackendOptions) {
   /** The snapshot file a module's answers are computed from: its own, or the profile's for the empty canvas. */
   const snapshotOf = (profile: SiteProfile, pkg: string): string | undefined =>
     pkg.endsWith(SCRATCH_SUFFIX) || pkg === profile.default_base_namespace ? profile.snapshot : moduleOf(profile, pkg)?.snapshot;
+
+  // Stored edits of packages this site cannot open (e.g. a module a newer snapshot removed or
+  // renamed) have no canvas of their own to list them. Report their packages, and the ones
+  // that did not apply: those are in no applied list, and the core keeps only the current
+  // package's conflicts, so they would be listed nowhere.
+  const withUnavailablePackages = <T extends Record<string, unknown>>(result: T, profile: SiteProfile, stored: StoredEdit[]): T => {
+    const unavailable = (pkg: unknown): pkg is string => typeof pkg === "string" && pkg !== "" && !snapshotOf(profile, pkg);
+    const applied = Array.isArray(result.applied_edits) ? result.applied_edits as { id?: unknown; package?: unknown }[] : [];
+    const appliedIds = new Set(applied.map(edit => String(edit.id)));
+    const notApplied = stored.filter(edit => unavailable(edit.package) && !appliedIds.has(String(edit.id)));
+    const missing = [...new Set([...applied.map(edit => edit.package), ...notApplied.map(edit => edit.package)].filter(unavailable))].sort();
+    if (!missing.length) return result;
+    return { ...result, unavailable_packages: missing, ...(notApplied.length ? { unavailable_edits: notApplied } : {}) };
+  };
 
   const profileRequest = (profile: SiteProfile) => ({
     key: profile.key, default_base_namespace: profile.default_base_namespace, edit_rule_set: profile.edit_rule_set,
@@ -330,8 +346,10 @@ export function createStaticBackend(options: StaticBackendOptions) {
       const namespace = text(query.base_namespace) ?? ws.base_namespace;
       const profile = profileFor(data, pkg, namespace);
       if (text(query.package) || text(query.base_namespace)) ws = setWorkspace(data, pkg, namespace);
-      const result = await graph(profile, pkg, query, namespace, edits.list(profile.key));
-      return ok({ ...result, workspace: workspacePayload(ws) });
+      const { edits: stored, generation } = edits.snapshot(profile.key);
+      const result = await graph(profile, pkg, query, namespace, stored);
+      // The ids in applied_edits are only meaningful within this generation.
+      return ok({ ...withUnavailablePackages(result as Record<string, unknown>, profile, stored), edit_generation: generation, workspace: workspacePayload(ws) });
     }
     if (route === "GET /schema/edits") {
       const pkg = text(query.package) ?? ws.package;
@@ -355,7 +373,9 @@ export function createStaticBackend(options: StaticBackendOptions) {
           ids: edits.nextIds(requested.length), created_at: now(),
         }) as Record<string, unknown>;
         edits.add((result.persisted_edits as StoredEdit[]) ?? []);
-        return ok({ ...result, workspace: workspacePayload(ws) });
+        // Read under the same lock as the save: History stamps its entry with it and drops
+        // the entry if the log was replaced (restore, discard all) before the response landed.
+        return ok({ ...withUnavailablePackages(result, profile, stored), edit_generation: edits.generation(), workspace: workspacePayload(ws) });
       });
     }
     if (method.toUpperCase() === "DELETE" && path.startsWith("/schema/edits/")) {
@@ -367,7 +387,13 @@ export function createStaticBackend(options: StaticBackendOptions) {
       const all = flag(query.all_packages, false);
       const profile = profileFor(data, pkg ?? ws.package, ws.base_namespace);
       const ids = Array.isArray(payload.ids) ? (payload.ids as unknown[]).map(Number).filter(Number.isInteger) : [];
-      const deleted = await edits.remove(ids, pkg || all ? { profile: profile.key, package: pkg, allPackages: all } : undefined);
+      const expected = text(payload.generation);
+      const deleted = await edits.transaction(tx => {
+        // Ids name edits only within one log: after a restore or discard (here or in another
+        // tab) the same id can be an unrelated edit, so never delete across generations.
+        if (expected !== undefined && tx.generation() !== expected) throw new StaticHttpError(409, EDITS_REPLACED);
+        return tx.remove(ids, pkg || all ? { profile: profile.key, package: pkg, allPackages: all } : undefined);
+      });
       return ok({ deleted, workspace: workspacePayload(ws) });
     }
     if (route === "GET /usage") {

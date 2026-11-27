@@ -102,7 +102,14 @@ test('persists a real Python edit, exports PDF, undoes after reload, and restore
   await page.getByLabel('Backup file', { exact: true }).setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: backupBytes });
   await expect(page.getByText('Restored 1 edit.', { exact: true })).toBeVisible();
   await expect(title).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Undo', exact: true })).toHaveCount(0);
+  // Restoring replaces History; the restored edit is still listed and can be undone.
+  await expect(page.getByText('Added class SmokeTestClass', { exact: true })).toHaveCount(0);
+  const restored = page.getByTestId('older-saved-edit');
+  await expect(restored).toHaveCount(1);
+  await expect(restored).toContainText('Older saved edit: add class SmokeTestClass');
+  await restored.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect(title).toHaveCount(0);
+  await expect(restored).toHaveCount(0);
 });
 
 test('renamed and added classes remain navigable in the package sidebar', async ({ page, request, baseURL }) => {

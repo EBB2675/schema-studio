@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createStaticBackend, type SiteIndex } from "../src/static/backend";
 import { createEditStore, EDITS_STORAGE_KEY } from "../src/static/editStore";
+import { LEGACY_EDITS_STORAGE_KEY } from "../src/utils/storageKeys";
 import type { CoreRequest } from "../src/static/pythonRunner";
 
 const SITE: SiteIndex = {
@@ -69,6 +70,16 @@ function setup(site = SITE) {
   });
   const backend = createStaticBackend({ readJson, runCore, storage, edits: createEditStore(storage), now: () => "now" });
   return { backend, readJson, runCore };
+}
+
+// Web Locks with one exclusive queue per lock name (nested requests for other names allowed).
+function lockManager() {
+  const queues = new Map<string, Promise<unknown>>();
+  return vi.fn((name: string, _options: unknown, callback: () => unknown) => {
+    const result = (queues.get(name) ?? Promise.resolve()).then(callback);
+    queues.set(name, result.catch(() => undefined));
+    return result;
+  });
 }
 
 function deferred() {
@@ -194,12 +205,7 @@ describe("static backend", () => {
   });
   it.each([false, true])("serializes overlapping saves and Undo (Web Locks: %s)", async useLocks => {
     const { backend, runCore, readJson } = setup();
-    let lockQueue = Promise.resolve<unknown>(undefined);
-    const requestLock = vi.fn((_name: string, _options: unknown, callback: () => unknown) => {
-      const result = lockQueue.then(callback);
-      lockQueue = result.catch(() => undefined);
-      return result;
-    });
+    const requestLock = lockManager();
     vi.stubGlobal("navigator", { locks: useLocks ? { request: requestLock } : undefined });
     // Separate stores model two clients sharing persisted state.
     const other = createStaticBackend({ readJson, runCore, storage: window.localStorage });
@@ -345,5 +351,103 @@ describe("edit store", () => {
     expect(await other.importLog(JSON.parse(JSON.stringify(log)))).toBe(1);
     expect(other.list("p").map(edit => [edit.id, edit.payload.name])).toEqual([[1, "B"], [2, "A"]]);
     await expect(other.importLog({ edits: [] })).rejects.toThrow(/not a Schema Studio edit log/);
+  });
+});
+
+describe("edit ids across log generations", () => {
+  it("reports the generation with every graph and never deletes by an id from a replaced log", async () => {
+    const { backend } = setup();
+    const store = () => createEditStore(window.localStorage);
+    const added = await backend.request("POST", "/schema/edits", { root: "Root" }, EDIT_BODY);
+    const savedIn = (added.data as { edit_generation: string }).edit_generation;
+    expect(savedIn).toBe(store().getGeneration());
+    const read = await backend.request("GET", "/schema", { package: "ns.pkg.a", root: "Root", base_namespace: "ns.pkg" });
+    expect((read.data as { edit_generation: string }).edit_generation).toBe(savedIn);
+
+    // Another tab restores a backup in which id 1 is an unrelated edit.
+    const replacement = { id: 1, profile: "nomad-simulations", package: "ns.pkg.b", commit: null, op: "add_class", target: "", payload: { name: "ImportantReplacementClass" }, created_at: null };
+    await store().restoreLog({ format: "schema-studio-edits", version: 1, edits: [replacement] });
+
+    await expect(backend.request("DELETE", "/schema/edits", {}, { ids: [1], generation: savedIn }))
+      .rejects.toMatchObject({ status: 409 });
+    expect(store().list("nomad-simulations")).toEqual([replacement]);
+    // In the current generation the same id can be deleted.
+    const current = store().getGeneration();
+    await backend.request("DELETE", "/schema/edits", {}, { ids: [1], generation: current });
+    expect(store().list("nomad-simulations")).toEqual([]);
+  });
+});
+
+describe("first save after the storage keys were scoped", () => {
+  it("holds the legacy lock, so a still-open old-version tab cannot replace the log mid-save", async () => {
+    const { backend, runCore } = setup();
+    const requestLock = lockManager();
+    vi.stubGlobal("navigator", { locks: { request: requestLock } });
+    const storage = window.localStorage;
+    const original = { id: 1, profile: "nomad-simulations", package: "ns.pkg.a", commit: null, op: "add_class", target: "", payload: { name: "Original" }, created_at: null };
+    storage.setItem(LEGACY_EDITS_STORAGE_KEY, JSON.stringify({ nextId: 2, edits: [original], generation: "G0" }));
+
+    const pause = pauseNextSave(runCore);
+    const save = backend.request("POST", "/schema/edits", {}, EDIT_BODY);
+    await pause.entered;
+    expect(requestLock).toHaveBeenCalledWith(LEGACY_EDITS_STORAGE_KEY, { mode: "exclusive" }, expect.any(Function));
+    // The previous version restores a backup under its own (legacy) lock and key.
+    const replacement = { ...original, payload: { name: "Replacement" } };
+    let restoredDuringSave = false;
+    const oldTab = requestLock(LEGACY_EDITS_STORAGE_KEY, { mode: "exclusive" }, () => {
+      restoredDuringSave = storage.getItem(EDITS_STORAGE_KEY) === null;
+      storage.setItem(LEGACY_EDITS_STORAGE_KEY, JSON.stringify({ nextId: 2, edits: [replacement], generation: "G1" }));
+    });
+    pause.release();
+    const answer = (await save).data as { persisted_edits: { id: number }[]; edit_generation: string };
+    await oldTab;
+
+    // The old tab got the lock only after the first scoped write, and the save validated
+    // against, extended and reported one and the same log.
+    expect(restoredDuringSave).toBe(false);
+    expect(JSON.parse(storage.getItem(LEGACY_EDITS_STORAGE_KEY)!).generation).toBe("G1");
+    expect(answer.edit_generation).toBe("G0");
+    expect(answer.persisted_edits.map(edit => edit.id)).toEqual([2]);
+    const scoped = JSON.parse(storage.getItem(EDITS_STORAGE_KEY)!);
+    expect(scoped.generation).toBe("G0");
+    expect(scoped.edits.map((edit: { payload: { name: string } }) => edit.payload.name)).toEqual(["Original", "Added"]);
+    // From now on the scoped log is used; the legacy lock is no longer taken.
+    requestLock.mockClear();
+    await backend.request("POST", "/schema/edits", {}, EDIT_BODY);
+    expect(requestLock.mock.calls.map(([name]) => name)).toEqual([EDITS_STORAGE_KEY]);
+  });
+});
+
+describe("edits of packages the site cannot open", () => {
+  it("are reported with the graph, so a canvas can list them", async () => {
+    const { backend, runCore } = setup();
+    // The core reports every stored edit as applied.
+    const implementation = runCore.getMockImplementation()!;
+    runCore.mockImplementation(async request => request.op === "graph"
+      ? { ok: { package: request.package, nodes: [], edges: [], applied_edits: request.stored } }
+      : implementation(request));
+    const edit = (id: number, pkg: string) => ({ id, profile: "nomad-simulations", package: pkg, commit: null, op: "add_class", target: "", payload: { name: `C${id}` }, created_at: null });
+    await createEditStore(window.localStorage).restoreLog({
+      format: "schema-studio-edits", version: 1, edits: [edit(1, "ns.pkg.a"), edit(2, "ns.pkg.removed")],
+    });
+    const read = await backend.request("GET", "/schema", { package: "ns.pkg.a", root: "Root", base_namespace: "ns.pkg" });
+    // ns.pkg.a is a module of the site; ns.pkg.removed is not.
+    expect((read.data as { unavailable_packages?: string[] }).unavailable_packages).toEqual(["ns.pkg.removed"]);
+  });
+
+  it("also reports their edits that did not apply, which no list would show", async () => {
+    const { backend, runCore } = setup();
+    // As when the module is gone: the core cannot apply its edits and keeps no conflict for them.
+    const implementation = runCore.getMockImplementation()!;
+    runCore.mockImplementation(async request => request.op === "graph"
+      ? { ok: { package: request.package, nodes: [], edges: [],
+        applied_edits: (request.stored as { package: string }[]).filter(edit => edit.package !== "ns.pkg.removed") } }
+      : implementation(request));
+    const edit = (id: number, pkg: string) => ({ id, profile: "nomad-simulations", package: pkg, commit: null, op: "add_class", target: "", payload: { name: `C${id}` }, created_at: null });
+    await createEditStore(window.localStorage).restoreLog({
+      format: "schema-studio-edits", version: 1, edits: [edit(1, "ns.pkg.a"), edit(2, "ns.pkg.removed")],
+    });
+    const read = await backend.request("GET", "/schema", { package: "ns.pkg.a", root: "Root", base_namespace: "ns.pkg" });
+    expect(read.data).toMatchObject({ unavailable_packages: ["ns.pkg.removed"], unavailable_edits: [edit(2, "ns.pkg.removed")] });
   });
 });

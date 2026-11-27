@@ -50,6 +50,12 @@ export type ApiGraph = {
   edit_conflicts?: EditConflict[];
   // The edits a POST /schema/edits just stored.
   persisted_edits?: AppliedEdit[];
+  // The edit-log generation they were stored in (POST /schema/edits).
+  edit_generation?: string;
+  // Packages of stored edits that this site cannot open.
+  unavailable_packages?: string[];
+  // Stored edits of those packages that did not apply (listed nowhere else).
+  unavailable_edits?: AppliedEdit[];
 };
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -228,6 +234,13 @@ export const ensureGraphResponse = (payload: unknown): ApiGraph => {
     persisted_edits: Array.isArray(payload.persisted_edits)
       ? payload.persisted_edits.map(ensureAppliedEdit)
       : undefined,
+    edit_generation: typeof payload.edit_generation === "string" ? payload.edit_generation : undefined,
+    unavailable_packages: Array.isArray(payload.unavailable_packages)
+      ? payload.unavailable_packages.filter((item): item is string => typeof item === "string")
+      : undefined,
+    unavailable_edits: Array.isArray(payload.unavailable_edits)
+      ? payload.unavailable_edits.map(ensureAppliedEdit)
+      : undefined,
   };
 };
 
@@ -265,5 +278,15 @@ export const ensureImportedGraph = (payload: unknown): ApiGraph => {
       throw new Error(`Quantity has a missing section owner: ${node.id}`);
     }
   }
+  // Edit references in a file come from the browser or deployment that exported it: their ids
+  // name unrelated edits in this browser's store, so they must never reach local Undo/Clear.
+  // The edits themselves are already part of the imported nodes. To make them local edits,
+  // load an edit log instead (Load edits), which assigns local ids.
+  delete graph.applied_edits;
+  delete graph.edit_conflicts;
+  delete graph.persisted_edits;
+  delete graph.edit_generation;
+  delete graph.unavailable_packages;
+  delete graph.unavailable_edits;
   return graph;
 };

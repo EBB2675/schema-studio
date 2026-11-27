@@ -1,4 +1,6 @@
 import { browserStorage } from "../utils/browserStorage";
+import { EDITS_STORAGE_KEY, LEGACY_EDITS_STORAGE_KEY, readWithLegacyFallback } from "../utils/storageKeys";
+import { belongsToPackage } from "../utils/identifier";
 import { catalogEditKey } from "./catalogEdits";
 
 /**
@@ -32,10 +34,13 @@ type Saved = { nextId: number; edits: StoredEdit[]; generation: string };
 // Older logs and history share this generation until the first replacement.
 export const LEGACY_EDIT_GENERATION = "legacy";
 
-export const EDITS_STORAGE_KEY = "schema-studio-static-edits";
+// Scoped to the site's base path; see utils/storageKeys.
+export { EDITS_STORAGE_KEY };
 
 export interface EditTransaction {
   list(profile: string, pkg?: string): StoredEdit[];
+  /** The generation of the log this transaction reads and writes. */
+  generation(): string;
   nextIds(count: number): number[];
   add(edits: StoredEdit[]): void;
   remove(ids: number[], scope?: { profile: string; package?: string; allPackages?: boolean }): number;
@@ -50,11 +55,15 @@ export interface EditStore {
   hasUnsavedChanges(): boolean;
   subscribe(listener: () => void): () => void;
   list: EditTransaction["list"];
+  /** A profile's edits and the generation of the log they come from, in one read. */
+  snapshot(profile: string): { edits: StoredEdit[]; generation: string };
   exportLog: EditTransaction["exportLog"];
   transaction<T>(operation: (edits: EditTransaction) => T | Promise<T>): Promise<T>;
   remove(...args: Parameters<EditTransaction["remove"]>): Promise<number>;
   importLog(file: unknown): Promise<number>;
   restoreLog(file: unknown): Promise<number>;
+  /** Removes every saved edit of every schema; returns how many there were (0 if unreadable). */
+  discardAll(): Promise<number>;
   retrySave(): Promise<boolean>;
 }
 
@@ -62,9 +71,21 @@ export interface EditStore {
 // This fallback cannot coordinate other browser tabs.
 let mutationQueue: Promise<unknown> = Promise.resolve();
 
-async function serialize<T>(operation: () => T | Promise<T>): Promise<T> {
+/**
+ * Runs a mutation under the edit lock of this deployment. Until the scoped log exists, edits
+ * are still read from the legacy record, which tabs of the previous version (still open)
+ * guard with the legacy lock: the mutation then holds that lock too, from its first read
+ * through its first scoped write, so the log it validates against is the log it extends.
+ * Old tabs only ever take the legacy lock, so taking scoped then legacy cannot deadlock.
+ *
+ * Migration only: the legacy lock can be dropped with the legacy fallback (utils/storageKeys).
+ */
+async function serialize<T>(operation: () => T | Promise<T>, readsLegacy: () => boolean = () => false): Promise<T> {
   if (typeof navigator !== "undefined" && navigator.locks) {
-    return navigator.locks.request(EDITS_STORAGE_KEY, { mode: "exclusive" }, operation);
+    const locks = navigator.locks;
+    return locks.request(EDITS_STORAGE_KEY, { mode: "exclusive" }, () => readsLegacy()
+      ? locks.request(LEGACY_EDITS_STORAGE_KEY, { mode: "exclusive" }, operation)
+      : operation());
   }
   const result = mutationQueue.then(operation);
   mutationQueue = result.catch(() => undefined);
@@ -84,11 +105,20 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
   let revision = 0;
   let catalogRevision = 0;
   const listeners = new Set<() => void>();
+  // Checked under the scoped lock. An unreadable record also takes the legacy lock: safe.
+  const readsLegacy = () => {
+    if (!storage) return false;
+    try {
+      return storage.getItem(EDITS_STORAGE_KEY) === null;
+    } catch {
+      return true;
+    }
+  };
 
   const read = (): Saved => {
     if (unsaved || !storage) return memory;
     try {
-      const raw = storage.getItem(EDITS_STORAGE_KEY);
+      const raw = readWithLegacyFallback(storage, EDITS_STORAGE_KEY, LEGACY_EDITS_STORAGE_KEY);
       if (raw === null) {
         memory = { nextId: 1, edits: [], generation: LEGACY_EDIT_GENERATION };
         return memory;
@@ -130,6 +160,9 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
     list(profile, pkg) {
       return read().edits.filter(edit => edit.profile === profile && (pkg === undefined || edit.package === pkg));
     },
+    generation() {
+      return read().generation;
+    },
     nextIds(count) {
       const start = read().nextId;
       return Array.from({ length: count }, (_, index) => start + index);
@@ -150,7 +183,7 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
       const goes = (edit: StoredEdit) =>
         byId.has(edit.id)
         || (scope !== undefined && edit.profile === scope.profile
-          && (scope.allPackages === true || (scope.package !== undefined && edit.package === scope.package)));
+          && (scope.allPackages === true || (scope.package !== undefined && belongsToPackage(edit.package, scope.package))));
       const kept = saved.edits.filter(edit => !goes(edit));
       write({ ...saved, edits: kept });
       return saved.edits.length - kept.length;
@@ -173,7 +206,7 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
   };
   // Read IDs and existing edits only inside this callback, and hold the lock
   // through asynchronous validation and the final write. Do not nest transactions.
-  const transaction: EditStore["transaction"] = operation => serialize(() => operation(access));
+  const transaction: EditStore["transaction"] = operation => serialize(() => operation(access), readsLegacy);
   return {
     restoreLog: file => serialize(() => {
       const log = file as Partial<EditLogFile> | null;
@@ -189,11 +222,26 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
       // A backup never supplies its identity: every replacement gets a fresh one.
       write({ nextId, edits, generation: crypto.randomUUID() });
       return edits.length;
-    }),
+    }, readsLegacy),
+    discardAll: () => serialize(() => {
+      let count = 0;
+      let nextId = memory.nextId;
+      try {
+        const saved = read();
+        count = saved.edits.length;
+        nextId = saved.nextId;
+      } catch {
+        // Discarding is also the way out of a log that cannot be read.
+      }
+      // A fresh generation drops history entries that point at the discarded edits;
+      // ids keep counting up so a late reference cannot name a new edit.
+      write({ nextId, edits: [], generation: crypto.randomUUID() });
+      return count;
+    }, readsLegacy),
     retrySave: () => serialize(() => {
       if (unsaved) write(memory);
       return !unsaved;
-    }),
+    }, readsLegacy),
     getGeneration: () => read().generation,
     getRevision: () => revision,
     getCatalogRevision: () => catalogRevision,
@@ -203,6 +251,10 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
       return () => { listeners.delete(listener); };
     },
     list: access.list,
+    snapshot(profile) {
+      const saved = read();
+      return { edits: saved.edits.filter(edit => edit.profile === profile), generation: saved.generation };
+    },
     exportLog: access.exportLog,
     transaction,
     remove: (...args) => transaction(store => store.remove(...args)),

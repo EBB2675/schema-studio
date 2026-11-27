@@ -378,6 +378,24 @@ def test_replay_gives_the_same_schema_and_reports_conflicts_across_commits(conve
     assert conflicts == []
 
 
+def test_undoing_an_edit_reports_the_later_edits_that_depend_on_it(converted):
+    # Undo in History deletes one stored edit; the rest are replayed without it.
+    session = Session(converted, "nomad-simulations")
+    owner = f"{SIM}.ModelMethod"
+    added = session.edit("add_attribute", owner, name="cutoff", kind="quantity", dtype="float64")
+    renamed = session.edit("rename_attribute", owner, attribute="cutoff", new_name="energy_cutoff")
+    described = session.edit("set_description", owner, description="Mine.")
+
+    remaining = [edit for edit in session.stored if edit is not added]
+    replayed, applied, conflicts = edits.apply_edits(session.source, remaining, rules="nomad", commit="c1")
+
+    # The rename is kept and reported, not dropped; unrelated edits still apply.
+    assert [(c["edit"], c["reason"], c["applied"]) for c in conflicts] == [(renamed, "not_found", False)]
+    assert applied == [described]
+    attributes = replayed["classes"][owner].get("attributes") or {}
+    assert "cutoff" not in attributes and "energy_cutoff" not in attributes
+
+
 def test_prepare_is_checked_and_complete(converted):
     session = Session(converted, "bam-masterdata-v0")
     edit = session.edit("add_attribute", f"{BAM}.Calibration", code="CALIBRATION_NOTE", data_type="VARCHAR")

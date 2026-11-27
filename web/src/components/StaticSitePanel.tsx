@@ -13,9 +13,12 @@ const ENGINE_TEXT: Partial<Record<CoreStatus, string>> = {
  * What the static site shows instead of the server controls: the edit log kept in this browser,
  * and the in-browser engine status while it loads or if it fails.
  */
-export default function StaticSitePanel({ onEditsChanged, onBackupRestored }: {
+export default function StaticSitePanel({ onEditsChanged, onBackupRestored, onAllEditsDiscarded, discardBlocked = false }: {
   onEditsChanged: () => void;
   onBackupRestored: () => void;
+  onAllEditsDiscarded: () => void;
+  /** True while an edit is being saved: discarding then could race with its History entry. */
+  discardBlocked?: boolean;
 }) {
   const [engine, setEngine] = useState<CoreStatus>(coreStatus());
   const [message, setMessage] = useState<string | null>(null);
@@ -61,6 +64,30 @@ export default function StaticSitePanel({ onEditsChanged, onBackupRestored }: {
     }
   };
 
+  const discardAll = async () => {
+    if (discardBlocked) return;
+    try {
+      const store = (await getStaticBackend()).edits;
+      let count: number | null = null;
+      try {
+        count = store.exportLog().edits.length;
+      } catch {
+        // An unreadable log can still be discarded.
+      }
+      if (count === 0) {
+        setMessage("There are no saved edits to discard.");
+        return;
+      }
+      const what = count === null ? "ALL saved edits (the saved log could not be read)" : `all ${count} saved edit${count === 1 ? "" : "s"}`;
+      if (!window.confirm(`Discard ${what} across all schemas in this browser? This also clears the undo history and cannot be undone. Download your edits first if you may need them.`)) return;
+      const discarded = await store.discardAll();
+      setMessage(`Discarded ${discarded} saved edit${discarded === 1 ? "" : "s"}.`);
+      onAllEditsDiscarded();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const loadLog = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -93,6 +120,16 @@ export default function StaticSitePanel({ onEditsChanged, onBackupRestored }: {
           Restore backup
         </button>
         <input ref={restoreRef} type="file" accept="application/json,.json" style={{ display: "none" }} onChange={restoreLog} aria-label="Backup file" />
+        <button
+          className="btn secondary"
+          type="button"
+          style={{ color: "var(--danger)" }}
+          onClick={discardAll}
+          disabled={discardBlocked}
+          title={discardBlocked ? "Wait until the current edit is saved" : "Remove every saved edit of every schema from this browser"}
+        >
+          Discard all saved edits…
+        </button>
       </div>
       {ENGINE_TEXT[engine] ? (
         <div className="small" role="status" style={{ marginTop: 6, color: engine === "failed" ? "var(--danger)" : "var(--muted)" }}>

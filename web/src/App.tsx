@@ -30,10 +30,12 @@ import {
   ensureGraphResponse,
   ensureImportedGraph,
   type ApiGraph,
-  type ApiNode
+  type ApiNode,
+  type AppliedEdit
 } from "./types/api";
-import { fqidFromParts, normalizeId, normalizeLabel, normalizePackageName } from "./utils/identifier";
+import { belongsToPackage, fqidFromParts, normalizeId, normalizeLabel, normalizePackageName } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
+import { describeSavedEdit, editsOfOtherPackages, notApplied, olderSavedEditsOf } from "./utils/savedEdits";
 import { buildUmlStateFromGraph } from "./utils/umlState";
 import { initialTheme } from "./utils/theme";
 import { canvasPositionKey } from "./utils/canvasPositions";
@@ -67,6 +69,9 @@ export default function App() {
   const [auditTrail, setAuditTrail] = useAuditTrail();
 
   const [quantityActionErr, setQuantityActionErr] = useState<string | null>(null);
+  // Failures of History actions (Undo, Clear), shown in the History panel: unlike the class
+  // panel's action error, they must stay visible when nothing is selected.
+  const [historyActionErr, setHistoryActionErr] = useState<string | null>(null);
   const [creatingQuantityFor, setCreatingQuantityFor] = useState<string | null>(null);
   const [creatingClass, setCreatingClass] = useState<boolean>(false);
 
@@ -213,16 +218,23 @@ export default function App() {
     [auditTrail]
   );
 
+  type StoredRefs = { editIds: string[]; editGeneration?: string };
+
   const archiveAuditTrail = useCallback(() => {
     setAuditTrail((prev) => prev.map((entry) => ({ ...entry, replayable: false })));
   }, [setAuditTrail]);
 
   const appendAudit = useCallback(
-    (change: AuditTrailEntry["change"], description: string, editIds?: string[], packageName?: string) => {
+    (change: AuditTrailEntry["change"], description: string, refs?: StoredRefs, packageName?: string) => {
       const now = new Date().toISOString();
       const id = `${now}-${Math.random().toString(16).slice(2)}`;
       const pkgForEntry = packageName || graph?.package || pkg;
-      const editGeneration = getBrowserEditStore().getGeneration();
+      const editIds = refs?.editIds;
+      const currentGeneration = getBrowserEditStore().getGeneration();
+      // The save finished after its log was replaced (restore, discard all): its edits are
+      // gone, so an entry would point at nothing, or at unrelated edits with the same ids.
+      if (editIds?.length && refs?.editGeneration && refs.editGeneration !== currentGeneration) return;
+      const editGeneration = refs?.editGeneration ?? currentGeneration;
       setAuditTrail((prev) => [
         ...prev,
         { change, description, id, timestamp: now, package: pkgForEntry, replayable: true, editIds, editGeneration },
@@ -561,8 +573,11 @@ export default function App() {
 
   type EditRequest = { op: string; target: string; payload: Record<string, unknown> };
 
-  const editIdsOf = (updated: ApiGraph): string[] =>
-    (updated.persisted_edits ?? []).map((edit) => edit.id).filter((id): id is string => Boolean(id));
+  // The stored edits a save response made, and the edit-log generation they belong to.
+  const storedRefs = (updated: ApiGraph): StoredRefs => ({
+    editIds: (updated.persisted_edits ?? []).map((edit) => edit.id).filter((id): id is string => Boolean(id)),
+    editGeneration: updated.edit_generation,
+  });
 
   // Store edits on the browser backend (all or none) and show the graph it rebuilds from the edited schema.
   const submitEdits = async (edits: EditRequest[]): Promise<ApiGraph> => {
@@ -590,6 +605,13 @@ export default function App() {
       }
     ));
     const updated = ensureGraphResponse(res.data);
+    // The log was replaced (restore, discard all, possibly in another tab) after this save
+    // committed: its edits and ids are gone or now name unrelated edits. Show nothing from it,
+    // refresh from the current log, and stop the caller's own updates (selection, History).
+    if (updated.edit_generation && updated.edit_generation !== getBrowserEditStore().getGeneration()) {
+      if (contextIsCurrent()) void reloadAfterEditsRemoved(shownAppliedEdits());
+      throw new Error("This edit was not kept: the saved edits were replaced (backup restored or all edits discarded) while it was being saved.");
+    }
     if (!contextIsCurrent()) return updated;
     // A renamed root follows its class even when the graph needs reconciliation.
     if ((updated.root ?? "") !== (root ?? "")) setRoot(updated.root ?? "");
@@ -677,7 +699,7 @@ export default function App() {
       appendAudit(
         { type: "add-quantity", classId, quantity: addedQuantity },
         `Added ${isVocabulary ? "term" : "quantity"} ${addedQuantity.name}${addedQuantity.dtype ? `: ${addedQuantity.dtype}` : ""} to class ${targetClass.name}`,
-        editIdsOf(updated),
+        storedRefs(updated),
         updated.package
       );
       if (uiIsCurrent()) setSelectedClassId(classId);
@@ -751,7 +773,7 @@ export default function App() {
       appendAudit(
         { type: "add-class", cls: newCls },
         parentId ? `Added class ${newCls.name} extending ${parentId}` : `Added class ${newCls.name}`,
-        editIdsOf(next),
+        storedRefs(next),
         next.package
       );
       if (uiIsCurrent()) setSelectedClassId(newCls.id);
@@ -779,28 +801,85 @@ export default function App() {
 
   // Deletes the stored edits of audit entries (and a module's own edits) in one request: all or none.
   const deleteStoredEdits = useCallback(
-    async (ids: string[], packageName?: string) => {
-      await withPendingMutation(packageName || graph?.package || pkg, () => api.delete("/schema/edits", { params: { package: packageName }, data: { ids } }));
+    // With `generation`, the store deletes nothing unless its log is still that generation.
+    async (ids: string[], packageName?: string, generation?: string) => {
+      await withPendingMutation(packageName || graph?.package || pkg, () => api.delete("/schema/edits", {
+        params: { package: packageName },
+        data: generation ? { ids, generation } : { ids },
+      }));
     },
     [api, graph?.package, pkg, withPendingMutation]
   );
 
+  // Best effort: in an error path the store may be unreadable for the same reason the
+  // request failed, and that must not hide the original error.
+  const readEditGeneration = (): string | undefined => {
+    try {
+      return getBrowserEditStore().getGeneration();
+    } catch {
+      return undefined;
+    }
+  };
+  // Shows the current schema after stored edits were removed or replaced. The open root may
+  // have been added or renamed by those edits: follow a removed rename back to the earlier
+  // name, keep the root if the package still has it, else open the package's first root (as
+  // loadRoots does). The root is passed explicitly: setRoot only applies on the next render.
+  const reloadAfterEditsRemoved = async (removed: AppliedEdit[] = []) => {
+    let nextRoot = root;
+    if (root && !startEmpty) {
+      for (const edit of [...removed].reverse()) {
+        if (edit.op === "rename_class" && edit.payload?.new_name === nextRoot && edit.target) {
+          nextRoot = edit.target.split(".").pop() || nextRoot;
+        }
+      }
+      try {
+        const response = await api.get("/roots", { params: { package: graph?.package || pkg, branch: undefined } });
+        const sections: unknown = response.data?.sections;
+        if (Array.isArray(sections) && !sections.includes(nextRoot)) nextRoot = String(sections[0] ?? "");
+      } catch {
+        // Keep the root; the graph load reports what is wrong.
+      }
+    }
+    if (nextRoot === root) {
+      await latestLoadGraph.current({ keepView: true });
+      return;
+    }
+    // The same canvas following its class, as a save that renames the root does.
+    setRoot(nextRoot);
+    canvasSession.updateRoot(nextRoot);
+    await latestLoadGraph.current({ root: nextRoot });
+  };
+  // Every applied edit of the shown graph, for when the whole log was replaced.
+  const shownAppliedEdits = () => graph?.applied_edits ?? [];
+
+  // History entries of a replaced log can never be undone or cleared by id.
+  const dropReplacedHistory = (generation: string) =>
+    setAuditTrail(prev => prev.filter(item => !item.editIds?.length || item.editGeneration === generation));
+
   const undoAuditEntry = async (id: string) => {
     const entry = auditTrail.find((a) => a.id === id);
     if (!entry || !entry.change) return;
-    setQuantityActionErr(null);
+    setHistoryActionErr(null);
     const contextIsCurrent = canvasSession.captureContext();
 
     if (entry.editIds?.length) {
       try {
-        await deleteStoredEdits(entry.editIds);
+        await deleteStoredEdits(entry.editIds, undefined, entry.editGeneration);
       } catch (e: unknown) {
-        // Nothing was deleted; the entry stays so the undo can be tried again.
-        if (contextIsCurrent()) setQuantityActionErr(`Undo failed: ${formatApiError(e)}`);
+        // Nothing was deleted. If the log was replaced, entries of the old one can never be
+        // undone: drop them and show the current edits. Otherwise (or if the generation cannot
+        // be read) keep the entry so the undo can be tried again. Always report why.
+        const generation = readEditGeneration();
+        if (generation !== undefined && entry.editGeneration && entry.editGeneration !== generation) {
+          dropReplacedHistory(generation);
+          if (contextIsCurrent()) await reloadAfterEditsRemoved(shownAppliedEdits());
+        }
+        if (contextIsCurrent()) setHistoryActionErr(`Undo failed: ${formatApiError(e)}`);
         return;
       }
       setAuditTrail(prev => prev.filter(item => item.id !== id && item.change));
-      if (contextIsCurrent()) await latestLoadGraph.current({ keepView: true });
+      const ids = new Set(entry.editIds);
+      if (contextIsCurrent()) await reloadAfterEditsRemoved(shownAppliedEdits().filter(edit => edit.id && ids.has(String(edit.id))));
       return;
     }
 
@@ -809,24 +888,71 @@ export default function App() {
     rebuildGraphWithAudit(remaining as AuditTrailEntry[]);
   };
 
-  // Clears what the audit panel shows: this module's stored edits and the edits its entries made.
+  // Undoes one applied edit that has no History entry. Only its id is sent, never the
+  // package: a package scope would delete all of that package's edits.
+  // Later edits that depend on it no longer apply and come back as edit conflicts.
+  const undoSavedEdit = async (edit: AppliedEdit, generation?: string) => {
+    const editId = String(edit.id);
+    if (pendingMutationsRef.current[currentPackageForAudit || pkg]) return;
+    setHistoryActionErr(null);
+    const contextIsCurrent = canvasSession.captureContext();
+    try {
+      // The id is only valid in the log the shown graph was built from.
+      await deleteStoredEdits([editId], undefined, generation);
+    } catch (e: unknown) {
+      if (contextIsCurrent()) {
+        // The rows may be out of date (log replaced): show the current edits.
+        await reloadAfterEditsRemoved(shownAppliedEdits());
+        if (contextIsCurrent()) setHistoryActionErr(`Undo failed: ${formatApiError(e)}`);
+      }
+      return;
+    }
+    if (contextIsCurrent()) await reloadAfterEditsRemoved([edit]);
+  };
+
+  // Clears what the History panel shows: this module's stored edits (by the same package test
+  // the rows use), the edits its entries made, and every listed older saved edit.
   const clearAuditTrail = async () => {
     const targetPackage = currentPackageForAudit || pkg;
     if (pendingMutationsRef.current[targetPackage]) return;
-    const hasLocalAudit = auditEntriesForCurrentPackage.length > 0;
-    const hasPersistedEdits = (graph?.applied_edits?.length ?? 0) > 0 || (graph?.edit_conflicts?.length ?? 0) > 0;
-    if (!hasLocalAudit && !hasPersistedEdits) return;
+    if (!historyHasClearable) return;
     const contextIsCurrent = canvasSession.captureContext();
-    const ids = auditEntriesForCurrentPackage.flatMap((entry) => entry.editIds ?? []);
-    setQuantityActionErr(null);
+    // Clear acts on the log the shown graph was built from; the store refuses it if that log
+    // was replaced since. Only ids recorded in that same log are sent: an id from another
+    // generation can name an unrelated edit, even in another package.
+    const generation = graph?.edit_generation ?? readEditGeneration();
+    // The listed rows' ids go along too, so no listed row can outlive a Clear. They come
+    // from the shown graph, so they are only sent with its generation.
+    const rowIds = graph?.edit_generation !== undefined && graph.edit_generation === generation
+      ? olderSavedEdits.flatMap((edit) => (edit.id ? [String(edit.id)] : []))
+      : [];
+    const ids = generation === undefined
+      ? []
+      : [...new Set([
+        ...auditEntriesForCurrentPackage
+          .filter((entry) => entry.editGeneration === generation)
+          .flatMap((entry) => entry.editIds ?? []),
+        ...rowIds,
+      ])];
+    setHistoryActionErr(null);
     try {
-      await deleteStoredEdits(ids, targetPackage);
+      await deleteStoredEdits(ids, targetPackage, generation);
     } catch (e: unknown) {
-      if (contextIsCurrent()) setQuantityActionErr(`Clear failed: ${formatApiError(e)}`);
+      const current = readEditGeneration();
+      if (current !== undefined && current !== generation) {
+        dropReplacedHistory(current);
+        if (contextIsCurrent()) await reloadAfterEditsRemoved(shownAppliedEdits());
+      }
+      if (contextIsCurrent()) setHistoryActionErr(`Clear failed: ${formatApiError(e)}`);
       return;
     }
     setAuditTrail((prev) => prev.filter((entry) => !auditEntriesForCurrentPackage.includes(entry)));
-    if (contextIsCurrent()) await latestLoadGraph.current({ keepView: true });
+    // Clear removed this package's edits and the listed ids.
+    const cleared = new Set(ids);
+    if (contextIsCurrent()) {
+      await reloadAfterEditsRemoved(shownAppliedEdits().filter(edit =>
+        (edit.id && cleared.has(String(edit.id))) || belongsToPackage(edit.package, targetPackage)));
+    }
   };
 
   // If user switches away from the scratch package, exit empty mode to restore schema-backed behavior.
@@ -860,6 +986,38 @@ export default function App() {
     [auditEntriesForCurrentPackage, currentPackageForAudit, filterActiveAuditForPackage]
   );
   const activeAuditCount = activeAuditEntries.length;
+  // This canvas's applied edits that its History rows do not cover: listed so none is
+  // invisible. Edits of other packages are listed on those packages' canvases, except for
+  // packages the site cannot open, which are listed here.
+  const olderSavedEdits = useMemo(
+    () => olderSavedEditsOf(currentGraph, currentPackageForAudit, auditEntriesForCurrentPackage),
+    [auditEntriesForCurrentPackage, currentGraph, currentPackageForAudit]
+  );
+  const otherPackagesEdits = useMemo(
+    () => editsOfOtherPackages(currentGraph, currentPackageForAudit),
+    [currentGraph, currentPackageForAudit]
+  );
+  // Clear is offered exactly when the panel lists something it removes.
+  const historyHasClearable = auditEntriesForCurrentPackage.length > 0 || olderSavedEdits.length > 0
+    || (currentGraph?.edit_conflicts?.length ?? 0) > 0;
+  // A graph from the current log (e.g. after another tab restored a backup) retires History
+  // entries of earlier logs: their ids now name other edits or nothing, so they would
+  // miscount active edits and can never be undone. A graph from an older log than the
+  // store's (a late response) changes nothing.
+  const shownGeneration = currentGraph?.edit_generation;
+  useEffect(() => {
+    if (!shownGeneration) return;
+    let current: string | undefined;
+    try {
+      current = getBrowserEditStore().getGeneration();
+    } catch {
+      return;
+    }
+    if (current !== shownGeneration) return;
+    setAuditTrail(prev => (prev.some(entry => entry.editIds?.length && entry.editGeneration !== current)
+      ? prev.filter(entry => !entry.editIds?.length || entry.editGeneration === current)
+      : prev));
+  }, [setAuditTrail, shownGeneration]);
   const archivedAuditCount = auditEntriesForCurrentPackage.length - activeAuditCount;
 
   const restoreArchivedEntry = (id: string) => {
@@ -885,6 +1043,16 @@ export default function App() {
     });
     setAuditTrail(updated);
     rebuildGraphWithAudit(updated);
+  };
+
+  // After a backup restore or discarding all edits.
+  // Replacement may reuse IDs for unrelated edits in any schema.
+  // Clear rather than archive: archived entries can be reactivated.
+  const resetAfterEditsReplaced = () => {
+    // Keep only entries a save made in the new log after the replacement.
+    const generation = getBrowserEditStore().getGeneration();
+    setAuditTrail(prev => prev.filter(entry => entry.editIds?.length && entry.editGeneration === generation));
+    void reloadAfterEditsRemoved(shownAppliedEdits());
   };
 
   const handleCanvasClassSelect = useCallback((cls: UmlClassNode) => {
@@ -1018,7 +1186,7 @@ export default function App() {
     appendAudit(
       { type: "edit-class", before, after },
       `Edited class ${before.name} docstring`,
-      editIdsOf(updated),
+      storedRefs(updated),
       updated.package
     );
 
@@ -1038,7 +1206,7 @@ export default function App() {
     const updated = await submitEdits([{ op: "rename_class", target: classId, payload: { new_name: name } }]);
     const newId = before.module ? `${before.module}.${name}` : name;
     const after = buildUmlStateFromGraph(updated)?.classes.find(c => c.id === newId);
-    if (after) appendAudit({ type: "edit-class", before, after }, `Renamed class ${before.name} to ${name}`, editIdsOf(updated), updated.package);
+    if (after) appendAudit({ type: "edit-class", before, after }, `Renamed class ${before.name} to ${name}`, storedRefs(updated), updated.package);
     if (uiIsCurrent()) setSelectedClassId(newId);
     if (uiIsCurrent()) setSelectedQuantityId(null);
     if (uiIsCurrent()) setQuantityActionErr(null);
@@ -1148,7 +1316,7 @@ export default function App() {
     appendAudit(
       { type: "edit-quantity", classId: owner, before, after },
       `Edited quantity ${before.name} on ${owner}`,
-      editIdsOf(updated),
+      storedRefs(updated),
       updated.package
     );
 
@@ -1187,7 +1355,7 @@ export default function App() {
     appendAudit(
       { type: "remove-quantity", classId: target.owner, quantity: removed },
       `Removed quantity ${removed.name} from ${target.owner}`,
-      editIdsOf(updated),
+      storedRefs(updated),
       updated.package
     );
 
@@ -1506,12 +1674,9 @@ export default function App() {
               <Suspense fallback={null}>
                 <StaticSitePanel
                   onEditsChanged={() => void loadGraph({ keepView: true })}
-                  onBackupRestored={() => {
-                    // Replacement may reuse IDs for unrelated edits in any schema.
-                    // Clear rather than archive: archived entries can be reactivated.
-                    setAuditTrail([]);
-                    void loadGraph({ keepView: true });
-                  }}
+                  onBackupRestored={resetAfterEditsReplaced}
+                  onAllEditsDiscarded={resetAfterEditsReplaced}
+                  discardBlocked={Object.values(pendingMutations).some(count => count > 0)}
                 />
               </Suspense>
             )}
@@ -1532,12 +1697,15 @@ export default function App() {
                 className="danger-action"
                 type="button"
                 onClick={clearAuditTrail}
-                disabled={Boolean(pendingMutations[currentPackageForAudit || pkg]) || (!auditTrail.length && !(graph?.applied_edits?.length) && !(graph?.edit_conflicts?.length))}
+                disabled={Boolean(pendingMutations[currentPackageForAudit || pkg]) || !historyHasClearable}
               >
                 Clear
               </button>
               </ActionMenu>
             </div>
+            {historyActionErr ? (
+              <div className="small" role="alert" style={{ color: "var(--danger)" }}>{historyActionErr}</div>
+            ) : null}
             {graph?.edit_conflicts?.length ? (
               <div className="small" role="status" style={{ color: "var(--pill-warning-fg)" }}>
                 <div>
@@ -1554,8 +1722,18 @@ export default function App() {
               </div>
             ) : null}
             <div className="small" style={{ color: "var(--muted)" }}>
-              {auditEntriesForCurrentPackage.length
-                ? `${activeAuditCount} active edits${archivedAuditCount > 0 ? ` (${archivedAuditCount} archived)` : ""}`
+              {auditEntriesForCurrentPackage.length || olderSavedEdits.length || otherPackagesEdits.count
+                ? [
+                    auditEntriesForCurrentPackage.length
+                      ? `${activeAuditCount} active edits${archivedAuditCount > 0 ? ` (${archivedAuditCount} archived)` : ""}`
+                      : null,
+                    olderSavedEdits.length
+                      ? `${olderSavedEdits.length} older saved edit${olderSavedEdits.length === 1 ? "" : "s"}`
+                      : null,
+                    otherPackagesEdits.count
+                      ? `${otherPackagesEdits.count} edit${otherPackagesEdits.count === 1 ? "" : "s"} from ${otherPackagesEdits.packages.join(", ")} also appl${otherPackagesEdits.count === 1 ? "ies" : "y"} here; open ${otherPackagesEdits.packages.length === 1 ? "that package" : "those packages"} to see ${otherPackagesEdits.count === 1 ? "it" : "them"}`
+                      : null,
+                  ].filter(Boolean).join(" · ")
                 : "No edits on this canvas yet"}
             </div>
             <div
@@ -1612,6 +1790,49 @@ export default function App() {
                         {new Date(entry.timestamp).toLocaleString()}
                       </div>
                       <div style={{ color: "var(--subtitle)" }}>Change: {entry.change.type}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {[...olderSavedEdits].reverse().map((edit, index) => {
+                // Only edits of a package the site cannot open are listed here from another package.
+                const otherPackage = edit.package && !belongsToPackage(edit.package, currentPackageForAudit)
+                  ? edit.package
+                  : null;
+                return (
+                  <div
+                    key={edit.id ? `saved-${edit.id}` : `saved-unnamed-${index}`}
+                    data-testid="older-saved-edit"
+                    style={{ padding: "6px 8px", borderBottom: "1px solid var(--panel-border)" }}
+                  >
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      {edit.id ? (
+                        <button
+                          className="btn secondary"
+                          type="button"
+                          onClick={() => undoSavedEdit(edit, currentGraph?.edit_generation)}
+                          disabled={Boolean(pendingMutations[currentPackageForAudit || pkg])}
+                          title="Remove this saved edit"
+                          style={{ padding: "6px 10px" }}
+                        >
+                          Undo
+                        </button>
+                      ) : null}
+                      <div>
+                        <div style={{ fontWeight: 700 }}>Older saved edit: {describeSavedEdit(edit)}</div>
+                        <div style={{ color: "var(--muted)" }}>
+                          {edit.created_at ? new Date(edit.created_at).toLocaleString() : "Date unknown"}
+                          {otherPackage ? ` · in ${otherPackage}, which this site cannot open` : ""}
+                        </div>
+                        {notApplied(edit, currentGraph) ? (
+                          <div style={{ color: "var(--pill-warning-fg)" }}>Not applied: its package is not on this site.</div>
+                        ) : null}
+                        {edit.id ? null : (
+                          <div style={{ color: "var(--subtitle)" }}>
+                            This edit has no ID, so it cannot be undone on its own. Use &ldquo;Discard all saved edits&rdquo; above to remove it.
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

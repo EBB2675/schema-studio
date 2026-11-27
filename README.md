@@ -40,9 +40,11 @@ The development server serves the same static application. Python is used only f
 
 ## GitHub Pages
 
-Set the repository's Pages source to **GitHub Actions**. The workflow in `.github/workflows/pages.yml` first runs the reusable CI verification pipeline, then builds the frontend, refreshes the schema environments, generates snapshots, and smoke-tests the complete `web/dist` artifact in Chromium before uploading it. Deployment depends on both verification and the successful artifact build. It runs on pushes to `main`, published releases, nightly, or manually.
+Set the repository's Pages source to **GitHub Actions**. The workflow in `.github/workflows/pages.yml` first runs the reusable CI verification pipeline, then builds the frontend, refreshes the schema environments, generates snapshots, and smoke-tests the complete `web/dist` artifact in Chromium before uploading it. Deployment depends on both verification and the successful artifact build. It runs on pushes to `develop`, published releases, nightly, or manually.
 
 `web/.env.pages` sets the project URL prefix to `/schema-studio/`. Change `VITE_BASE_PATH` for another repository, or use `/` for a user/organization root site. Assets, snapshots, and Pyodide resolve relative to this prefix.
+
+Saved edits live in the browser's local storage, under keys that include this prefix, so two Pages sites on the same `github.io` domain keep separate edits. Edits saved by an earlier version, before the keys included the prefix, are picked up automatically. If a tab of Schema Studio was open during an update, download your edits from it (History → Download edits) and load them in a new tab (Load edits): edits saved in that old tab after the update are not shown in new tabs.
 
 To prepare the same artifact locally:
 

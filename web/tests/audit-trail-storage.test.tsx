@@ -3,8 +3,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useAuditTrail } from '../src/hooks/useAuditTrail';
 import { getBrowserEditStore } from '../src/static/editStore';
 import type { AuditTrailEntry } from '../src/types/uml';
+import { AUDIT_STORAGE_KEY } from '../src/utils/storageKeys';
 
-const key = 'schema-uml-audit';
+const key = AUDIT_STORAGE_KEY;
 const entry = (id: string): AuditTrailEntry => ({
   id, timestamp: '2026-11-24T00:00:00Z', description: id,
   editGeneration: getBrowserEditStore().getGeneration(),
