@@ -51,10 +51,10 @@ const SITE: SiteIndex = {
 
 const READY = { package: "ns.pkg.a", root: "Root", nodes: [{ id: "ns.pkg.a.Root" }], edges: [] };
 
-function setup() {
+function setup(site = SITE) {
   const storage = window.localStorage;
   storage.clear();
-  const readJson = vi.fn(async (path: string) => (path === "index.json" ? SITE : READY));
+  const readJson = vi.fn(async (path: string) => (path === "index.json" ? site : READY));
   const runCore = vi.fn(async (request: CoreRequest) => {
     if (request.op === "add_edits") {
       const ids = request.ids as number[];
@@ -94,6 +94,83 @@ function pauseNextSave(runCore: ReturnType<typeof setup>["runCore"]) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("static backend", () => {
+  it("caches a 47-module catalog across repeated reads and non-class edits, invalidating profile-wide for class changes", async () => {
+    const site = structuredClone(SITE);
+    const profile = site.profiles[0];
+    profile.modules = Array.from({ length: 47 }, (_, i) => ({ package: `ns.pkg.module${i}`, sections: ['Root'], snapshot: `snapshots/module${i}.json` }));
+    profile.overview = profile.modules.map(({ package: pkg, sections }) => ({ package: pkg, sections }));
+    const { backend, runCore } = setup(site);
+    const overview = () => backend.request('GET', '/overview', { base: 'ns.pkg' });
+    const save = async (op: string, payload: Record<string, unknown> = {}) => backend.edits.transaction(tx => tx.add([{
+      id: tx.nextIds(1)[0], profile: profile.key, package: 'ns.pkg.module0', commit: null,
+      op, target: 'ns.pkg.module0.Root', payload, created_at: null,
+    }]));
+    await overview();
+    await save('set_description');
+    await save('add_attribute');
+    await overview();
+    await overview();
+    expect(runCore).not.toHaveBeenCalled();
+
+    await save('rename_class', { new_name: 'Renamed' });
+    await Promise.all([overview(), overview()]);
+    expect(runCore).toHaveBeenCalledTimes(47);
+    expect(new Set(runCore.mock.calls.map(([request]) => request.package)).size).toBe(47);
+    // All modules receive all profile edits, including modules that only import the renamed class.
+    expect(runCore.mock.calls.every(([request]) => (request.stored as unknown[]).length === 3)).toBe(true);
+    await backend.request('GET', '/roots', { package: 'ns.pkg.module0' });
+    await save('set_description');
+    await save('remove_attribute');
+    await overview();
+    await backend.edits.remove([4, 5]);
+    await overview();
+    expect(runCore).toHaveBeenCalledTimes(47);
+
+    await save('add_class', { name: 'Added' });
+    await overview();
+    expect(runCore).toHaveBeenCalledTimes(94);
+    const addedId = backend.edits.list(profile.key).at(-1)!.id;
+    await backend.edits.remove([addedId]);
+    await overview();
+    expect(runCore).toHaveBeenCalledTimes(141);
+    await save('remove_class');
+    await overview();
+    expect(runCore).toHaveBeenCalledTimes(188);
+    const backup = backend.edits.exportLog();
+    await backend.edits.restoreLog(backup);
+    await overview();
+    expect(runCore).toHaveBeenCalledTimes(235);
+    await backend.edits.restoreLog({ ...backup, edits: [] });
+    await overview();
+    await overview();
+    expect(runCore).toHaveBeenCalledTimes(235);
+  });
+
+  it("retries failed catalog calculations instead of caching their errors", async () => {
+    const { backend, runCore } = setup();
+    await backend.request('POST', '/schema/edits', {}, EDIT_BODY);
+    runCore.mockClear();
+    runCore.mockResolvedValueOnce({ error: 'temporary failure', status: 500 });
+    await expect(backend.request('GET', '/overview', { base: 'ns.pkg' })).rejects.toThrow('temporary failure');
+    await backend.request('GET', '/overview', { base: 'ns.pkg' });
+    await backend.request('GET', '/overview', { base: 'ns.pkg' });
+    expect(runCore).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidates when undo changes a reference edit preceding a class removal", async () => {
+    const { backend, runCore } = setup();
+    await backend.edits.transaction(tx => tx.add(['remove_attribute', 'remove_class'].map((op, i) => ({
+      id: i + 1, profile: SITE.profiles[0].key, package: 'ns.pkg.a', commit: null, op,
+      target: 'ns.pkg.a.Root', payload: {}, created_at: null,
+    }))));
+    const revision = backend.edits.getCatalogRevision();
+    await backend.request('GET', '/overview', { base: 'ns.pkg' });
+    await backend.edits.remove([1]);
+    expect(backend.edits.getCatalogRevision()).toBeGreaterThan(revision);
+    await backend.request('GET', '/overview', { base: 'ns.pkg' });
+    expect(runCore).toHaveBeenCalledTimes(2);
+  });
+
   it("uses the edited roots in overview after saves, undo, import, and restore", async () => {
     const { backend, runCore } = setup();
     const overview = async () => (await backend.request("GET", "/overview", { base: "ns.pkg" })).data;

@@ -9,6 +9,7 @@
 import type { CoreAnswer, CoreRequest } from "./pythonRunner";
 import { browserStorage } from "../utils/browserStorage";
 import { createEditStore, getBrowserEditStore, type EditStore, type StoredEdit } from "./editStore";
+import { catalogEditKey, changesClassNames } from "./catalogEdits";
 
 export type SiteModule = {
   package: string;
@@ -175,14 +176,27 @@ export function createStaticBackend(options: StaticBackendOptions) {
     return answer.ok;
   };
 
-  // Both navigation catalogs must list the same roots as the edited graph.
-  const sectionsFor = async (profile: SiteProfile, pkg: string, stored: StoredEdit[]): Promise<string[]> => {
+  // Retain only the current catalog per profile; share pending work between
+  // overview/roots callers. Invalidate profile-wide because modules share classes.
+  const catalogs = new Map<string, { key: string; sections: Map<string, Promise<string[]>> }>();
+  const sectionsFor = (profile: SiteProfile, pkg: string, stored: StoredEdit[]): Promise<string[]> => {
+    const key = JSON.stringify([edits.getGeneration(), catalogEditKey(stored)]);
+    let catalog = catalogs.get(profile.key);
+    if (!catalog || catalog.key !== key) {
+      catalog = { key, sections: new Map() };
+      catalogs.set(profile.key, catalog);
+    }
+    const cached = catalog.sections.get(pkg);
+    if (cached) return cached;
     const module = moduleOf(profile, pkg);
     const snapshot = snapshotOf(profile, pkg);
-    if (snapshot && (stored.length > 0 || pkg.endsWith(SCRATCH_SUFFIX) || !module)) {
-      return await core({ op: "sections", snapshots: [snapshot], snapshot, profile: profileRequest(profile), package: pkg, stored }) as string[];
-    }
-    return [...(module?.sections ?? [])].sort();
+    const result = snapshot && (stored.some(changesClassNames) || pkg.endsWith(SCRATCH_SUFFIX) || !module)
+      ? core({ op: "sections", snapshots: [snapshot], snapshot, profile: profileRequest(profile), package: pkg, stored }) as Promise<string[]>
+      : Promise.resolve([...(module?.sections ?? [])].sort());
+    const sections = catalog.sections;
+    sections.set(pkg, result);
+    void result.catch(() => { if (sections.get(pkg) === result) sections.delete(pkg); });
+    return result;
   };
 
   const graphFlags = (params: Params, root: string | undefined, namespace: string) => ({
@@ -300,7 +314,7 @@ export function createStaticBackend(options: StaticBackendOptions) {
         const stored = edits.list(profile.key);
         return Promise.all(profile.overview
           .filter(m => inNamespace(m.package, b))
-          .map(async m => ({ package: m.package, classes: stored.length ? await sectionsFor(profile, m.package, stored) : [...m.sections].sort() })));
+          .map(async m => ({ package: m.package, classes: stored.some(changesClassNames) ? await sectionsFor(profile, m.package, stored) : [...m.sections].sort() })));
       }))).flat();
       return ok({ branch: profileFor(data, ws.package, ws.base_namespace).default_branch, base, items, workspace: workspacePayload(ws) });
     }

@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import OverviewGrid from '../src/components/OverviewGrid';
@@ -79,4 +79,50 @@ it('refreshes the mounted catalog on save, undo, import, and backup replacement'
   reply('Model');
   await act(async () => { await store.restoreLog(empty); });
   expect(await screen.findByRole('button', { name: 'Model', exact: true })).toBeVisible();
+});
+
+it('ignores description and quantity edits and preserves the list, scroll, and search focus during class refreshes', async () => {
+  const store = getBrowserEditStore();
+  await store.restoreLog({ format: 'schema-studio-edits', version: 1, edits: [] });
+  vi.mocked(apiFetch).mockClear();
+  const user = userEvent.setup();
+  const view = render(<OverviewGrid branch="main" base="schema" layout="tree" />);
+  await user.click(await screen.findByRole('button', { name: /schema.model/ }));
+  const list = view.container.querySelector('.package-list')!;
+  list.scrollTop = 120;
+  const search = screen.getByRole('textbox');
+  search.focus();
+  const edit = { profile: 'test', package: 'schema.model', commit: null, target: 'schema.model.Model', payload: {}, created_at: null };
+  await act(async () => { await store.transaction(tx => tx.add([
+    { ...edit, id: 1, op: 'set_description' }, { ...edit, id: 2, op: 'add_attribute' },
+  ])); });
+  expect(apiFetch).toHaveBeenCalledTimes(1);
+  await act(async () => { await store.remove([1, 2]); });
+  expect(apiFetch).toHaveBeenCalledTimes(1);
+
+  let finish!: (response: Response) => void;
+  vi.mocked(apiFetch).mockImplementationOnce(() => new Promise<Response>(resolve => { finish = resolve; }));
+  await act(async () => { await store.transaction(tx => tx.add([{ ...edit, id: 3, op: 'rename_class' }])); });
+  await screen.findByText('Updating classes…');
+  expect(view.container.querySelector('.package-list')).toBe(list);
+  expect(list.scrollTop).toBe(120);
+  expect(search).toHaveFocus();
+  expect(screen.getByRole('button', { name: 'Model', exact: true })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Model', exact: true })).toBeDisabled();
+  await act(async () => finish(new Response(JSON.stringify({ branch: 'main', base: 'schema', items: [
+    { package: 'schema.model', classes: ['RenamedModel', 'Symmetry'] },
+    { package: 'schema.outputs', classes: ['Result'] },
+  ] }))));
+  expect(await screen.findByRole('button', { name: 'RenamedModel', exact: true })).toBeEnabled();
+  expect(view.container.querySelector('.package-list')).toBe(list);
+  expect(list.scrollTop).toBe(120);
+  expect(search).toHaveFocus();
+  expect(screen.getByRole('button', { name: /schema.model/ })).toHaveAttribute('aria-expanded', 'true');
+
+  // A failed background request also leaves the catalog in place, with an error.
+  vi.mocked(apiFetch).mockRejectedValueOnce(new Error('offline'));
+  await act(async () => { await store.remove([3]); });
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not refresh classes: offline'));
+  expect(view.container.querySelector('.package-list')).toBe(list);
+  expect(list.scrollTop).toBe(120);
 });

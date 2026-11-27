@@ -26,8 +26,10 @@ export default function OverviewGrid({
   activePackage?: string;
 }) {
   const editStore = getBrowserEditStore();
-  const editRevision = useSyncExternalStore(editStore.subscribe, editStore.getRevision);
-  const [data, setData] = useState<OverviewResp | null>(null);
+  const editRevision = useSyncExternalStore(editStore.subscribe, editStore.getCatalogRevision);
+  const context = `${branch}\0${base}`;
+  const [loaded, setLoaded] = useState<{ context: string; data: OverviewResp } | null>(null);
+  const data = loaded?.context === context ? loaded.data : null;
   const [ownQuery, setOwnQuery] = useState("");
   const q = query ?? ownQuery;
   const setQ = onQueryChange ?? setOwnQuery;
@@ -47,14 +49,14 @@ export default function OverviewGrid({
         if (!r.ok) throw new Error((await r.text()) || `HTTP ${r.status}`);
         return r.json();
       })
-      .then((json) => !cancelled && setData(json))
+      .then((json) => !cancelled && setLoaded({ context, data: json }))
       .catch((e) => !cancelled && setErr(e.message || String(e)))
       .finally(() => !cancelled && setLoading(false));
 
     return () => {
       cancelled = true;
     };
-  }, [branch, base, editRevision]);
+  }, [branch, base, context, editRevision]);
 
   // Resolve labels against the complete catalog so filtering cannot rename folders.
   const packageLabels = useMemo(() => {
@@ -80,13 +82,17 @@ export default function OverviewGrid({
     );
   }, [data, q]);
 
-  if (loading) return <div className="p-2 text-sm">Loading…</div>;
-  if (err) return <div className="p-2 text-sm" style={{ color: "var(--danger)" }}>{err}</div>;
+  if (loading && !data) return <div className="p-2 text-sm">Loading…</div>;
+  if (err && !data) return <div className="p-2 text-sm" style={{ color: "var(--danger)" }}>{err}</div>;
   if (!data) return <div className="p-2 text-sm">No data.</div>;
+  const refreshStatus = <div hidden={!loading && !err} role={err ? "alert" : "status"} className="small" style={{ color: err ? "var(--danger)" : "var(--muted)" }}>
+    {err ? `Could not refresh classes: ${err}` : "Updating classes…"}
+  </div>;
 
   if (layout === "tree") return (
-    <div className="package-tree">
+    <div className="package-tree" aria-busy={loading}>
       <input className="package-search" aria-label="Find package or class" placeholder="Find package or class…" value={q} onChange={e => setQ(e.target.value)} />
+      {refreshStatus}
       <ul className="package-list">
         {items.map(it => {
           const searching = Boolean(q);
@@ -115,7 +121,7 @@ export default function OverviewGrid({
               <span className="overview-count" aria-label={`${it.classes.length} classes`}>{it.classes.length}</span>
             </button>
             {open && <ul className="package-classes">{classes.map(c => <li key={c}>
-              <button type="button" title={c} onClick={() => onClassSelect?.(it.package, c)}>{c}</button>
+              <button type="button" title={c} disabled={loading || Boolean(err)} onClick={() => onClassSelect?.(it.package, c)}>{c}</button>
             </li>)}</ul>}
           </li>;
         })}
@@ -126,6 +132,7 @@ export default function OverviewGrid({
 
   return (
     <div
+      aria-busy={loading}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -147,6 +154,7 @@ export default function OverviewGrid({
         </div>
       </div>
 
+      {refreshStatus}
       <div
         style={{
           display: "grid",
@@ -194,6 +202,7 @@ export default function OverviewGrid({
                 <button
                   key={`${it.package}.${c}`}
                   type="button"
+                  disabled={loading || Boolean(err)}
                   onClick={() => onClassSelect?.(it.package, c)}
                   className={`overview-chip${onClassSelect ? " is-clickable" : ""}`}
                   title={c}

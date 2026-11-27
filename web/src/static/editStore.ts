@@ -1,4 +1,5 @@
 import { browserStorage } from "../utils/browserStorage";
+import { catalogEditKey } from "./catalogEdits";
 
 /**
  * Schema edits of the static site, kept in this browser (localStorage).
@@ -44,6 +45,7 @@ export interface EditTransaction {
 
 export interface EditStore {
   getRevision(): number;
+  getCatalogRevision(): number;
   getGeneration(): string;
   hasUnsavedChanges(): boolean;
   subscribe(listener: () => void): () => void;
@@ -80,6 +82,7 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
   let memory: Saved = { nextId: 1, edits: [], generation: LEGACY_EDIT_GENERATION };
   let unsaved = false;
   let revision = 0;
+  let catalogRevision = 0;
   const listeners = new Set<() => void>();
 
   const read = (): Saved => {
@@ -105,6 +108,9 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
   };
 
   const write = (saved: Saved) => {
+    if (saved.generation !== memory.generation || catalogEditKey(saved.edits) !== catalogEditKey(memory.edits)) {
+      catalogRevision += 1;
+    }
     memory = saved;
     let persisted = false;
     try {
@@ -190,6 +196,7 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
     }),
     getGeneration: () => read().generation,
     getRevision: () => revision,
+    getCatalogRevision: () => catalogRevision,
     hasUnsavedChanges: () => unsaved,
     subscribe(listener) {
       listeners.add(listener);
