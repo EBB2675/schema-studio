@@ -168,6 +168,15 @@ export function createStaticBackend(options: StaticBackendOptions) {
   const snapshotOf = (profile: SiteProfile, pkg: string): string | undefined =>
     pkg.endsWith(SCRATCH_SUFFIX) || pkg === profile.default_base_namespace ? profile.snapshot : moduleOf(profile, pkg)?.snapshot;
 
+  // Packages of applied edits that this site cannot open (e.g. a module a newer snapshot
+  // removed or renamed): their edits still apply, but no canvas of their own lists them.
+  const withUnavailablePackages = <T extends Record<string, unknown>>(result: T, profile: SiteProfile): T => {
+    const applied = Array.isArray(result.applied_edits) ? result.applied_edits as { package?: unknown }[] : [];
+    const missing = [...new Set(applied.map(edit => edit.package).filter((pkg): pkg is string => typeof pkg === "string" && pkg !== ""))]
+      .filter(pkg => !snapshotOf(profile, pkg)).sort();
+    return missing.length ? { ...result, unavailable_packages: missing } : result;
+  };
+
   const profileRequest = (profile: SiteProfile) => ({
     key: profile.key, default_base_namespace: profile.default_base_namespace, edit_rule_set: profile.edit_rule_set,
   });
@@ -335,7 +344,7 @@ export function createStaticBackend(options: StaticBackendOptions) {
       const { edits: stored, generation } = edits.snapshot(profile.key);
       const result = await graph(profile, pkg, query, namespace, stored);
       // The ids in applied_edits are only meaningful within this generation.
-      return ok({ ...result, edit_generation: generation, workspace: workspacePayload(ws) });
+      return ok({ ...withUnavailablePackages(result as Record<string, unknown>, profile), edit_generation: generation, workspace: workspacePayload(ws) });
     }
     if (route === "GET /schema/edits") {
       const pkg = text(query.package) ?? ws.package;
@@ -361,7 +370,7 @@ export function createStaticBackend(options: StaticBackendOptions) {
         edits.add((result.persisted_edits as StoredEdit[]) ?? []);
         // Read under the same lock as the save: History stamps its entry with it and drops
         // the entry if the log was replaced (restore, discard all) before the response landed.
-        return ok({ ...result, edit_generation: edits.generation(), workspace: workspacePayload(ws) });
+        return ok({ ...withUnavailablePackages(result, profile), edit_generation: edits.generation(), workspace: workspacePayload(ws) });
       });
     }
     if (method.toUpperCase() === "DELETE" && path.startsWith("/schema/edits/")) {

@@ -21,3 +21,12 @@ export const fqidFromParts = (module: string | null | undefined, name: string | 
 export function normalizePackageName(value?: string | null): string {
   return value ? normalizeModule(value) || value : "";
 }
+
+/**
+ * Whether a stored edit belongs to a package. The one test for both what History lists on
+ * a canvas and what Clear deletes there, so a listed edit is always one Clear removes.
+ * An edit without a package belongs to every package, as in the core's replay.
+ */
+export function belongsToPackage(editPackage: string | null | undefined, pkg: string): boolean {
+  return !editPackage || normalizePackageName(editPackage) === normalizePackageName(pkg);
+}

@@ -417,3 +417,21 @@ describe("first save after the storage keys were scoped", () => {
     expect(requestLock.mock.calls.map(([name]) => name)).toEqual([EDITS_STORAGE_KEY]);
   });
 });
+
+describe("edits of packages the site cannot open", () => {
+  it("are reported with the graph, so a canvas can list them", async () => {
+    const { backend, runCore } = setup();
+    // The core reports every stored edit as applied.
+    const implementation = runCore.getMockImplementation()!;
+    runCore.mockImplementation(async request => request.op === "graph"
+      ? { ok: { package: request.package, nodes: [], edges: [], applied_edits: request.stored } }
+      : implementation(request));
+    const edit = (id: number, pkg: string) => ({ id, profile: "nomad-simulations", package: pkg, commit: null, op: "add_class", target: "", payload: { name: `C${id}` }, created_at: null });
+    await createEditStore(window.localStorage).restoreLog({
+      format: "schema-studio-edits", version: 1, edits: [edit(1, "ns.pkg.a"), edit(2, "ns.pkg.removed")],
+    });
+    const read = await backend.request("GET", "/schema", { package: "ns.pkg.a", root: "Root", base_namespace: "ns.pkg" });
+    // ns.pkg.a is a module of the site; ns.pkg.removed is not.
+    expect((read.data as { unavailable_packages?: string[] }).unavailable_packages).toEqual(["ns.pkg.removed"]);
+  });
+});

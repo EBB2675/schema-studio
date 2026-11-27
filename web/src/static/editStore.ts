@@ -1,5 +1,6 @@
 import { browserStorage } from "../utils/browserStorage";
 import { EDITS_STORAGE_KEY, LEGACY_EDITS_STORAGE_KEY, readWithLegacyFallback } from "../utils/storageKeys";
+import { belongsToPackage } from "../utils/identifier";
 import { catalogEditKey } from "./catalogEdits";
 
 /**
@@ -182,7 +183,7 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
       const goes = (edit: StoredEdit) =>
         byId.has(edit.id)
         || (scope !== undefined && edit.profile === scope.profile
-          && (scope.allPackages === true || (scope.package !== undefined && edit.package === scope.package)));
+          && (scope.allPackages === true || (scope.package !== undefined && belongsToPackage(edit.package, scope.package))));
       const kept = saved.edits.filter(edit => !goes(edit));
       write({ ...saved, edits: kept });
       return saved.edits.length - kept.length;

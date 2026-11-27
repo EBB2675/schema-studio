@@ -33,9 +33,9 @@ import {
   type ApiNode,
   type AppliedEdit
 } from "./types/api";
-import { fqidFromParts, normalizeId, normalizeLabel, normalizePackageName } from "./utils/identifier";
+import { belongsToPackage, fqidFromParts, normalizeId, normalizeLabel, normalizePackageName } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
-import { describeSavedEdit, packagesListingAppliedEdits, unlistedAppliedEdits } from "./utils/savedEdits";
+import { describeSavedEdit, editsOfOtherPackages, olderSavedEditsOf } from "./utils/savedEdits";
 import { buildUmlStateFromGraph } from "./utils/umlState";
 import { initialTheme } from "./utils/theme";
 import { canvasPositionKey } from "./utils/canvasPositions";
@@ -910,23 +910,30 @@ export default function App() {
     if (contextIsCurrent()) await reloadAfterEditsRemoved([edit]);
   };
 
-  // Clears what the audit panel shows: this module's stored edits and the edits its entries made.
+  // Clears what the History panel shows: this module's stored edits (by the same package test
+  // the rows use), the edits its entries made, and every listed older saved edit.
   const clearAuditTrail = async () => {
     const targetPackage = currentPackageForAudit || pkg;
     if (pendingMutationsRef.current[targetPackage]) return;
-    const hasLocalAudit = auditEntriesForCurrentPackage.length > 0;
-    const hasPersistedEdits = (graph?.applied_edits?.length ?? 0) > 0 || (graph?.edit_conflicts?.length ?? 0) > 0;
-    if (!hasLocalAudit && !hasPersistedEdits) return;
+    if (!historyHasClearable) return;
     const contextIsCurrent = canvasSession.captureContext();
     // Clear acts on the log the shown graph was built from; the store refuses it if that log
     // was replaced since. Only ids recorded in that same log are sent: an id from another
     // generation can name an unrelated edit, even in another package.
     const generation = graph?.edit_generation ?? readEditGeneration();
+    // The listed rows' ids go along too, so no listed row can outlive a Clear. They come
+    // from the shown graph, so they are only sent with its generation.
+    const rowIds = graph?.edit_generation !== undefined && graph.edit_generation === generation
+      ? olderSavedEdits.flatMap((edit) => (edit.id ? [String(edit.id)] : []))
+      : [];
     const ids = generation === undefined
       ? []
-      : auditEntriesForCurrentPackage
-        .filter((entry) => entry.editGeneration === generation)
-        .flatMap((entry) => entry.editIds ?? []);
+      : [...new Set([
+        ...auditEntriesForCurrentPackage
+          .filter((entry) => entry.editGeneration === generation)
+          .flatMap((entry) => entry.editIds ?? []),
+        ...rowIds,
+      ])];
     setHistoryActionErr(null);
     try {
       await deleteStoredEdits(ids, targetPackage, generation);
@@ -944,7 +951,7 @@ export default function App() {
     const cleared = new Set(ids);
     if (contextIsCurrent()) {
       await reloadAfterEditsRemoved(shownAppliedEdits().filter(edit =>
-        (edit.id && cleared.has(String(edit.id))) || normalizePackageName(edit.package || "") === targetPackage));
+        (edit.id && cleared.has(String(edit.id))) || belongsToPackage(edit.package, targetPackage)));
     }
   };
 
@@ -979,18 +986,20 @@ export default function App() {
     [auditEntriesForCurrentPackage, currentPackageForAudit, filterActiveAuditForPackage]
   );
   const activeAuditCount = activeAuditEntries.length;
-  // Applied edits with no History entry anywhere (any package): listed so none is invisible.
+  // This canvas's applied edits that its History rows do not cover: listed so none is
+  // invisible. Edits of other packages are listed on those packages' canvases, except for
+  // packages the site cannot open, which are listed here.
   const olderSavedEdits = useMemo(
-    () => unlistedAppliedEdits(currentGraph?.applied_edits, auditTrail, currentGraph?.edit_generation),
-    [auditTrail, currentGraph?.applied_edits, currentGraph?.edit_generation]
+    () => olderSavedEditsOf(currentGraph, currentPackageForAudit, auditEntriesForCurrentPackage),
+    [auditEntriesForCurrentPackage, currentGraph, currentPackageForAudit]
   );
-  const listedElsewhere = useMemo(
-    () => packagesListingAppliedEdits(
-      currentGraph?.applied_edits, auditTrail, currentGraph?.edit_generation,
-      (entryPackage) => normalizePackageName(entryPackage || "") === currentPackageForAudit,
-    ),
-    [auditTrail, currentGraph?.applied_edits, currentGraph?.edit_generation, currentPackageForAudit]
+  const otherPackagesEdits = useMemo(
+    () => editsOfOtherPackages(currentGraph, currentPackageForAudit),
+    [currentGraph, currentPackageForAudit]
   );
+  // Clear is offered exactly when the panel lists something it removes.
+  const historyHasClearable = auditEntriesForCurrentPackage.length > 0 || olderSavedEdits.length > 0
+    || (currentGraph?.edit_conflicts?.length ?? 0) > 0;
   // A graph from the current log (e.g. after another tab restored a backup) retires History
   // entries of earlier logs: their ids now name other edits or nothing, so they would
   // miscount active edits and can never be undone. A graph from an older log than the
@@ -1688,7 +1697,7 @@ export default function App() {
                 className="danger-action"
                 type="button"
                 onClick={clearAuditTrail}
-                disabled={Boolean(pendingMutations[currentPackageForAudit || pkg]) || (!auditTrail.length && !(graph?.applied_edits?.length) && !(graph?.edit_conflicts?.length))}
+                disabled={Boolean(pendingMutations[currentPackageForAudit || pkg]) || !historyHasClearable}
               >
                 Clear
               </button>
@@ -1713,7 +1722,7 @@ export default function App() {
               </div>
             ) : null}
             <div className="small" style={{ color: "var(--muted)" }}>
-              {auditEntriesForCurrentPackage.length || olderSavedEdits.length || listedElsewhere.count
+              {auditEntriesForCurrentPackage.length || olderSavedEdits.length || otherPackagesEdits.count
                 ? [
                     auditEntriesForCurrentPackage.length
                       ? `${activeAuditCount} active edits${archivedAuditCount > 0 ? ` (${archivedAuditCount} archived)` : ""}`
@@ -1721,8 +1730,8 @@ export default function App() {
                     olderSavedEdits.length
                       ? `${olderSavedEdits.length} older saved edit${olderSavedEdits.length === 1 ? "" : "s"}`
                       : null,
-                    listedElsewhere.count
-                      ? `${listedElsewhere.count} applied edit${listedElsewhere.count === 1 ? " is" : "s are"} listed in the History of ${listedElsewhere.packages.join(", ")}`
+                    otherPackagesEdits.count
+                      ? `${otherPackagesEdits.count} edit${otherPackagesEdits.count === 1 ? "" : "s"} from ${otherPackagesEdits.packages.join(", ")} also appl${otherPackagesEdits.count === 1 ? "ies" : "y"} here; open ${otherPackagesEdits.packages.length === 1 ? "that package" : "those packages"} to see ${otherPackagesEdits.count === 1 ? "it" : "them"}`
                       : null,
                   ].filter(Boolean).join(" · ")
                 : "No edits on this canvas yet"}
@@ -1787,7 +1796,8 @@ export default function App() {
                 );
               })}
               {[...olderSavedEdits].reverse().map((edit, index) => {
-                const otherPackage = edit.package && normalizePackageName(edit.package) !== currentPackageForAudit
+                // Only edits of a package the site cannot open are listed here from another package.
+                const otherPackage = edit.package && !belongsToPackage(edit.package, currentPackageForAudit)
                   ? edit.package
                   : null;
                 return (
@@ -1813,7 +1823,7 @@ export default function App() {
                         <div style={{ fontWeight: 700 }}>Older saved edit: {describeSavedEdit(edit)}</div>
                         <div style={{ color: "var(--muted)" }}>
                           {edit.created_at ? new Date(edit.created_at).toLocaleString() : "Date unknown"}
-                          {otherPackage ? ` · in ${otherPackage}` : ""}
+                          {otherPackage ? ` · in ${otherPackage}, which this site cannot open` : ""}
                         </div>
                         {edit.id ? null : (
                           <div style={{ color: "var(--subtitle)" }}>

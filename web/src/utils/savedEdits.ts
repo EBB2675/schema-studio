@@ -1,5 +1,6 @@
 import type { AppliedEdit } from "../types/api";
 import type { AuditTrailEntry } from "../types/uml";
+import { belongsToPackage } from "./identifier";
 
 /**
  * Applied edits that no History entry accounts for. History is a separate, optional
@@ -41,28 +42,28 @@ export function describeSavedEdit(edit: AppliedEdit): string {
 }
 
 /**
- * The other packages whose History lists edits applied to this graph: such edits are
- * neither History rows here (History is per package) nor older saved edits (they are
- * listed), so the panel names where to find them.
+ * Whether a canvas of `pkg` lists an applied edit: the package's own edits, and edits of
+ * packages this site cannot open (listed nowhere else). Exactly these are removed by Clear.
  */
-export function packagesListingAppliedEdits(
-  applied: AppliedEdit[] | undefined,
-  history: AuditTrailEntry[],
-  generation: string | undefined,
-  isCurrentPackage: (pkg: string | undefined) => boolean,
+export function listedOnCanvas(edit: AppliedEdit, pkg: string, unavailable: string[] = []): boolean {
+  return belongsToPackage(edit.package, pkg) || (Boolean(edit.package) && unavailable.includes(edit.package!));
+}
+
+/** The canvas's older saved edits: listed on it, and not covered by its History rows. */
+export function olderSavedEditsOf(
+  graph: { applied_edits?: AppliedEdit[]; edit_generation?: string; unavailable_packages?: string[] } | null | undefined,
+  pkg: string,
+  canvasHistory: AuditTrailEntry[],
+): AppliedEdit[] {
+  const own = (graph?.applied_edits ?? []).filter(edit => listedOnCanvas(edit, pkg, graph?.unavailable_packages));
+  return unlistedAppliedEdits(own, canvasHistory, graph?.edit_generation);
+}
+
+/** Applied edits of other packages the site has: they are listed on those packages' canvases. */
+export function editsOfOtherPackages(
+  graph: { applied_edits?: AppliedEdit[]; unavailable_packages?: string[] } | null | undefined,
+  pkg: string,
 ): { count: number; packages: string[] } {
-  const ids = new Set((applied ?? []).map(edit => edit.id).filter((id): id is string => Boolean(id)).map(String));
-  const elsewhere = history.filter(entry => entry.package && !isCurrentPackage(entry.package)
-    && (generation === undefined || entry.editGeneration === generation));
-  const listed = new Set<string>();
-  const packages = new Set<string>();
-  for (const entry of elsewhere) {
-    for (const id of entry.editIds ?? []) {
-      if (ids.has(id)) {
-        listed.add(id);
-        packages.add(entry.package!);
-      }
-    }
-  }
-  return { count: listed.size, packages: [...packages].sort() };
+  const others = (graph?.applied_edits ?? []).filter(edit => !listedOnCanvas(edit, pkg, graph?.unavailable_packages));
+  return { count: others.length, packages: [...new Set(others.map(edit => edit.package!))].sort() };
 }

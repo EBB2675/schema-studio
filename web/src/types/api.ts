@@ -52,6 +52,8 @@ export type ApiGraph = {
   persisted_edits?: AppliedEdit[];
   // The edit-log generation they were stored in (POST /schema/edits).
   edit_generation?: string;
+  // Packages of applied edits that this site cannot open.
+  unavailable_packages?: string[];
 };
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -231,6 +233,9 @@ export const ensureGraphResponse = (payload: unknown): ApiGraph => {
       ? payload.persisted_edits.map(ensureAppliedEdit)
       : undefined,
     edit_generation: typeof payload.edit_generation === "string" ? payload.edit_generation : undefined,
+    unavailable_packages: Array.isArray(payload.unavailable_packages)
+      ? payload.unavailable_packages.filter((item): item is string => typeof item === "string")
+      : undefined,
   };
 };
 
@@ -276,5 +281,6 @@ export const ensureImportedGraph = (payload: unknown): ApiGraph => {
   delete graph.edit_conflicts;
   delete graph.persisted_edits;
   delete graph.edit_generation;
+  delete graph.unavailable_packages;
   return graph;
 };

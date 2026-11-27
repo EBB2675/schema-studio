@@ -44,6 +44,8 @@ Set the repository's Pages source to **GitHub Actions**. The workflow in `.githu
 
 `web/.env.pages` sets the project URL prefix to `/schema-studio/`. Change `VITE_BASE_PATH` for another repository, or use `/` for a user/organization root site. Assets, snapshots, and Pyodide resolve relative to this prefix.
 
+Saved edits live in the browser's local storage, under keys that include this prefix, so two Pages sites on the same `github.io` domain keep separate edits. Edits saved by an earlier version, before the keys included the prefix, are picked up automatically. If a tab of Schema Studio was open during an update, download your edits from it (History → Download edits) and load them in a new tab (Load edits): edits saved in that old tab after the update are not shown in new tabs.
+
 To prepare the same artifact locally:
 
 ```sh

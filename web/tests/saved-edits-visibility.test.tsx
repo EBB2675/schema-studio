@@ -7,7 +7,7 @@ import { createEditStore, EDITS_STORAGE_KEY, LEGACY_EDIT_GENERATION, type Stored
 import {
   AUDIT_STORAGE_KEY, LEGACY_AUDIT_STORAGE_KEY, LEGACY_EDITS_STORAGE_KEY, readWithLegacyFallback, scopedStorageKey,
 } from "../src/utils/storageKeys";
-import { describeSavedEdit, packagesListingAppliedEdits, unlistedAppliedEdits } from "../src/utils/savedEdits";
+import { describeSavedEdit, editsOfOtherPackages, listedOnCanvas, olderSavedEditsOf, unlistedAppliedEdits } from "../src/utils/savedEdits";
 import type { AuditTrailEntry } from "../src/types/uml";
 
 vi.mock("../src/client", () => ({ getStaticBackend: vi.fn() }));
@@ -160,14 +160,23 @@ describe("applied edits without a History entry", () => {
     expect(unlistedAppliedEdits([restored], [{ ...stale, editGeneration: "G1" }], "G1")).toEqual([]);
   });
 
-  it("names the other packages whose History lists edits applied here", () => {
-    const inA = { ...history(["1", "2"]), package: "pkg.a", editGeneration: "G" };
-    const inB = { ...history(["3"]), package: "pkg.b", editGeneration: "G" };
-    const old = { ...history(["4"]), package: "pkg.c", editGeneration: "G0" };
-    const here = (pkg?: string) => pkg === "pkg.b";
-    expect(packagesListingAppliedEdits([applied("1"), applied("3"), applied("4")], [inA, inB, old], "G", here))
-      .toEqual({ count: 1, packages: ["pkg.a"] });
-    expect(packagesListingAppliedEdits([], [inA], "G", here)).toEqual({ count: 0, packages: [] });
+  it("lists the canvas's own edits and those of packages the site cannot open; counts the rest", () => {
+    const own = { ...applied("1"), package: "pkg.a." };  // normalizes to pkg.a
+    const other = { ...applied("2"), package: "pkg.b" };
+    const gone = { ...applied("3"), package: "pkg.removed" };
+    const graph = { applied_edits: [own, other, gone], edit_generation: "G", unavailable_packages: ["pkg.removed"] };
+    expect(listedOnCanvas(own, "pkg.a")).toBe(true);
+    expect(olderSavedEditsOf(graph, "pkg.a", [])).toEqual([own, gone]);
+    // Only this canvas's History rows of the same generation cover an edit.
+    expect(olderSavedEditsOf(graph, "pkg.a", [{ ...history(["1"]), editGeneration: "G" }])).toEqual([gone]);
+    expect(editsOfOtherPackages(graph, "pkg.a")).toEqual({ count: 1, packages: ["pkg.b"] });
+  });
+
+  it("deletes a package's edits by the same package test the rows use", async () => {
+    const store = createEditStore(localStorage);
+    await store.transaction(tx => tx.add([edit(1, "pkg.a."), edit(2, "pkg.b")]));
+    expect(await store.remove([], { profile: "p", package: "pkg.a" })).toBe(1);
+    expect(store.list("p").map(e => e.id)).toEqual([2]);
   });
 
   it("describes edits in plain words", () => {

@@ -331,18 +331,42 @@ describe('Audit trail seeding from applied edits', () => {
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY)!)).toEqual([]));
   });
 
-  it('says where an applied edit is listed when its History entry belongs to another package', async () => {
+  const otherEdit = { id: '5', op: 'add_class', target: '', payload: { name: 'FromB' }, package: 'other.module' };
+  const goneEdit = { id: '6', op: 'add_class', target: '', payload: { name: 'FromRemoved' }, package: 'removed.module' };
+
+  it('lists only this package\'s edits and those of unavailable packages, and Clear removes all it lists', async () => {
     const generation = getBrowserEditStore().getGeneration();
-    window.localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify([{
-      id: 'in-a', timestamp: new Date().toISOString(), description: 'Added quantity in A', package: 'other.module',
-      replayable: true, editIds: ['1'], editGeneration: generation,
-      change: { type: 'add-class', cls: { id: 'other.module.X', name: 'X', module: 'other.module', quantities: [] } },
-    }]));
-    mockGet.mockImplementation(commonGet({ ...graphWithApplied, edit_generation: generation }));
+    let current: object = {
+      ...graphWithApplied, applied_edits: [...graphWithApplied.applied_edits, otherEdit, goneEdit],
+      unavailable_packages: ['removed.module'], edit_generation: generation,
+    };
+    mockGet.mockImplementation(async (url: string, options?: { params?: Record<string, unknown> }) => commonGet(current)(url, options));
     mockPut.mockResolvedValue({ data: { workspace: { branch: 'develop', package: 'pkg.custom_schema', base_namespace: 'pkg' } } });
-    await openHistory();
-    expect(await screen.findByText('1 applied edit is listed in the History of other.module')).toBeInTheDocument();
-    expect(screen.queryByText(/No edits on this canvas yet/i)).not.toBeInTheDocument();
-    expect(screen.queryByTestId('older-saved-edit')).not.toBeInTheDocument();
+    mockDelete.mockImplementation(async () => {
+      current = { ...graphWithoutApplied, applied_edits: [otherEdit], edit_generation: generation };
+      return { data: { deleted: 2 } };
+    });
+    const user = await openHistory();
+
+    const rows = await screen.findAllByTestId('older-saved-edit');
+    expect(rows.map(row => row.textContent)).toEqual([
+      expect.stringContaining('add class FromRemoved'),
+      expect.stringContaining('add attribute user_defined on AtomsState'),
+    ]);
+    expect(rows[0]).toHaveTextContent('in removed.module, which this site cannot open');
+    expect(screen.getByText(/1 edit from other\.module also applies here; open that package to see it/)).toBeInTheDocument();
+    expect(screen.queryByText(/FromB/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('History actions'));
+    await user.click(screen.getByRole('button', { name: /^Clear$/ }));
+    // The package scope plus every listed row's id, in the shown graph's generation.
+    expect(mockDelete).toHaveBeenCalledWith('/schema/edits', {
+      params: { package: 'pkg.custom_schema' }, data: { ids: ['1', '6'], generation },
+    });
+    await waitFor(() => expect(screen.queryByTestId('older-saved-edit')).not.toBeInTheDocument());
+    // Only another package's edit applies: nothing here for Clear, so it is not offered.
+    await user.click(screen.getByLabelText('History actions'));
+    expect(screen.getByRole('button', { name: /^Clear$/ })).toBeDisabled();
+    expect(screen.getByText(/1 edit from other\.module also applies here/)).toBeInTheDocument();
   });
 });
