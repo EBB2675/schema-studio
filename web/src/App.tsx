@@ -34,6 +34,7 @@ import {
 } from "./types/api";
 import { fqidFromParts, normalizeId, normalizeLabel, normalizePackageName } from "./utils/identifier";
 import { formatApiError } from "./utils/errors";
+import { describeSavedEdit, unlistedAppliedEdits } from "./utils/savedEdits";
 import { buildUmlStateFromGraph } from "./utils/umlState";
 import { initialTheme } from "./utils/theme";
 import { canvasPositionKey } from "./utils/canvasPositions";
@@ -809,6 +810,22 @@ export default function App() {
     rebuildGraphWithAudit(remaining as AuditTrailEntry[]);
   };
 
+  // Undoes one applied edit that has no History entry. Only its id is sent, never the
+  // package: a package scope would delete all of that package's edits.
+  // Later edits that depend on it no longer apply and come back as edit conflicts.
+  const undoSavedEdit = async (editId: string) => {
+    if (pendingMutationsRef.current[currentPackageForAudit || pkg]) return;
+    setQuantityActionErr(null);
+    const contextIsCurrent = canvasSession.captureContext();
+    try {
+      await deleteStoredEdits([editId]);
+    } catch (e: unknown) {
+      if (contextIsCurrent()) setQuantityActionErr(`Undo failed: ${formatApiError(e)}`);
+      return;
+    }
+    if (contextIsCurrent()) await latestLoadGraph.current({ keepView: true });
+  };
+
   // Clears what the audit panel shows: this module's stored edits and the edits its entries made.
   const clearAuditTrail = async () => {
     const targetPackage = currentPackageForAudit || pkg;
@@ -860,6 +877,11 @@ export default function App() {
     [auditEntriesForCurrentPackage, currentPackageForAudit, filterActiveAuditForPackage]
   );
   const activeAuditCount = activeAuditEntries.length;
+  // Applied edits with no History entry anywhere (any package): listed so none is invisible.
+  const olderSavedEdits = useMemo(
+    () => unlistedAppliedEdits(currentGraph?.applied_edits, auditTrail),
+    [auditTrail, currentGraph?.applied_edits]
+  );
   const archivedAuditCount = auditEntriesForCurrentPackage.length - activeAuditCount;
 
   const restoreArchivedEntry = (id: string) => {
@@ -885,6 +907,14 @@ export default function App() {
     });
     setAuditTrail(updated);
     rebuildGraphWithAudit(updated);
+  };
+
+  // After a backup restore or discarding all edits.
+  // Replacement may reuse IDs for unrelated edits in any schema.
+  // Clear rather than archive: archived entries can be reactivated.
+  const resetAfterEditsReplaced = () => {
+    setAuditTrail([]);
+    void loadGraph({ keepView: true });
   };
 
   const handleCanvasClassSelect = useCallback((cls: UmlClassNode) => {
@@ -1506,12 +1536,8 @@ export default function App() {
               <Suspense fallback={null}>
                 <StaticSitePanel
                   onEditsChanged={() => void loadGraph({ keepView: true })}
-                  onBackupRestored={() => {
-                    // Replacement may reuse IDs for unrelated edits in any schema.
-                    // Clear rather than archive: archived entries can be reactivated.
-                    setAuditTrail([]);
-                    void loadGraph({ keepView: true });
-                  }}
+                  onBackupRestored={resetAfterEditsReplaced}
+                  onAllEditsDiscarded={resetAfterEditsReplaced}
                 />
               </Suspense>
             )}
@@ -1554,8 +1580,15 @@ export default function App() {
               </div>
             ) : null}
             <div className="small" style={{ color: "var(--muted)" }}>
-              {auditEntriesForCurrentPackage.length
-                ? `${activeAuditCount} active edits${archivedAuditCount > 0 ? ` (${archivedAuditCount} archived)` : ""}`
+              {auditEntriesForCurrentPackage.length || olderSavedEdits.length
+                ? [
+                    auditEntriesForCurrentPackage.length
+                      ? `${activeAuditCount} active edits${archivedAuditCount > 0 ? ` (${archivedAuditCount} archived)` : ""}`
+                      : null,
+                    olderSavedEdits.length
+                      ? `${olderSavedEdits.length} older saved edit${olderSavedEdits.length === 1 ? "" : "s"}`
+                      : null,
+                  ].filter(Boolean).join(" · ")
                 : "No edits on this canvas yet"}
             </div>
             <div
@@ -1612,6 +1645,45 @@ export default function App() {
                         {new Date(entry.timestamp).toLocaleString()}
                       </div>
                       <div style={{ color: "var(--subtitle)" }}>Change: {entry.change.type}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {[...olderSavedEdits].reverse().map((edit, index) => {
+                const otherPackage = edit.package && normalizePackageName(edit.package) !== currentPackageForAudit
+                  ? edit.package
+                  : null;
+                return (
+                  <div
+                    key={edit.id ? `saved-${edit.id}` : `saved-unnamed-${index}`}
+                    data-testid="older-saved-edit"
+                    style={{ padding: "6px 8px", borderBottom: "1px solid var(--panel-border)" }}
+                  >
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      {edit.id ? (
+                        <button
+                          className="btn secondary"
+                          type="button"
+                          onClick={() => undoSavedEdit(String(edit.id))}
+                          disabled={Boolean(pendingMutations[currentPackageForAudit || pkg])}
+                          title="Remove this saved edit"
+                          style={{ padding: "6px 10px" }}
+                        >
+                          Undo
+                        </button>
+                      ) : null}
+                      <div>
+                        <div style={{ fontWeight: 700 }}>Older saved edit: {describeSavedEdit(edit)}</div>
+                        <div style={{ color: "var(--muted)" }}>
+                          {edit.created_at ? new Date(edit.created_at).toLocaleString() : "Date unknown"}
+                          {otherPackage ? ` · in ${otherPackage}` : ""}
+                        </div>
+                        {edit.id ? null : (
+                          <div style={{ color: "var(--subtitle)" }}>
+                            This edit has no ID, so it cannot be undone on its own. Use &ldquo;Discard all saved edits&rdquo; above to remove it.
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

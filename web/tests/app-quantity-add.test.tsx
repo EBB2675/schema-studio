@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { useWorkspaceStore } from '../src/store/workspace';
+import { AUDIT_STORAGE_KEY } from '../src/utils/storageKeys';
 
 const classId = 'pkg.custom_schema.Class';
 const baseGraph = {
@@ -132,7 +133,7 @@ describe('App editable quantity add flow', () => {
     useWorkspaceStore.getState().setStartEmpty(true);
 
     // No audit trail from earlier tests.
-    window.localStorage.removeItem('schema-uml-audit');
+    window.localStorage.removeItem(AUDIT_STORAGE_KEY);
 
     if (!('ResizeObserver' in window)) {
       // minimal stub for layout observer
@@ -272,7 +273,7 @@ describe('App editable quantity add flow', () => {
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Undo' })).toHaveLength(1));
     await act(async () => complete[1]());
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument());
-    expect(JSON.parse(window.localStorage.getItem('schema-uml-audit') || '[]')).toEqual([]);
+    expect(JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY) || '[]')).toEqual([]);
   });
 
   it('a failed undo keeps the change so it can be tried again', async () => {
@@ -311,7 +312,7 @@ describe('App editable quantity add flow', () => {
     await user.click(screen.getByRole('button', { name: 'Back to home' }));
     await act(async () => finish({ data: graphWithQuantity }));
     expect(screen.queryByRole('button', { name: 'Trigger quantity add' })).not.toBeInTheDocument();
-    expect(JSON.parse(window.localStorage.getItem('schema-uml-audit') ?? '[]')).toEqual(
+    expect(JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY) ?? '[]')).toEqual(
       expect.arrayContaining([expect.objectContaining({ editIds: ['7'] })])
     );
   });
@@ -376,7 +377,7 @@ describe('App editable quantity add flow', () => {
     mockPost.mockReset().mockResolvedValue({ data: { ...graphWithQuantity, persisted_edits: [{ ...graphWithQuantity.persisted_edits[0], id: '8' }] } });
     await user.click(screen.getByRole('button', { name: 'Trigger quantity add' }));
     await act(async () => finish());
-    const audit = JSON.parse(window.localStorage.getItem('schema-uml-audit') ?? '[]');
+    const audit = JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY) ?? '[]');
     expect(audit).toEqual(expect.arrayContaining([expect.objectContaining({ editIds: ['8'], replayable: true })]));
   });
 
@@ -445,7 +446,7 @@ describe('App editable quantity add flow', () => {
     mockDelete.mockResolvedValue({ data: { deleted: success ? 1 : 0 } });
     await user.click(reset);
     await screen.findByText('Canvas reset to empty.');
-    const audit = JSON.parse(window.localStorage.getItem('schema-uml-audit') ?? '[]');
+    const audit = JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY) ?? '[]');
     expect(audit.filter((entry: { replayable: boolean }) => entry.replayable)).toEqual([]);
     if (success) expect(audit).toEqual(expect.arrayContaining([expect.objectContaining({ editIds: ['7'], replayable: false })]));
   });
@@ -485,7 +486,7 @@ describe('App editable quantity add flow', () => {
     await waitFor(() => expect(mockDelete).toHaveBeenCalledWith('/schema/edits', {
       params: { package: 'pkg.custom_schema' }, data: { ids: success ? ['7', '8'] : ['7'] },
     }));
-    await waitFor(() => expect(JSON.parse(window.localStorage.getItem('schema-uml-audit') ?? '[]')).toEqual([]));
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY) ?? '[]')).toEqual([]));
   });
 
 });

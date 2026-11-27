@@ -2,7 +2,8 @@ import { hasValidAuditMetadata, isAuditChange } from "../utils/auditValidation";
 import { useEffect, useState } from "react";
 import { getBrowserEditStore, LEGACY_EDIT_GENERATION } from "../static/editStore";
 import type { AuditTrailEntry } from "../types/uml";
-import { readPreference, writePreference } from "../utils/browserStorage";
+import { browserStorage, writePreference } from "../utils/browserStorage";
+import { AUDIT_STORAGE_KEY, LEGACY_AUDIT_STORAGE_KEY, readWithLegacyFallback } from "../utils/storageKeys";
 
 // UI history is optional; the edit store remains the source of truth for edits.
 // Keep generation checks and migration of old history at this storage boundary.
@@ -31,7 +32,8 @@ export function useAuditTrail() {
   const [auditTrail, setAuditTrail] = useState<AuditTrailEntry[]>(() => {
     if (typeof window === "undefined") return [];
     try {
-      const raw = readPreference("schema-uml-audit");
+      const storage = browserStorage();
+      const raw = storage ? readWithLegacyFallback(storage, AUDIT_STORAGE_KEY, LEGACY_AUDIT_STORAGE_KEY) : null;
       if (!raw) return [];
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
@@ -49,7 +51,7 @@ export function useAuditTrail() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      writePreference("schema-uml-audit", JSON.stringify(auditTrail));
+      writePreference(AUDIT_STORAGE_KEY, JSON.stringify(auditTrail));
     } catch {
       // ignore storage errors
     }

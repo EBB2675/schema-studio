@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { useWorkspaceStore } from '../src/store/workspace';
+import { AUDIT_STORAGE_KEY } from '../src/utils/storageKeys';
 
 const classId = 'pkg.custom_schema.Class';
 const otherId = 'pkg.custom_schema.Other';
@@ -93,7 +94,7 @@ describe('App subclass toggle', () => {
     useWorkspaceStore.getState().setPkg('pkg');
     useWorkspaceStore.getState().setBaseNamespace('pkg');
     useWorkspaceStore.getState().setStartEmpty(true);
-    window.localStorage.removeItem('schema-uml-audit');
+    window.localStorage.removeItem(AUDIT_STORAGE_KEY);
     held = false;
     schemaGraph = graph;
     queue.length = 0;

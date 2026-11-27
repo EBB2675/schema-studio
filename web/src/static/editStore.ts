@@ -1,4 +1,5 @@
 import { browserStorage } from "../utils/browserStorage";
+import { EDITS_STORAGE_KEY, LEGACY_EDITS_STORAGE_KEY, readWithLegacyFallback } from "../utils/storageKeys";
 import { catalogEditKey } from "./catalogEdits";
 
 /**
@@ -32,7 +33,8 @@ type Saved = { nextId: number; edits: StoredEdit[]; generation: string };
 // Older logs and history share this generation until the first replacement.
 export const LEGACY_EDIT_GENERATION = "legacy";
 
-export const EDITS_STORAGE_KEY = "schema-studio-static-edits";
+// Scoped to the site's base path; see utils/storageKeys.
+export { EDITS_STORAGE_KEY };
 
 export interface EditTransaction {
   list(profile: string, pkg?: string): StoredEdit[];
@@ -55,6 +57,8 @@ export interface EditStore {
   remove(...args: Parameters<EditTransaction["remove"]>): Promise<number>;
   importLog(file: unknown): Promise<number>;
   restoreLog(file: unknown): Promise<number>;
+  /** Removes every saved edit of every schema; returns how many there were (0 if unreadable). */
+  discardAll(): Promise<number>;
   retrySave(): Promise<boolean>;
 }
 
@@ -88,7 +92,7 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
   const read = (): Saved => {
     if (unsaved || !storage) return memory;
     try {
-      const raw = storage.getItem(EDITS_STORAGE_KEY);
+      const raw = readWithLegacyFallback(storage, EDITS_STORAGE_KEY, LEGACY_EDITS_STORAGE_KEY);
       if (raw === null) {
         memory = { nextId: 1, edits: [], generation: LEGACY_EDIT_GENERATION };
         return memory;
@@ -189,6 +193,17 @@ export function createEditStore(storage: Storage | null = browserStorage()): Edi
       // A backup never supplies its identity: every replacement gets a fresh one.
       write({ nextId, edits, generation: crypto.randomUUID() });
       return edits.length;
+    }),
+    discardAll: () => serialize(() => {
+      let count = 0;
+      try {
+        count = read().edits.length;
+      } catch {
+        // Discarding is also the way out of a log that cannot be read.
+      }
+      // A fresh generation drops history entries that point at the discarded edits.
+      write({ nextId: 1, edits: [], generation: crypto.randomUUID() });
+      return count;
     }),
     retrySave: () => serialize(() => {
       if (unsaved) write(memory);

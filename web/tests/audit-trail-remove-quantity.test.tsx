@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../src/App';
 import { useWorkspaceStore } from '../src/store/workspace';
+import { AUDIT_STORAGE_KEY } from '../src/utils/storageKeys';
 
 const classId = 'pkg.custom_schema.AtomsState';
 const qtyId = `${classId}.atomic_number`;
@@ -112,7 +113,7 @@ describe('Audit trail — archived quantity removals', () => {
         },
       },
     ];
-    window.localStorage.setItem('schema-uml-audit', JSON.stringify(storedAudit));
+    window.localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(storedAudit));
 
     mockGet.mockImplementation(commonGet(graphWithQuantity));
     mockPut.mockResolvedValue({ data: { workspace: { branch: 'main', package: 'pkg', base_namespace: 'pkg' } } });
@@ -122,7 +123,7 @@ describe('Audit trail — archived quantity removals', () => {
 
     await user.click(await screen.findByRole('button', { name: /\+ Start from empty canvas/i }));
 
-    const saved = JSON.parse(window.localStorage.getItem('schema-uml-audit') ?? '[]');
+    const saved = JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY) ?? '[]');
     expect(saved[0].replayable).toBe(false);
     expect(screen.queryByTitle('Undo this change')).not.toBeInTheDocument();
     expect(await screen.findByText('FlowGraphView')).toBeVisible();
@@ -139,7 +140,7 @@ describe('Audit trail — archived quantity removals', () => {
     const view = render(<App />);
     await user.click(await screen.findByRole('button', { name: /Start from empty canvas/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Remove test quantity', hidden: true }));
-    const readAudit = () => JSON.parse(window.localStorage.getItem('schema-uml-audit') ?? '[]');
+    const readAudit = () => JSON.parse(window.localStorage.getItem(AUDIT_STORAGE_KEY) ?? '[]');
     await waitFor(() => expect(readAudit()).toEqual(expect.arrayContaining([
       expect.objectContaining({ editIds: ['7'], replayable: true, change: expect.objectContaining({ type: 'remove-quantity' }) }),
     ])));

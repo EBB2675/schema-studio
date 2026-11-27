@@ -40,7 +40,7 @@ The development server serves the same static application. Python is used only f
 
 ## GitHub Pages
 
-Set the repository's Pages source to **GitHub Actions**. The workflow in `.github/workflows/pages.yml` first runs the reusable CI verification pipeline, then builds the frontend, refreshes the schema environments, generates snapshots, and smoke-tests the complete `web/dist` artifact in Chromium before uploading it. Deployment depends on both verification and the successful artifact build. It runs on pushes to `main`, published releases, nightly, or manually.
+Set the repository's Pages source to **GitHub Actions**. The workflow in `.github/workflows/pages.yml` first runs the reusable CI verification pipeline, then builds the frontend, refreshes the schema environments, generates snapshots, and smoke-tests the complete `web/dist` artifact in Chromium before uploading it. Deployment depends on both verification and the successful artifact build. It runs on pushes to `develop`, published releases, nightly, or manually.
 
 `web/.env.pages` sets the project URL prefix to `/schema-studio/`. Change `VITE_BASE_PATH` for another repository, or use `/` for a user/organization root site. Assets, snapshots, and Pyodide resolve relative to this prefix.
 
